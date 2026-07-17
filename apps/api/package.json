@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
-    "dev": "node --watch src/main.ts",
+    "dev": "node --env-file=.env --watch src/main.ts",
     "start": "node dist/main.mjs",
     "test": "vp test run"
   },
