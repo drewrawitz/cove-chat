@@ -1,0 +1,22 @@
+{
+  "name": "@cove/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "prisma validate",
+    "format": "prisma format",
+    "migrate:create": "prisma migrate dev --create-only",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:status": "prisma migrate status"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "dotenv": "17.4.2",
+    "prisma": "7.8.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

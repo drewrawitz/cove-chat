@@ -190,7 +190,7 @@ packages/
   application/               # use cases and orchestration
   ports/                     # infrastructure-independent service contracts
   protocol/                  # versioned HTTP/WebSocket schemas and mappers
-  database/                  # Prisma schema, Prisma Migrate SQL history, seed tooling
+  db/                        # Prisma schema, Prisma Migrate SQL history, seed tooling
   sync/                      # generated Zero schema and authorized query definitions
   ui/                        # reusable React components and design tokens
   platform/                  # browser/desktop capability interface
@@ -216,7 +216,7 @@ The dependency graph is below. `A → B` means package A may depend on package B
 ports           → domain
 application     → domain + ports
 infrastructure  → domain + ports
-sync            → database schema output
+sync            → db schema output
 apps/api        → application + infrastructure + protocol + sync
 apps/web        → protocol + sync + ui
 apps/desktop    → apps/web + platform
@@ -228,7 +228,7 @@ Interpret the graph through these concrete rules:
 - `ports` may use domain types but exposes no provider-specific types.
 - `application` depends on `domain` and `ports`.
 - `protocol` owns serialized transport contracts and explicit mappings; domain models are not treated as wire formats.
-- `database` is tooling-only: it owns the Prisma schema and committed SQL migrations, but exports no runtime domain model.
+- `db` is tooling-only: it owns the Prisma schema and committed SQL migrations, but exports no runtime domain model.
 - `sync` owns the generated Zero schema and named query definitions. It is a sync/transport concern, not the domain model.
 - Infrastructure packages implement ports and may depend on domain/application data contracts as needed.
 - `apps/api` is the composition root. It selects Effect Layers and connects transports to application use cases.

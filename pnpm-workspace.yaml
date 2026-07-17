@@ -20,4 +20,6 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
 allowBuilds:
+  "@prisma/engines": true
   msgpackr-extract: false
+  prisma: true

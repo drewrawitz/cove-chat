@@ -1,0 +1,75 @@
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkspaceRole {
+  OWNER  @map("owner")
+  ADMIN  @map("admin")
+  MEMBER @map("member")
+}
+
+enum ChannelVisibility {
+  PUBLIC  @map("public")
+  PRIVATE @map("private")
+}
+
+model User {
+  id                   String                @id
+  email                String                @unique
+  displayName          String                @map("display_name")
+  workspaceMemberships WorkspaceMembership[]
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("users")
+}
+
+model Workspace {
+  id          String                @id
+  name        String
+  memberships WorkspaceMembership[]
+  channels    Channel[]
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  workspaceId        String              @map("workspace_id")
+  userId             String              @map("user_id")
+  role               WorkspaceRole       @default(MEMBER)
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelMemberships ChannelMembership[]
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+  @@map("workspace_memberships")
+}
+
+model Channel {
+  id          String
+  workspaceId String              @map("workspace_id")
+  name        String
+  visibility  ChannelVisibility   @default(PUBLIC)
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  memberships ChannelMembership[]
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, visibility])
+  @@map("channels")
+}
+
+model ChannelMembership {
+  workspaceId         String              @map("workspace_id")
+  channelId           String              @map("channel_id")
+  userId              String              @map("user_id")
+  channel             Channel             @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
+  workspaceMembership WorkspaceMembership @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, channelId, userId])
+  @@index([workspaceId, userId])
+  @@map("channel_memberships")
+}
