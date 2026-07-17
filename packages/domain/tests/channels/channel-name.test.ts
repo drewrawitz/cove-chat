@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { InvalidChannelName, makeChannelName, type ChannelName } from "../src/index.ts";
+import { InvalidChannelName, makeChannelName, type ChannelName } from "../../src/index.ts";
 
 it.effect("creates a channel name after trimming surrounding whitespace", () =>
   Effect.gen(function* () {

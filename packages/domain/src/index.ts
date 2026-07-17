@@ -1,11 +1,13 @@
 export {
+  Channel,
   ChannelAccessFacts,
+  ChannelMembershipFacts,
   ChannelName,
   ChannelVisibility,
   InvalidChannelName,
   canViewChannel,
   makeChannelName,
-} from "./channel.ts";
+} from "./channels/index.ts";
 
 export {
   ChannelId,

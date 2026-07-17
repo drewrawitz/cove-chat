@@ -1,6 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { ChannelAccessFacts, canViewChannel } from "../src/index.ts";
+import { ChannelAccessFacts, canViewChannel } from "../../src/index.ts";
 
 const accessCases = [
   {
