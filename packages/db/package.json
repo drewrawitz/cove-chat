@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "dotenv": "17.4.2",
+    "dotenv": "catalog:",
     "prisma": "7.8.0",
     "typescript": "catalog:",
     "vite": "catalog:",

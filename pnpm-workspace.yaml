@@ -1,13 +1,17 @@
 packages:
   - apps/*
   - packages/*
+  - packages/infrastructure/*
   - tools/*
 
 catalogMode: prefer
 
 catalog:
+  "@effect/sql-pg": 4.0.0-beta.98
   "@effect/vitest": 4.0.0-beta.98
+  "@testcontainers/postgresql": 12.0.4
   "@types/node": ^24
+  dotenv: 17.4.2
   effect: 4.0.0-beta.98
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
@@ -21,5 +25,8 @@ peerDependencyRules:
     vite: "*"
 allowBuilds:
   "@prisma/engines": true
+  cpu-features: false
   msgpackr-extract: false
   prisma: true
+  protobufjs: false
+  ssh2: false
