@@ -2,63 +2,59 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { ChannelAccessFacts, canViewChannel } from "../src/index.ts";
 
-it.effect("a workspace member can view a public channel", () =>
-  Effect.gen(function* () {
-    const facts = yield* ChannelAccessFacts.makeEffect({
+const accessCases = [
+  {
+    name: "a workspace member can view a public channel",
+    facts: {
       visibility: "public",
       isWorkspaceMember: true,
       isChannelMember: false,
-    });
-
-    expect(canViewChannel(facts)).toBe(true);
-  }),
-);
-
-it.effect("a non-member cannot view a public channel", () =>
-  Effect.gen(function* () {
-    const facts = yield* ChannelAccessFacts.makeEffect({
+    },
+    expected: true,
+  },
+  {
+    name: "a non-member cannot view a public channel",
+    facts: {
       visibility: "public",
       isWorkspaceMember: false,
       isChannelMember: false,
-    });
-
-    expect(canViewChannel(facts)).toBe(false);
-  }),
-);
-
-it.effect("a workspace member cannot view a private channel without channel membership", () =>
-  Effect.gen(function* () {
-    const facts = yield* ChannelAccessFacts.makeEffect({
+    },
+    expected: false,
+  },
+  {
+    name: "a workspace member cannot view a private channel without channel membership",
+    facts: {
       visibility: "private",
       isWorkspaceMember: true,
       isChannelMember: false,
-    });
-
-    expect(canViewChannel(facts)).toBe(false);
-  }),
-);
-
-it.effect("a private-channel member can view the private channel", () =>
-  Effect.gen(function* () {
-    const facts = yield* ChannelAccessFacts.makeEffect({
+    },
+    expected: false,
+  },
+  {
+    name: "a private-channel member can view the private channel",
+    facts: {
       visibility: "private",
       isWorkspaceMember: true,
       isChannelMember: true,
-    });
-
-    expect(canViewChannel(facts)).toBe(true);
-  }),
-);
-
-it.effect("channel membership cannot bypass workspace membership", () =>
-  Effect.gen(function* () {
-    const facts = yield* ChannelAccessFacts.makeEffect({
+    },
+    expected: true,
+  },
+  {
+    name: "channel membership cannot bypass workspace membership",
+    facts: {
       visibility: "private",
       isWorkspaceMember: false,
       isChannelMember: true,
-    });
+    },
+    expected: false,
+  },
+] as const;
 
-    expect(canViewChannel(facts)).toBe(false);
+it.effect.each(accessCases)("$name", ({ facts, expected }) =>
+  Effect.sync(() => {
+    const accessFacts = ChannelAccessFacts.make(facts);
+
+    expect(canViewChannel(accessFacts)).toBe(expected);
   }),
 );
 
