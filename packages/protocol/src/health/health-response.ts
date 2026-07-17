@@ -18,9 +18,3 @@ export const HealthUnavailableResponse = Schema.Struct({
 export interface HealthUnavailableResponse extends Schema.Schema.Type<
   typeof HealthUnavailableResponse
 > {}
-
-export const HealthResponse = Schema.Union([HealthOkResponse, HealthUnavailableResponse]).annotate({
-  identifier: "HealthResponse",
-});
-
-export type HealthResponse = typeof HealthResponse.Type;
