@@ -293,6 +293,12 @@ Contains versioned schemas for:
 - Pagination cursors.
 - Ephemeral realtime event versions.
 
+Define HTTP contracts declaratively with Effect `HttpApi`. The Node application implements those
+contracts with `HttpApiBuilder`; in-repo TypeScript consumers derive clients with `HttpApiClient`;
+and OpenAPI 3.1 plus interactive documentation are generated from the same value. OpenAPI is an
+integration and documentation artifact, not a second manually maintained contract or the source for
+a duplicate in-repo client.
+
 Use explicit mappers between domain/application values and protocol values:
 
 ```text

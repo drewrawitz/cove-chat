@@ -1,0 +1,26 @@
+{
+  "name": "@cove/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp pack",
+    "check": "vp check",
+    "dev": "node --watch src/main.ts",
+    "start": "node dist/main.mjs",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@cove/infrastructure-postgres": "workspace:*",
+    "@cove/protocol": "workspace:*",
+    "@effect/platform-node": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
