@@ -6,7 +6,9 @@ packages:
 catalogMode: prefer
 
 catalog:
+  "@effect/vitest": 4.0.0-beta.98
   "@types/node": ^24
+  effect: 4.0.0-beta.98
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
   vite-plus: 0.2.4
@@ -17,3 +19,5 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
+allowBuilds:
+  msgpackr-extract: false
