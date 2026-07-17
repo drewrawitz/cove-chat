@@ -2,5 +2,6 @@
 
 Cove use cases and orchestration built with Effect.
 
-The current slice exposes `getChannelForActor`, which loads a tenant-scoped channel, evaluates its
-domain access rules, and hides missing and inaccessible channels behind the same typed error.
+The current slices expose an authorized channel lookup and passwordless authentication workflows.
+Magic-link verification delegates to the provider-neutral `issueSession` use case so later passkey
+and Google identity adapters can share session policy and durable sign-in audit capture.

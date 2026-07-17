@@ -6,7 +6,8 @@ This package uses explicit parameterized SQL through Effect's PostgreSQL client.
 decoded before they become domain values, and driver failures are translated into the ports'
 typed `PersistenceError`.
 
-`PostgresLive` reads `DATABASE_URL` through Effect `Config` and provides both repository ports.
+`PostgresLive` reads `DATABASE_URL` through Effect `Config` and provides the repository, audit, and
+transaction ports.
 Prisma in `@cove/db` remains the schema and migration tool; it is not used by the runtime adapters.
 
 The integration suite starts a disposable PostgreSQL container and runs `prisma migrate deploy`

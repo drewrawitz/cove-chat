@@ -14,5 +14,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["prisma.config.ts", "vite.config.ts"]
+  "include": ["prisma.config.ts", "prisma/**/*.ts", "vite.config.ts"]
 }

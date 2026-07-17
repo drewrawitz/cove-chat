@@ -18,9 +18,49 @@ model User {
   email                String                @unique
   displayName          String                @map("display_name")
   workspaceMemberships WorkspaceMembership[]
+  magicLinks           MagicLink[]
+  sessions             Session[]
+  auditEvents          AuditEvent[]
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
+}
+
+model MagicLink {
+  tokenHash  String    @id @map("token_hash")
+  userId     String    @map("user_id")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("magic_links")
+}
+
+model Session {
+  tokenHash     String   @id @map("token_hash")
+  csrfTokenHash String   @unique @map("csrf_token_hash")
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model AuditEvent {
+  id          String   @id
+  eventType   String   @map("event_type")
+  actorUserId String   @map("actor_user_id")
+  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([actorUserId, occurredAt])
+  @@map("audit_events")
 }
 
 model Workspace {

@@ -8,3 +8,10 @@ generate or export Prisma Client.
 Copy `.env.example` to `.env`, then run the package scripts through Vite+ to validate the schema,
 create reviewed migrations, apply local migrations, deploy committed migrations, or inspect
 migration status.
+
+Run `vp run @cove/db#seed` from the repository root to upsert the two passwordless demo users:
+
+- `alice@cove.local` (`demo-alice`)
+- `bob@cove.local` (`demo-bob`)
+
+Sign-in is by one-time magic link; the seed contains no passwords or reusable login credentials.

@@ -26,12 +26,22 @@ const applyMigrations = Effect.fn("PostgresTest.applyMigrations")((databaseUrl: 
   ),
 );
 
+const seedDatabase = Effect.fn("PostgresTest.seedDatabase")((databaseUrl: string) =>
+  Effect.promise(() =>
+    execFileAsync(prismaExecutable, ["db", "seed"], {
+      cwd: dbPackageDirectory,
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    }),
+  ),
+);
+
 export const TestDatabase = Layer.unwrap(
   Effect.gen(function* () {
     const container = yield* startedContainer;
     const databaseUrl = container.getConnectionUri();
 
     yield* applyMigrations(databaseUrl);
+    yield* seedDatabase(databaseUrl);
 
     return PgClient.layer({ url: Redacted.make(databaseUrl) });
   }),

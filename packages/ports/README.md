@@ -2,6 +2,6 @@
 
 Infrastructure-independent capabilities required by Cove application workflows.
 
-The current interface contains only the tenant-scoped channel lookup and membership facts needed
-to authorize channel access. Concrete persistence adapters must translate provider failures into
-the typed `PersistenceError`.
+The interfaces cover tenant-scoped channel authorization plus passwordless identity, session,
+transaction, delivery, and audit capabilities. Security capabilities use distinct branded token
+types, and concrete persistence adapters translate provider failures into typed errors.

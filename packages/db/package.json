@@ -9,7 +9,12 @@
     "migrate:create": "prisma migrate dev --create-only",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",
-    "migrate:status": "prisma migrate status"
+    "migrate:status": "prisma migrate status",
+    "seed": "prisma db seed"
+  },
+  "dependencies": {
+    "@effect/sql-pg": "catalog:",
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

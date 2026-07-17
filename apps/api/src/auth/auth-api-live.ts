@@ -1,0 +1,154 @@
+import {
+  RequestMagicLinkInput,
+  VerifyMagicLinkInput,
+  getCurrentUser,
+  logout,
+  makeCsrfToken,
+  makeEmailAddress,
+  makeMagicLinkToken,
+  makeSessionToken,
+  requestMagicLink,
+  verifyMagicLink,
+} from "@cove/application";
+import {
+  AuthenticatedSession,
+  CoveApi,
+  CsrfCookie,
+  MagicLinkAcceptedResponse,
+  SessionCookie,
+} from "@cove/protocol";
+import { Effect, Redacted } from "effect";
+import { HttpEffect, HttpServerResponse } from "effect/unstable/http";
+import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { currentUserResponse } from "./current-user-response.ts";
+import {
+  csrfValidationFailedResponse,
+  internalServerErrorResponse,
+  invalidMagicLinkResponse,
+  unauthorizedResponse,
+} from "./error-responses.ts";
+
+const setAuthenticationCookies = (
+  sessionToken: Redacted.Redacted<string>,
+  csrfToken: Redacted.Redacted<string>,
+  expires: Date,
+) =>
+  HttpEffect.appendPreResponseHandler((_request, response) =>
+    Effect.succeed(
+      HttpServerResponse.setCookieUnsafe(
+        HttpServerResponse.setCookieUnsafe(
+          response,
+          SessionCookie.key,
+          Redacted.value(sessionToken),
+          {
+            expires,
+            httpOnly: true,
+            path: "/",
+            sameSite: "strict",
+            secure: true,
+          },
+        ),
+        CsrfCookie.key,
+        Redacted.value(csrfToken),
+        {
+          expires,
+          httpOnly: false,
+          path: "/",
+          sameSite: "strict",
+          secure: true,
+        },
+      ),
+    ),
+  );
+
+const expireAuthenticationCookies = HttpEffect.appendPreResponseHandler((_request, response) =>
+  Effect.succeed(
+    HttpServerResponse.setCookieUnsafe(
+      HttpServerResponse.setCookieUnsafe(response, SessionCookie.key, "", {
+        expires: new Date(0),
+        httpOnly: true,
+        maxAge: 0,
+        path: "/",
+        sameSite: "strict",
+        secure: true,
+      }),
+      CsrfCookie.key,
+      "",
+      {
+        expires: new Date(0),
+        httpOnly: false,
+        maxAge: 0,
+        path: "/",
+        sameSite: "strict",
+        secure: true,
+      },
+    ),
+  ),
+);
+
+export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
+  handlers
+    .handle("login", ({ payload }) =>
+      requestMagicLink(
+        RequestMagicLinkInput.make({
+          email: makeEmailAddress(payload.email),
+        }),
+      ).pipe(
+        Effect.mapError(internalServerErrorResponse),
+        Effect.as(MagicLinkAcceptedResponse.make({ status: "accepted" })),
+      ),
+    )
+    .handle("verifyMagicLink", ({ payload }) =>
+      verifyMagicLink(
+        VerifyMagicLinkInput.make({
+          token: makeMagicLinkToken(payload.token),
+        }),
+      ).pipe(
+        Effect.mapError((error) =>
+          error._tag === "Application.InvalidMagicLink"
+            ? invalidMagicLinkResponse()
+            : internalServerErrorResponse(),
+        ),
+        Effect.tap(({ session }) =>
+          setAuthenticationCookies(session.token, session.csrfToken, session.expiresAt),
+        ),
+        Effect.map(({ user }) => currentUserResponse(user)),
+      ),
+    )
+    .handle("logout", ({ headers }) =>
+      Effect.gen(function* () {
+        const session = yield* AuthenticatedSession;
+        const csrfHeader = headers["x-csrf-token"];
+
+        if (csrfHeader === undefined) {
+          return yield* Effect.fail(csrfValidationFailedResponse());
+        }
+
+        yield* logout(
+          makeSessionToken(Redacted.value(session.token)),
+          makeCsrfToken(csrfHeader),
+        ).pipe(
+          Effect.mapError((error) =>
+            error._tag === "Application.InvalidCsrfToken"
+              ? csrfValidationFailedResponse()
+              : internalServerErrorResponse(),
+          ),
+        );
+        yield* expireAuthenticationCookies;
+      }),
+    )
+    .handle("me", () =>
+      Effect.gen(function* () {
+        const session = yield* AuthenticatedSession;
+        const user = yield* getCurrentUser(makeSessionToken(Redacted.value(session.token))).pipe(
+          Effect.mapError((error) =>
+            error._tag === "Application.Unauthenticated"
+              ? unauthorizedResponse()
+              : internalServerErrorResponse(),
+          ),
+        );
+
+        return currentUserResponse(user);
+      }),
+    ),
+);

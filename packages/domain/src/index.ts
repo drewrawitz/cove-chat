@@ -18,3 +18,5 @@ export {
   makeUserId,
   makeWorkspaceId,
 } from "./identifiers.ts";
+
+export { DisplayName, EmailAddress, User } from "./users/index.ts";
