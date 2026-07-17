@@ -13,7 +13,7 @@ const Server = HttpRouter.serve(HttpRoutes, {
 });
 
 const apiWithDatabase = <E>(database: Layer.Layer<DatabaseReadiness, E>) =>
-  Server.pipe(Layer.provideMerge(Layer.mergeAll(NodeHttpServer.layerTest, database)));
+  Server.pipe(Layer.provide(database), Layer.provideMerge(NodeHttpServer.layerTest));
 
 const AvailableDatabase = PostgresDatabaseReadiness.pipe(Layer.provide(TestDatabase));
 const AvailableApi = apiWithDatabase(AvailableDatabase);
