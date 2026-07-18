@@ -8,7 +8,7 @@ import {
 import { MagicLinkAcceptedResponse } from "./auth-response.ts";
 import { CurrentUserResponse } from "./current-user-response.ts";
 import { LoginRequest } from "./login-request.ts";
-import { LogoutHeaders } from "./logout-headers.ts";
+import { CsrfHeaders } from "./logout-headers.ts";
 import { SessionAuth } from "./session-auth.ts";
 import { VerifyMagicLinkRequest } from "./verify-magic-link-request.ts";
 
@@ -34,7 +34,7 @@ const MeEndpoint = HttpApiEndpoint.get("me", "/api/app/v1/me", {
 }).middleware(SessionAuth);
 
 const LogoutEndpoint = HttpApiEndpoint.post("logout", "/api/app/v1/auth/logout", {
-  headers: LogoutHeaders,
+  headers: CsrfHeaders,
   error: [CsrfValidationFailedResponse, InternalServerErrorResponse],
 }).middleware(SessionAuth);
 

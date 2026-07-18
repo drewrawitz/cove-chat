@@ -27,6 +27,11 @@ export const workspaceListResponse = (
       WorkspaceSummaryResponse.make({
         id: access.workspace.id,
         name: access.workspace.name,
+        identity: {
+          id: access.identity.id,
+          name: access.identity.name,
+          avatarUrl: access.identity.avatarUrl,
+        },
         role: access.role,
       }),
     ),

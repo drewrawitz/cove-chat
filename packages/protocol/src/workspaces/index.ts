@@ -1,4 +1,5 @@
 export { WorkspaceApiGroup } from "./workspace-api.ts";
+export { CreateWorkspaceRequest, UpdateWorkspaceIdentityRequest } from "./workspace-request.ts";
 export {
   LastWorkspaceOwnerResponse,
   WorkspaceErrorResponses,

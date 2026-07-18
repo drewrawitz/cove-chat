@@ -32,6 +32,7 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
       "/api/app/v1/me",
       "/api/app/v1/workspaces",
       "/api/app/v1/workspaces/{workspaceId}",
+      "/api/app/v1/workspaces/{workspaceId}/identity",
       "/api/app/v1/workspaces/{workspaceId}/membership",
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
@@ -48,6 +49,16 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
     ]);
     expect(document.paths["/api/app/v1/auth/logout"]?.post?.responses).toHaveProperty("403");
     expect(document.paths["/api/app/v1/auth/logout"]?.post?.parameters).toContainEqual(
+      expect.objectContaining({
+        in: "header",
+        name: "x-csrf-token",
+      }),
+    );
+    expect(document.paths["/api/app/v1/workspaces"]?.post?.responses).toHaveProperty("200");
+    expect(
+      document.paths["/api/app/v1/workspaces/{workspaceId}/identity"]?.patch?.responses,
+    ).toHaveProperty("200");
+    expect(document.paths["/api/app/v1/workspaces"]?.post?.parameters).toContainEqual(
       expect.objectContaining({
         in: "header",
         name: "x-csrf-token",

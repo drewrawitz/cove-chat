@@ -6,6 +6,7 @@ import {
   WorkspaceIdentity,
   WorkspaceIdentityId,
   WorkspaceIdentityName,
+  WorkspaceIdentityProfile,
   WorkspaceName,
   WorkspaceRole,
   type WorkspaceAccess as WorkspaceAccessType,
@@ -18,6 +19,9 @@ import { persistenceError } from "../persistence-error.ts";
 const AccountRequest = Schema.Struct({ accountId: UserId });
 const WorkspaceRequest = Schema.Struct({ accountId: UserId, workspaceId: WorkspaceId });
 const EndMembershipRequest = WorkspaceRequest.pipe(Schema.fieldsAssign({ endedAt: Schema.Date }));
+const UpdateIdentityRequest = WorkspaceRequest.pipe(
+  Schema.fieldsAssign(WorkspaceIdentityProfile.fields),
+);
 
 const WorkspaceAccessRow = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -52,6 +56,85 @@ const accessFromRow = (row: WorkspaceAccessRow): WorkspaceAccessType =>
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+
+  const createWorkspaceRow = SqlSchema.findOne({
+    Request: WorkspaceAccess,
+    Result: WorkspaceAccessRow,
+    execute: ({ identity, workspace }) => sql<WorkspaceAccessRow>`
+      WITH created_workspace AS (
+        INSERT INTO workspaces (id, name)
+        VALUES (${workspace.id}, ${workspace.name})
+        RETURNING id, name
+      ), created_identity AS (
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        SELECT
+          ${identity.id},
+          created_workspace.id,
+          ${identity.accountId},
+          ${identity.name},
+          ${identity.avatarUrl},
+          'owner'
+        FROM created_workspace
+        RETURNING id, workspace_id, account_id, name, avatar_url, role
+      )
+      SELECT
+        created_workspace.id AS "workspaceId",
+        created_workspace.name AS "workspaceName",
+        created_identity.id AS "identityId",
+        created_identity.account_id AS "accountId",
+        created_identity.name AS "identityName",
+        created_identity.avatar_url AS "avatarUrl",
+        created_identity.role
+      FROM created_workspace
+      CROSS JOIN created_identity
+    `,
+  });
+
+  const joinWorkspaceRow = SqlSchema.findOneOption({
+    Request: WorkspaceIdentity,
+    Result: WorkspaceAccessRow,
+    execute: (identity) => sql<WorkspaceAccessRow>`
+      WITH joined_identity AS (
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        SELECT
+          ${identity.id},
+          workspace.id,
+          ${identity.accountId},
+          ${identity.name},
+          ${identity.avatarUrl},
+          'member'
+        FROM workspaces AS workspace
+        WHERE workspace.id = ${identity.workspaceId}
+        RETURNING id, workspace_id, account_id, name, avatar_url, role
+      )
+      SELECT
+        workspace.id AS "workspaceId",
+        workspace.name AS "workspaceName",
+        joined_identity.id AS "identityId",
+        joined_identity.account_id AS "accountId",
+        joined_identity.name AS "identityName",
+        joined_identity.avatar_url AS "avatarUrl",
+        joined_identity.role
+      FROM joined_identity
+      INNER JOIN workspaces AS workspace
+        ON workspace.id = joined_identity.workspace_id
+      LIMIT 1
+    `,
+  });
 
   const listRows = SqlSchema.findAll({
     Request: AccountRequest,
@@ -113,6 +196,35 @@ const make = Effect.gen(function* () {
     `,
   });
 
+  const updateIdentityRow = SqlSchema.findOneOption({
+    Request: UpdateIdentityRequest,
+    Result: WorkspaceAccessRow,
+    execute: ({ accountId, avatarUrl, name, workspaceId }) => sql<WorkspaceAccessRow>`
+      WITH updated_identity AS (
+        UPDATE workspace_identities AS identity
+        SET
+          name = ${name},
+          avatar_url = ${avatarUrl}
+        WHERE identity.workspace_id = ${workspaceId}
+          AND identity.account_id = ${accountId}
+          AND identity.membership_ended_at IS NULL
+        RETURNING id, workspace_id, account_id, name, avatar_url, role
+      )
+      SELECT
+        workspace.id AS "workspaceId",
+        workspace.name AS "workspaceName",
+        updated_identity.id AS "identityId",
+        updated_identity.account_id AS "accountId",
+        updated_identity.name AS "identityName",
+        updated_identity.avatar_url AS "avatarUrl",
+        updated_identity.role
+      FROM updated_identity
+      INNER JOIN workspaces AS workspace
+        ON workspace.id = updated_identity.workspace_id
+      LIMIT 1
+    `,
+  });
+
   const endMembership = SqlSchema.findOne({
     Request: EndMembershipRequest,
     Result: EndMembershipResult,
@@ -163,6 +275,22 @@ const make = Effect.gen(function* () {
   });
 
   return WorkspaceAccessRepository.of({
+    createWorkspace: Effect.fn("PostgresWorkspaceAccessRepository.createWorkspace")((access) =>
+      createWorkspaceRow(access).pipe(
+        Effect.map(accessFromRow),
+        Effect.mapError((cause) =>
+          persistenceError("WorkspaceAccessRepository.createWorkspace", cause),
+        ),
+      ),
+    ),
+    joinWorkspace: Effect.fn("PostgresWorkspaceAccessRepository.joinWorkspace")((identity) =>
+      joinWorkspaceRow(identity).pipe(
+        Effect.map(Option.map(accessFromRow)),
+        Effect.mapError((cause) =>
+          persistenceError("WorkspaceAccessRepository.joinWorkspace", cause),
+        ),
+      ),
+    ),
     listForAccount: Effect.fn("PostgresWorkspaceAccessRepository.listForAccount")((accountId) =>
       listRows({ accountId }).pipe(
         Effect.map((rows) => rows.map(accessFromRow)),
@@ -185,6 +313,15 @@ const make = Effect.gen(function* () {
         findIdentity({ accountId, workspaceId }).pipe(
           Effect.mapError((cause) =>
             persistenceError("WorkspaceAccessRepository.findIdentityForAccount", cause),
+          ),
+        ),
+    ),
+    updateIdentity: Effect.fn("PostgresWorkspaceAccessRepository.updateIdentity")(
+      (accountId, workspaceId, profile) =>
+        updateIdentityRow({ accountId, workspaceId, ...profile }).pipe(
+          Effect.map(Option.map(accessFromRow)),
+          Effect.mapError((cause) =>
+            persistenceError("WorkspaceAccessRepository.updateIdentity", cause),
           ),
         ),
     ),

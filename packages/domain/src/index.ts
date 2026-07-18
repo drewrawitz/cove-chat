@@ -30,6 +30,7 @@ export {
   WorkspaceAccess,
   WorkspaceAvatarUrl,
   WorkspaceIdentity,
+  WorkspaceIdentityProfile,
   WorkspaceIdentityName,
   WorkspaceName,
   WorkspaceRole,
