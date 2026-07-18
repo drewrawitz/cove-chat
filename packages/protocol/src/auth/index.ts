@@ -9,7 +9,7 @@ export {
 export { MagicLinkAcceptedResponse } from "./auth-response.ts";
 export { CurrentUserResponse } from "./current-user-response.ts";
 export { LoginRequest } from "./login-request.ts";
-export { LogoutHeaders } from "./logout-headers.ts";
+export { CsrfHeaders, LogoutHeaders } from "./logout-headers.ts";
 export {
   AuthenticatedActor,
   AuthenticatedActorId,

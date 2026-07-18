@@ -26,11 +26,19 @@ export {
   getChannelForActor,
 } from "./channels/index.ts";
 export {
+  CreateWorkspaceInput,
   EndWorkspaceMembershipInput,
   GetWorkspaceAccessInput,
+  JoinWorkspaceInput,
   LastWorkspaceOwner,
+  UpdateWorkspaceIdentityInput,
   WorkspaceUnavailable,
+  WorkspaceIdentityDefaultsUnavailable,
+  createWorkspace,
   endWorkspaceMembership,
   getWorkspaceAccess,
+  getWorkspaceIdentityDefaults,
+  joinWorkspace,
   listWorkspaceAccess,
+  updateWorkspaceIdentity,
 } from "./workspaces/index.ts";

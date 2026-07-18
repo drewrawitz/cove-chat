@@ -1,3 +1,4 @@
+export { CreateWorkspaceInput, createWorkspace } from "./create-workspace.ts";
 export {
   EndWorkspaceMembershipInput,
   LastWorkspaceOwner,
@@ -9,3 +10,13 @@ export {
   getWorkspaceAccess,
 } from "./get-workspace-access.ts";
 export { listWorkspaceAccess } from "./list-workspace-access.ts";
+export {
+  JoinWorkspaceInput,
+  WorkspaceIdentityDefaultsUnavailable,
+  getWorkspaceIdentityDefaults,
+  joinWorkspace,
+} from "./join-workspace.ts";
+export {
+  UpdateWorkspaceIdentityInput,
+  updateWorkspaceIdentity,
+} from "./update-workspace-identity.ts";

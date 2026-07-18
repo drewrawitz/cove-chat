@@ -1,5 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { makeCsrfToken, makeMagicLinkToken, makeSessionToken } from "@cove/application";
+import { WorkspaceId, WorkspaceIdentityId } from "@cove/domain";
 import {
   AuditEventWriter,
   AuthenticationNotifier,
@@ -8,6 +9,7 @@ import {
   TransactionManager,
   UserRepository,
   WorkspaceAccessRepository,
+  WorkspaceIdentifierGenerator,
 } from "@cove/ports";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -20,21 +22,23 @@ const AuthPortsTest = Layer.mergeAll(
       sendMagicLink: Effect.fn("AuthenticationNotifier.Test.sendMagicLink")(() => Effect.void),
     }),
   ),
+  Layer.mock(WorkspaceAccessRepository, {
+    listForAccount: Effect.fn("WorkspaceAccessRepository.Test.listForAccount")(() =>
+      Effect.succeed([]),
+    ),
+    findForAccount: Effect.fn("WorkspaceAccessRepository.Test.findForAccount")(() =>
+      Effect.succeed(Option.none()),
+    ),
+  }),
   Layer.succeed(
-    WorkspaceAccessRepository,
-    WorkspaceAccessRepository.of({
-      listForAccount: Effect.fn("WorkspaceAccessRepository.Test.listForAccount")(() =>
-        Effect.succeed([]),
+    WorkspaceIdentifierGenerator,
+    WorkspaceIdentifierGenerator.of({
+      nextWorkspaceId: Effect.fn("WorkspaceIdentifierGenerator.Test.nextWorkspaceId")(() =>
+        Effect.succeed(WorkspaceId.make("workspace-id")),
       ),
-      findForAccount: Effect.fn("WorkspaceAccessRepository.Test.findForAccount")(() =>
-        Effect.succeed(Option.none()),
-      ),
-      findIdentityForAccount: Effect.fn("WorkspaceAccessRepository.Test.findIdentityForAccount")(
-        () => Effect.succeed(Option.none()),
-      ),
-      endMembership: Effect.fn("WorkspaceAccessRepository.Test.endMembership")(() =>
-        Effect.succeed("not-found" as const),
-      ),
+      nextWorkspaceIdentityId: Effect.fn(
+        "WorkspaceIdentifierGenerator.Test.nextWorkspaceIdentityId",
+      )(() => Effect.succeed(WorkspaceIdentityId.make("workspace-identity-id"))),
     }),
   ),
   Layer.succeed(

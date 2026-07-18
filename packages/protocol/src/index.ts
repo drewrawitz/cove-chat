@@ -6,6 +6,7 @@ export {
   AuthenticatedActorId,
   AuthenticatedSession,
   AuthErrorResponses,
+  CsrfHeaders,
   CsrfCookie,
   CsrfValidationFailedResponse,
   CurrentUserResponse,
@@ -25,6 +26,7 @@ export {
 } from "./auth/index.ts";
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
 export {
+  CreateWorkspaceRequest,
   WorkspaceAccessResponse,
   WorkspaceApiGroup,
   WorkspaceErrorResponses,
@@ -34,4 +36,5 @@ export {
   WorkspaceRoleResponse,
   WorkspaceSummaryResponse,
   WorkspaceUnavailableResponse,
+  UpdateWorkspaceIdentityRequest,
 } from "./workspaces/index.ts";

@@ -34,6 +34,14 @@ export const WorkspaceIdentity = Schema.Struct({
 });
 export interface WorkspaceIdentity extends Schema.Schema.Type<typeof WorkspaceIdentity> {}
 
+export const WorkspaceIdentityProfile = Schema.Struct({
+  name: WorkspaceIdentityName,
+  avatarUrl: WorkspaceAvatarUrl,
+});
+export interface WorkspaceIdentityProfile extends Schema.Schema.Type<
+  typeof WorkspaceIdentityProfile
+> {}
+
 export const WorkspaceAccess = Schema.Struct({
   workspace: Workspace,
   identity: WorkspaceIdentity,

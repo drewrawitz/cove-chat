@@ -1,7 +1,16 @@
 import { Button } from "@cove/ui/components/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, useState } from "react";
-import { useAuthLogin, useAuthMe, useWorkspacesListWorkspaces } from "../api/generated/cove-app.ts";
+import {
+  invalidateWorkspacesListWorkspaces,
+  useAuthLogin,
+  useAuthMe,
+  useWorkspacesCreateWorkspace,
+  useWorkspacesListWorkspaces,
+} from "../api/generated/cove-app.ts";
+import { requiredFormValue } from "../form-data.ts";
 
 interface HomeSearch {
   readonly left?: string;
@@ -16,10 +25,13 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { left } = Route.useSearch();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspaces = useWorkspacesListWorkspaces({
     query: { enabled: account.isSuccess, retry: false },
   });
+  const createWorkspace = useWorkspacesCreateWorkspace();
 
   if (account.isPending) return <PageMessage message="Opening Cove…" />;
   if (account.isError && account.error.status === 401) return <SignIn />;
@@ -29,9 +41,40 @@ function Home() {
     return <PageMessage message="Cove could not load your workspaces." />;
   }
 
+  const identityDefaults = workspaces.data.workspaces[0]?.identity ?? {
+    name: account.data.displayName,
+    avatarUrl: "/avatars/default.svg",
+  };
+
+  const create = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = requiredFormValue(form, "workspaceName");
+    const identityName = requiredFormValue(form, "identityName");
+    const avatarUrl = requiredFormValue(form, "avatarUrl");
+
+    createWorkspace.mutate(
+      {
+        data: {
+          name,
+          identity: { name: identityName, avatarUrl },
+        },
+      },
+      {
+        onSuccess: async (created) => {
+          await invalidateWorkspacesListWorkspaces(queryClient);
+          await navigate({
+            to: "/workspaces/$workspaceId",
+            params: { workspaceId: created.workspace.id },
+          });
+        },
+      },
+    );
+  };
+
   return (
     <main className="min-h-svh bg-muted/30 px-5 py-12 sm:px-8">
-      <section className="mx-auto w-full max-w-2xl">
+      <section className="mx-auto w-full max-w-4xl">
         <p className="font-heading text-sm font-semibold tracking-[0.22em] text-primary uppercase">
           Cove
         </p>
@@ -51,7 +94,7 @@ function Home() {
           </p>
         )}
 
-        <ul className="mt-8 grid gap-3">
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
           {workspaces.data.workspaces.map((workspace) => (
             <li key={workspace.id}>
               <Link
@@ -76,6 +119,62 @@ function Home() {
             You do not currently have access to a workspace.
           </p>
         ) : null}
+
+        <section className="mt-10 rounded-3xl border bg-card p-6 shadow-sm sm:p-8">
+          <p className="font-heading text-sm font-semibold tracking-[0.16em] text-primary uppercase">
+            New workspace
+          </p>
+          <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight">
+            Create a separate place to work
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Your current workspace identity is offered as a starting point. These values become an
+            independent profile in the new workspace.
+          </p>
+
+          <form className="mt-6 grid gap-5 sm:grid-cols-2" onSubmit={create}>
+            <label className="text-sm font-medium sm:col-span-2" htmlFor="workspaceName">
+              Workspace name
+              <input
+                id="workspaceName"
+                name="workspaceName"
+                required
+                className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                placeholder="Product Studio"
+              />
+            </label>
+            <label className="text-sm font-medium" htmlFor="identityName">
+              Your name in this workspace
+              <input
+                id="identityName"
+                name="identityName"
+                required
+                defaultValue={identityDefaults.name}
+                className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </label>
+            <label className="text-sm font-medium" htmlFor="avatarUrl">
+              Avatar URL
+              <input
+                id="avatarUrl"
+                name="avatarUrl"
+                required
+                defaultValue={identityDefaults.avatarUrl}
+                className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={createWorkspace.isPending}>
+                {createWorkspace.isPending ? "Creating…" : "Create workspace"}
+              </Button>
+              {createWorkspace.isError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                  Cove could not create this workspace. Check the profile values and try again.
+                </p>
+              ) : null}
+            </div>
+          </form>
+        </section>
       </section>
     </main>
   );

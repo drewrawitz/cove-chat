@@ -57,7 +57,7 @@ const makeFixture = (role: "member" | "owner" = "member", canEnd = true) =>
       }>
     >([]);
 
-    const workspaces = WorkspaceAccessRepository.of({
+    const workspaces = Layer.mock(WorkspaceAccessRepository, {
       listForAccount: Effect.fn("WorkspaceAccessRepository.Test.listForAccount")(() =>
         Ref.get(active).pipe(Effect.map((isActive) => (isActive ? [access] : []))),
       ),
@@ -100,7 +100,7 @@ const makeFixture = (role: "member" | "owner" = "member", canEnd = true) =>
       findForAccountCalls,
       endMembershipCalls,
       layer: Layer.mergeAll(
-        Layer.succeed(WorkspaceAccessRepository, workspaces),
+        workspaces,
         Layer.succeed(AuditEventWriter, audits),
         Layer.succeed(TransactionManager, transactions),
       ),
