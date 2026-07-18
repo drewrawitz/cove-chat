@@ -11,9 +11,9 @@ const generatedDefaultFetch = "fetchFn ?? fetch";
 const generatedErrorBlock = /  if \(!res\.ok\) \{[\s\S]*?    throw err;\n  \}/g;
 const generatedErrorType = /globalThis\.Error & \{[^}]*\}/g;
 const generatedValidatedResponse =
-  /const data = contentType\.includes\("json"\)\s*\?\s*(\w+)\.parse\(parsedBody\)\s*:\s*parsedBody;/g;
+  /const data = contentType\.includes\(["']json["']\)\s*\?\s*(\w+)\.parse\(parsedBody\)\s*:\s*parsedBody;?/g;
 const generatedVoidResponse =
-  /  const data: voidSuccess = body \? JSON\.parse\(body\) : undefined;\n  return data;/g;
+  /  const data\s*:\s*voidSuccess = body \? JSON\.parse\(body\) : undefined;?\s*return data;?/g;
 
 function occurrences(pattern: string): number {
   return generatedClient.split(pattern).length - 1;

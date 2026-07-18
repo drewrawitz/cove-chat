@@ -18,5 +18,20 @@
   "editor.formatOnSaveMode": "file",
   "editor.codeActionsOnSave": {
     "source.fixAll.oxc": "explicit"
+  },
+  "files.watcherExclude": {
+    "**/apps/web/src/api/generated/**": true,
+    "**/apps/web/src/routeTree.gen.ts": true,
+    "**/packages/protocol/openapi/app.json": true
+  },
+  "search.exclude": {
+    "**/apps/web/src/api/generated/**": true,
+    "**/apps/web/src/routeTree.gen.ts": true,
+    "**/packages/protocol/openapi/app.json": true
+  },
+  "files.readonlyInclude": {
+    "**/apps/web/src/api/generated/**": true,
+    "**/apps/web/src/routeTree.gen.ts": true,
+    "**/packages/protocol/openapi/app.json": true
   }
 }

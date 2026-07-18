@@ -28,3 +28,10 @@ Canonical label vocabulary, no overrides (`needs-triage`, `needs-info`, `ready-f
 ### Domain docs
 
 Multi-context: `CONTEXT-MAP.md` at the root points to per-context `CONTEXT.md` files. See `docs/agents/domain.md`.
+
+### Generated artifacts
+
+Do not read or search `apps/web/src/api/generated/`, `apps/web/src/routeTree.gen.ts`, or
+`packages/protocol/openapi/app.json` for implementation context. Read `CoveAppApi`, the protocol
+schemas, and `apps/web/orval.config.ts` instead. Regenerate the API artifacts with
+`vp run web#generate:api`.

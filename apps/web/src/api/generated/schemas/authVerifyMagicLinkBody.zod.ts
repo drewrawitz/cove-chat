@@ -12,4 +12,6 @@ export const AuthVerifyMagicLinkBody = zod.object({
 });
 
 export type AuthVerifyMagicLinkBody = zod.input<typeof AuthVerifyMagicLinkBody>;
-export type AuthVerifyMagicLinkBodyOutput = zod.output<typeof AuthVerifyMagicLinkBody>;
+export type AuthVerifyMagicLinkBodyOutput = zod.output<
+  typeof AuthVerifyMagicLinkBody
+>;

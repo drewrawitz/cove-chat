@@ -1,0 +1,3 @@
+apps/web/src/api/generated/
+apps/web/src/routeTree.gen.ts
+packages/protocol/openapi/app.json

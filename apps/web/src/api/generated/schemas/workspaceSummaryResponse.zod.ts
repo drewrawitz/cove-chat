@@ -13,5 +13,9 @@ export const WorkspaceSummaryResponse = zod.object({
   role: zod.enum(["owner", "admin", "member", "guest"]),
 });
 
-export type WorkspaceSummaryResponse = zod.input<typeof WorkspaceSummaryResponse>;
-export type WorkspaceSummaryResponseOutput = zod.output<typeof WorkspaceSummaryResponse>;
+export type WorkspaceSummaryResponse = zod.input<
+  typeof WorkspaceSummaryResponse
+>;
+export type WorkspaceSummaryResponseOutput = zod.output<
+  typeof WorkspaceSummaryResponse
+>;

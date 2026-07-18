@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "vp dev --port 3000",
-    "generate:api": "vp run @cove/protocol#generate:openapi && orval --config orval.config.ts && vp fmt src/api/generated --write && node scripts/normalize-generated-api.ts && vp fmt src/api/generated --write",
+    "generate:api": "vp run @cove/protocol#generate:openapi && orval --config orval.config.ts && node scripts/normalize-generated-api.ts",
     "generate-routes": "tsr generate",
     "build": "vp run generate:api && vp build",
     "check": "vp run generate:api && vp check",

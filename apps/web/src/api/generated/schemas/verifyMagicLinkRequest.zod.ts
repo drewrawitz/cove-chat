@@ -12,4 +12,6 @@ export const VerifyMagicLinkRequest = zod.object({
 });
 
 export type VerifyMagicLinkRequest = zod.input<typeof VerifyMagicLinkRequest>;
-export type VerifyMagicLinkRequestOutput = zod.output<typeof VerifyMagicLinkRequest>;
+export type VerifyMagicLinkRequestOutput = zod.output<
+  typeof VerifyMagicLinkRequest
+>;

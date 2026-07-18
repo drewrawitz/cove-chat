@@ -7,9 +7,13 @@
  */
 import { z as zod } from "zod";
 
-export const authLoginBodyEmailOneRegExp = new RegExp("^\\S[\\s\\S]*\\S$|^\\S$|^$");
+export const authLoginBodyEmailOneRegExp = new RegExp(
+  "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+);
 
-export const authLoginBodyEmailThreeRegExp = new RegExp("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+export const authLoginBodyEmailThreeRegExp = new RegExp(
+  "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+);
 
 export const AuthLoginBody = zod.object({
   email: zod

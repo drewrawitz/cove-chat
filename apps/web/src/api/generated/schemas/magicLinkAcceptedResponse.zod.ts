@@ -11,5 +11,9 @@ export const MagicLinkAcceptedResponse = zod.object({
   status: zod.enum(["accepted"]),
 });
 
-export type MagicLinkAcceptedResponse = zod.input<typeof MagicLinkAcceptedResponse>;
-export type MagicLinkAcceptedResponseOutput = zod.output<typeof MagicLinkAcceptedResponse>;
+export type MagicLinkAcceptedResponse = zod.input<
+  typeof MagicLinkAcceptedResponse
+>;
+export type MagicLinkAcceptedResponseOutput = zod.output<
+  typeof MagicLinkAcceptedResponse
+>;

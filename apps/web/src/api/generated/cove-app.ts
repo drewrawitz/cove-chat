@@ -30,7 +30,10 @@ import { type VerifyMagicLinkRequest } from "./schemas/verifyMagicLinkRequest.zo
 import { WorkspaceAccessResponse } from "./schemas/workspaceAccessResponse.zod.ts";
 import { WorkspaceListResponse } from "./schemas/workspaceListResponse.zod.ts";
 
-const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+const withQueryKey = <T extends object, K>(
+  query: T,
+  queryKey: K,
+): T & { queryKey: K } => {
   const result = { queryKey } as T & { queryKey: K };
   for (const key of Object.keys(query)) {
     // The explicit queryKey always wins, matching the previous
@@ -57,22 +60,26 @@ export const authLogin = async (
   const res = await (fetchFn ?? coveFetch)(getAuthLoginUrl(), {
     ...options,
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...Object.fromEntries(new Headers(options?.headers)),
-    },
+    headers: { "Content-Type": "application/json", ...Object.fromEntries(new Headers(options?.headers)) },
     body: JSON.stringify(loginRequest),
   });
 
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
-  const parsedBody = body ? (contentType.includes("json") ? JSON.parse(body) : body) : {};
+  const parsedBody = body
+    ? contentType.includes("json")
+      ? JSON.parse(body)
+      : body
+    : {};
   const data = MagicLinkAcceptedResponse.parse(parsedBody);
   return data;
 };
 
-export const getAuthLoginMutationOptions = <TError = CoveApiError, TContext = unknown>(options?: {
+export const getAuthLoginMutationOptions = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(options?: {
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof authLogin>>,
     TError,
@@ -93,7 +100,9 @@ export const getAuthLoginMutationOptions = <TError = CoveApiError, TContext = un
     fetch: fetchOptions,
     fetcher: fetcherFn,
   } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, fetch: undefined };
@@ -110,11 +119,16 @@ export const getAuthLoginMutationOptions = <TError = CoveApiError, TContext = un
   return { mutationFn, ...mutationOptions };
 };
 
-export type AuthLoginMutationResult = NonNullable<Awaited<ReturnType<typeof authLogin>>>;
+export type AuthLoginMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authLogin>>
+>;
 export type AuthLoginMutationBody = LoginRequest;
 export type AuthLoginMutationError = CoveApiError;
 
-export const useAuthLogin = <TError = CoveApiError, TContext = unknown>(
+export const useAuthLogin = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof authLogin>>,
@@ -147,17 +161,18 @@ export const authVerifyMagicLink = async (
   const res = await (fetchFn ?? coveFetch)(getAuthVerifyMagicLinkUrl(), {
     ...options,
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...Object.fromEntries(new Headers(options?.headers)),
-    },
+    headers: { "Content-Type": "application/json", ...Object.fromEntries(new Headers(options?.headers)) },
     body: JSON.stringify(verifyMagicLinkRequest),
   });
 
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
-  const parsedBody = body ? (contentType.includes("json") ? JSON.parse(body) : body) : {};
+  const parsedBody = body
+    ? contentType.includes("json")
+      ? JSON.parse(body)
+      : body
+    : {};
   const data = CurrentUserResponse.parse(parsedBody);
   return data;
 };
@@ -186,7 +201,9 @@ export const getAuthVerifyMagicLinkMutationOptions = <
     fetch: fetchOptions,
     fetcher: fetcherFn,
   } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, fetch: undefined };
@@ -209,7 +226,10 @@ export type AuthVerifyMagicLinkMutationResult = NonNullable<
 export type AuthVerifyMagicLinkMutationBody = VerifyMagicLinkRequest;
 export type AuthVerifyMagicLinkMutationError = CoveApiError;
 
-export const useAuthVerifyMagicLink = <TError = CoveApiError, TContext = unknown>(
+export const useAuthVerifyMagicLink = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof authVerifyMagicLink>>,
@@ -227,7 +247,10 @@ export const useAuthVerifyMagicLink = <TError = CoveApiError, TContext = unknown
   { data: VerifyMagicLinkRequest },
   TContext
 > => {
-  return useMutation(getAuthVerifyMagicLinkMutationOptions(options), queryClient);
+  return useMutation(
+    getAuthVerifyMagicLinkMutationOptions(options),
+    queryClient,
+  );
 };
 
 export const getAuthLogoutUrl = () => {
@@ -249,41 +272,74 @@ export const authLogout = async (
   return undefined;
 };
 
-export const getAuthLogoutMutationOptions = <TError = CoveApiError, TContext = unknown>(options?: {
-  mutation?: UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError, void, TContext>;
+export const getAuthLogoutMutationOptions = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof authLogout>>,
+    TError,
+    void,
+    TContext
+  >;
   fetch?: RequestInit;
   fetcher?: typeof globalThis.fetch;
-}): UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError, void, TContext> => {
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof authLogout>>,
+  TError,
+  void,
+  TContext
+> => {
   const mutationKey = ["authLogout"];
   const {
     mutation: mutationOptions,
     fetch: fetchOptions,
     fetcher: fetcherFn,
   } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, fetch: undefined };
 
-  const mutationFn: MutationFunction<Awaited<ReturnType<typeof authLogout>>, void> = () => {
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof authLogout>>,
+    void
+  > = () => {
     return authLogout(fetchOptions, fetcherFn);
   };
 
   return { mutationFn, ...mutationOptions };
 };
 
-export type AuthLogoutMutationResult = NonNullable<Awaited<ReturnType<typeof authLogout>>>;
+export type AuthLogoutMutationResult = NonNullable<
+  Awaited<ReturnType<typeof authLogout>>
+>;
 
 export type AuthLogoutMutationError = CoveApiError;
 
-export const useAuthLogout = <TError = CoveApiError, TContext = unknown>(
+export const useAuthLogout = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(
   options?: {
-    mutation?: UseMutationOptions<Awaited<ReturnType<typeof authLogout>>, TError, void, TContext>;
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof authLogout>>,
+      TError,
+      void,
+      TContext
+    >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseMutationResult<Awaited<ReturnType<typeof authLogout>>, TError, void, TContext> => {
+): UseMutationResult<
+  Awaited<ReturnType<typeof authLogout>>,
+  TError,
+  void,
+  TContext
+> => {
   return useMutation(getAuthLogoutMutationOptions(options), queryClient);
 };
 
@@ -303,7 +359,11 @@ export const authMe = async (
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
-  const parsedBody = body ? (contentType.includes("json") ? JSON.parse(body) : body) : {};
+  const parsedBody = body
+    ? contentType.includes("json")
+      ? JSON.parse(body)
+      : body
+    : {};
   const data = CurrentUserResponse.parse(parsedBody);
   return data;
 };
@@ -316,16 +376,23 @@ export const getAuthMeQueryOptions = <
   TData = Awaited<ReturnType<typeof authMe>>,
   TError = CoveApiError,
 >(options?: {
-  query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>>;
+  query?: Partial<
+    UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+  >;
   fetch?: RequestInit;
   fetcher?: typeof globalThis.fetch;
 }) => {
-  const { query: queryOptions, fetch: fetchOptions, fetcher: fetcherFn } = options ?? {};
+  const {
+    query: queryOptions,
+    fetch: fetchOptions,
+    fetcher: fetcherFn,
+  } = options ?? {};
 
   const queryKey = queryOptions?.queryKey ?? getAuthMeQueryKey();
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof authMe>>> = ({ signal }) =>
-    authMe({ signal, ...fetchOptions }, fetcherFn);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof authMe>>> = ({
+    signal,
+  }) => authMe({ signal, ...fetchOptions }, fetcherFn);
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof authMe>>,
@@ -337,9 +404,14 @@ export const getAuthMeQueryOptions = <
 export type AuthMeQueryResult = NonNullable<Awaited<ReturnType<typeof authMe>>>;
 export type AuthMeQueryError = CoveApiError;
 
-export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = CoveApiError>(
+export function useAuthMe<
+  TData = Awaited<ReturnType<typeof authMe>>,
+  TError = CoveApiError,
+>(
   options: {
-    query: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>> &
+    query: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+    > &
       Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof authMe>>,
@@ -352,10 +424,17 @@ export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = C
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = CoveApiError>(
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthMe<
+  TData = Awaited<ReturnType<typeof authMe>>,
+  TError = CoveApiError,
+>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>> &
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+    > &
       Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof authMe>>,
@@ -368,29 +447,46 @@ export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = C
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
-export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = CoveApiError>(
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
+export function useAuthMe<
+  TData = Awaited<ReturnType<typeof authMe>>,
+  TError = CoveApiError,
+>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+    >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 
-export function useAuthMe<TData = Awaited<ReturnType<typeof authMe>>, TError = CoveApiError>(
+export function useAuthMe<
+  TData = Awaited<ReturnType<typeof authMe>>,
+  TError = CoveApiError,
+>(
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+    >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
   const queryOptions = getAuthMeQueryOptions(options);
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
@@ -401,7 +497,9 @@ export const prefetchAuthMeQuery = async <
 >(
   queryClient: QueryClient,
   options?: {
-    query?: Partial<UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>>;
+    query?: Partial<
+      UseQueryOptions<Awaited<ReturnType<typeof authMe>>, TError, TData>
+    >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
@@ -417,7 +515,10 @@ export const invalidateAuthMe = async (
   queryClient: QueryClient,
   options?: InvalidateOptions,
 ): Promise<QueryClient> => {
-  await queryClient.invalidateQueries({ queryKey: getAuthMeQueryKey() }, options);
+  await queryClient.invalidateQueries(
+    { queryKey: getAuthMeQueryKey() },
+    options,
+  );
 
   return queryClient;
 };
@@ -438,7 +539,11 @@ export const workspacesListWorkspaces = async (
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
-  const parsedBody = body ? (contentType.includes("json") ? JSON.parse(body) : body) : {};
+  const parsedBody = body
+    ? contentType.includes("json")
+      ? JSON.parse(body)
+      : body
+    : {};
   const data = WorkspaceListResponse.parse(parsedBody);
   return data;
 };
@@ -452,18 +557,28 @@ export const getWorkspacesListWorkspacesQueryOptions = <
   TError = CoveApiError,
 >(options?: {
   query?: Partial<
-    UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+    UseQueryOptions<
+      Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+      TError,
+      TData
+    >
   >;
   fetch?: RequestInit;
   fetcher?: typeof globalThis.fetch;
 }) => {
-  const { query: queryOptions, fetch: fetchOptions, fetcher: fetcherFn } = options ?? {};
+  const {
+    query: queryOptions,
+    fetch: fetchOptions,
+    fetcher: fetcherFn,
+  } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getWorkspacesListWorkspacesQueryKey();
+  const queryKey =
+    queryOptions?.queryKey ?? getWorkspacesListWorkspacesQueryKey();
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof workspacesListWorkspaces>>> = ({
-    signal,
-  }) => workspacesListWorkspaces({ signal, ...fetchOptions }, fetcherFn);
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof workspacesListWorkspaces>>
+  > = ({ signal }) =>
+    workspacesListWorkspaces({ signal, ...fetchOptions }, fetcherFn);
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof workspacesListWorkspaces>>,
@@ -483,7 +598,11 @@ export function useWorkspacesListWorkspaces<
 >(
   options: {
     query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+        TError,
+        TData
+      >
     > &
       Pick<
         DefinedInitialDataOptions<
@@ -497,14 +616,20 @@ export function useWorkspacesListWorkspaces<
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 export function useWorkspacesListWorkspaces<
   TData = Awaited<ReturnType<typeof workspacesListWorkspaces>>,
   TError = CoveApiError,
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+        TError,
+        TData
+      >
     > &
       Pick<
         UndefinedInitialDataOptions<
@@ -518,20 +643,28 @@ export function useWorkspacesListWorkspaces<
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 export function useWorkspacesListWorkspaces<
   TData = Awaited<ReturnType<typeof workspacesListWorkspaces>>,
   TError = CoveApiError,
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 
 export function useWorkspacesListWorkspaces<
   TData = Awaited<ReturnType<typeof workspacesListWorkspaces>>,
@@ -539,18 +672,25 @@ export function useWorkspacesListWorkspaces<
 >(
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
   const queryOptions = getWorkspacesListWorkspacesQueryOptions(options);
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
@@ -562,7 +702,11 @@ export const prefetchWorkspacesListWorkspacesQuery = async <
   queryClient: QueryClient,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesListWorkspaces>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesListWorkspaces>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
@@ -579,7 +723,10 @@ export const invalidateWorkspacesListWorkspaces = async (
   queryClient: QueryClient,
   options?: InvalidateOptions,
 ): Promise<QueryClient> => {
-  await queryClient.invalidateQueries({ queryKey: getWorkspacesListWorkspacesQueryKey() }, options);
+  await queryClient.invalidateQueries(
+    { queryKey: getWorkspacesListWorkspacesQueryKey() },
+    options,
+  );
 
   return queryClient;
 };
@@ -593,15 +740,22 @@ export const workspacesGetWorkspace = async (
   options?: RequestInit,
   fetchFn?: typeof globalThis.fetch,
 ): Promise<WorkspaceAccessResponse> => {
-  const res = await (fetchFn ?? coveFetch)(getWorkspacesGetWorkspaceUrl(workspaceId), {
-    ...options,
-    method: "GET",
-  });
+  const res = await (fetchFn ?? coveFetch)(
+    getWorkspacesGetWorkspaceUrl(workspaceId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 
   const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
-  const parsedBody = body ? (contentType.includes("json") ? JSON.parse(body) : body) : {};
+  const parsedBody = body
+    ? contentType.includes("json")
+      ? JSON.parse(body)
+      : body
+    : {};
   const data = WorkspaceAccessResponse.parse(parsedBody);
   return data;
 };
@@ -617,17 +771,28 @@ export const getWorkspacesGetWorkspaceQueryOptions = <
   workspaceId: string,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions, fetcher: fetcherFn } = options ?? {};
+  const {
+    query: queryOptions,
+    fetch: fetchOptions,
+    fetcher: fetcherFn,
+  } = options ?? {};
 
-  const queryKey = queryOptions?.queryKey ?? getWorkspacesGetWorkspaceQueryKey(workspaceId);
+  const queryKey =
+    queryOptions?.queryKey ?? getWorkspacesGetWorkspaceQueryKey(workspaceId);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof workspacesGetWorkspace>>> = ({ signal }) =>
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof workspacesGetWorkspace>>
+  > = ({ signal }) =>
     workspacesGetWorkspace(workspaceId, { signal, ...fetchOptions }, fetcherFn);
 
   return {
@@ -635,9 +800,11 @@ export const getWorkspacesGetWorkspaceQueryOptions = <
     queryFn,
     enabled: workspaceId !== null && workspaceId !== undefined,
     ...queryOptions,
-  } as UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+    TError,
+    TData
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 };
 
 export type WorkspacesGetWorkspaceQueryResult = NonNullable<
@@ -652,7 +819,11 @@ export function useWorkspacesGetWorkspace<
   workspaceId: string,
   options: {
     query: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     > &
       Pick<
         DefinedInitialDataOptions<
@@ -666,7 +837,9 @@ export function useWorkspacesGetWorkspace<
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): DefinedUseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 export function useWorkspacesGetWorkspace<
   TData = Awaited<ReturnType<typeof workspacesGetWorkspace>>,
   TError = CoveApiError,
@@ -674,7 +847,11 @@ export function useWorkspacesGetWorkspace<
   workspaceId: string,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     > &
       Pick<
         UndefinedInitialDataOptions<
@@ -688,7 +865,9 @@ export function useWorkspacesGetWorkspace<
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 export function useWorkspacesGetWorkspace<
   TData = Awaited<ReturnType<typeof workspacesGetWorkspace>>,
   TError = CoveApiError,
@@ -696,13 +875,19 @@ export function useWorkspacesGetWorkspace<
   workspaceId: string,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+};
 
 export function useWorkspacesGetWorkspace<
   TData = Awaited<ReturnType<typeof workspacesGetWorkspace>>,
@@ -711,18 +896,28 @@ export function useWorkspacesGetWorkspace<
   workspaceId: string,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
   queryClient?: QueryClient,
-): UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
-  const queryOptions = getWorkspacesGetWorkspaceQueryOptions(workspaceId, options);
+): UseQueryResult<TData, TError> & {
+  queryKey: DataTag<QueryKey, TData, TError>;
+} {
+  const queryOptions = getWorkspacesGetWorkspaceQueryOptions(
+    workspaceId,
+    options,
+  );
 
-  const query = useQuery(queryOptions, queryClient) as UseQueryResult<TData, TError> & {
-    queryKey: DataTag<QueryKey, TData, TError>;
-  };
+  const query = useQuery(queryOptions, queryClient) as UseQueryResult<
+    TData,
+    TError
+  > & { queryKey: DataTag<QueryKey, TData, TError> };
 
   return withQueryKey(query, queryOptions.queryKey);
 }
@@ -735,13 +930,20 @@ export const prefetchWorkspacesGetWorkspaceQuery = async <
   workspaceId: string,
   options?: {
     query?: Partial<
-      UseQueryOptions<Awaited<ReturnType<typeof workspacesGetWorkspace>>, TError, TData>
+      UseQueryOptions<
+        Awaited<ReturnType<typeof workspacesGetWorkspace>>,
+        TError,
+        TData
+      >
     >;
     fetch?: RequestInit;
     fetcher?: typeof globalThis.fetch;
   },
 ): Promise<QueryClient> => {
-  const queryOptions = getWorkspacesGetWorkspaceQueryOptions(workspaceId, options);
+  const queryOptions = getWorkspacesGetWorkspaceQueryOptions(
+    workspaceId,
+    options,
+  );
 
   await queryClient.prefetchQuery(queryOptions);
 
@@ -770,10 +972,13 @@ export const workspacesEndMembership = async (
   options?: RequestInit,
   fetchFn?: typeof globalThis.fetch,
 ): Promise<void> => {
-  const res = await (fetchFn ?? coveFetch)(getWorkspacesEndMembershipUrl(workspaceId), {
-    ...options,
-    method: "DELETE",
-  });
+  const res = await (fetchFn ?? coveFetch)(
+    getWorkspacesEndMembershipUrl(workspaceId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text();
   if (!res.ok) throw new CoveApiError(res.status, parseApiError(body));
@@ -805,7 +1010,9 @@ export const getWorkspacesEndMembershipMutationOptions = <
     fetch: fetchOptions,
     fetcher: fetcherFn,
   } = options
-    ? options.mutation && "mutationKey" in options.mutation && options.mutation.mutationKey
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
     : { mutation: { mutationKey }, fetch: undefined };
@@ -828,7 +1035,10 @@ export type WorkspacesEndMembershipMutationResult = NonNullable<
 
 export type WorkspacesEndMembershipMutationError = CoveApiError;
 
-export const useWorkspacesEndMembership = <TError = CoveApiError, TContext = unknown>(
+export const useWorkspacesEndMembership = <
+  TError = CoveApiError,
+  TContext = unknown,
+>(
   options?: {
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof workspacesEndMembership>>,
@@ -846,5 +1056,8 @@ export const useWorkspacesEndMembership = <TError = CoveApiError, TContext = unk
   { workspaceId: string },
   TContext
 > => {
-  return useMutation(getWorkspacesEndMembershipMutationOptions(options), queryClient);
+  return useMutation(
+    getWorkspacesEndMembershipMutationOptions(options),
+    queryClient,
+  );
 };

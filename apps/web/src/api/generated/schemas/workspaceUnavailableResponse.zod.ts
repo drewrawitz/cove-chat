@@ -12,5 +12,9 @@ export const WorkspaceUnavailableResponse = zod.object({
   message: zod.enum(["Workspace is unavailable."]),
 });
 
-export type WorkspaceUnavailableResponse = zod.input<typeof WorkspaceUnavailableResponse>;
-export type WorkspaceUnavailableResponseOutput = zod.output<typeof WorkspaceUnavailableResponse>;
+export type WorkspaceUnavailableResponse = zod.input<
+  typeof WorkspaceUnavailableResponse
+>;
+export type WorkspaceUnavailableResponseOutput = zod.output<
+  typeof WorkspaceUnavailableResponse
+>;

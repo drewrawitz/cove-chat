@@ -11,7 +11,9 @@ export const WorkspacesEndMembershipHeaders = zod.object({
   "x-csrf-token": zod.string().min(1).optional(),
 });
 
-export type WorkspacesEndMembershipHeaders = zod.input<typeof WorkspacesEndMembershipHeaders>;
+export type WorkspacesEndMembershipHeaders = zod.input<
+  typeof WorkspacesEndMembershipHeaders
+>;
 export type WorkspacesEndMembershipHeadersOutput = zod.output<
   typeof WorkspacesEndMembershipHeaders
 >;

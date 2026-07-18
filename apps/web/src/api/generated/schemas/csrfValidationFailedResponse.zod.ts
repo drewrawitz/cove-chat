@@ -12,5 +12,9 @@ export const CsrfValidationFailedResponse = zod.object({
   message: zod.enum(["CSRF validation failed."]),
 });
 
-export type CsrfValidationFailedResponse = zod.input<typeof CsrfValidationFailedResponse>;
-export type CsrfValidationFailedResponseOutput = zod.output<typeof CsrfValidationFailedResponse>;
+export type CsrfValidationFailedResponse = zod.input<
+  typeof CsrfValidationFailedResponse
+>;
+export type CsrfValidationFailedResponseOutput = zod.output<
+  typeof CsrfValidationFailedResponse
+>;

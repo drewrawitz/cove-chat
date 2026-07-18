@@ -18,5 +18,9 @@ export const InternalServerErrorResponse = zod.union([
   }),
 ]);
 
-export type InternalServerErrorResponse = zod.input<typeof InternalServerErrorResponse>;
-export type InternalServerErrorResponseOutput = zod.output<typeof InternalServerErrorResponse>;
+export type InternalServerErrorResponse = zod.input<
+  typeof InternalServerErrorResponse
+>;
+export type InternalServerErrorResponseOutput = zod.output<
+  typeof InternalServerErrorResponse
+>;

@@ -9,6 +9,7 @@ export default defineConfig({
       target: "./src/api/generated/cove-app.ts",
       client: "react-query",
       httpClient: "fetch",
+      formatter: "prettier",
       schemas: {
         path: "./src/api/generated/schemas",
         type: "zod",

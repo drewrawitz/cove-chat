@@ -12,5 +12,9 @@ export const LastWorkspaceOwnerResponse = zod.object({
   message: zod.enum(["The final workspace owner cannot leave."]),
 });
 
-export type LastWorkspaceOwnerResponse = zod.input<typeof LastWorkspaceOwnerResponse>;
-export type LastWorkspaceOwnerResponseOutput = zod.output<typeof LastWorkspaceOwnerResponse>;
+export type LastWorkspaceOwnerResponse = zod.input<
+  typeof LastWorkspaceOwnerResponse
+>;
+export type LastWorkspaceOwnerResponseOutput = zod.output<
+  typeof LastWorkspaceOwnerResponse
+>;

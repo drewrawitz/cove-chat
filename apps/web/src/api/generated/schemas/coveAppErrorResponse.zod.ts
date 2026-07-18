@@ -35,4 +35,6 @@ export const CoveAppErrorResponse = zod.union([
 ]);
 
 export type CoveAppErrorResponse = zod.input<typeof CoveAppErrorResponse>;
-export type CoveAppErrorResponseOutput = zod.output<typeof CoveAppErrorResponse>;
+export type CoveAppErrorResponseOutput = zod.output<
+  typeof CoveAppErrorResponse
+>;

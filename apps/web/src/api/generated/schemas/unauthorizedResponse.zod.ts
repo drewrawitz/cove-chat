@@ -19,4 +19,6 @@ export const UnauthorizedResponse = zod.union([
 ]);
 
 export type UnauthorizedResponse = zod.input<typeof UnauthorizedResponse>;
-export type UnauthorizedResponseOutput = zod.output<typeof UnauthorizedResponse>;
+export type UnauthorizedResponseOutput = zod.output<
+  typeof UnauthorizedResponse
+>;

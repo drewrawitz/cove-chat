@@ -18,4 +18,6 @@ export const WorkspaceListResponse = zod.object({
 });
 
 export type WorkspaceListResponse = zod.input<typeof WorkspaceListResponse>;
-export type WorkspaceListResponseOutput = zod.output<typeof WorkspaceListResponse>;
+export type WorkspaceListResponseOutput = zod.output<
+  typeof WorkspaceListResponse
+>;

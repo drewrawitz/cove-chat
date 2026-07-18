@@ -13,5 +13,9 @@ export const WorkspaceIdentityResponse = zod.object({
   avatarUrl: zod.string(),
 });
 
-export type WorkspaceIdentityResponse = zod.input<typeof WorkspaceIdentityResponse>;
-export type WorkspaceIdentityResponseOutput = zod.output<typeof WorkspaceIdentityResponse>;
+export type WorkspaceIdentityResponse = zod.input<
+  typeof WorkspaceIdentityResponse
+>;
+export type WorkspaceIdentityResponseOutput = zod.output<
+  typeof WorkspaceIdentityResponse
+>;

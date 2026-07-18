@@ -12,5 +12,9 @@ export const InvalidMagicLinkResponse = zod.object({
   message: zod.enum(["Magic link is invalid or expired."]),
 });
 
-export type InvalidMagicLinkResponse = zod.input<typeof InvalidMagicLinkResponse>;
-export type InvalidMagicLinkResponseOutput = zod.output<typeof InvalidMagicLinkResponse>;
+export type InvalidMagicLinkResponse = zod.input<
+  typeof InvalidMagicLinkResponse
+>;
+export type InvalidMagicLinkResponseOutput = zod.output<
+  typeof InvalidMagicLinkResponse
+>;

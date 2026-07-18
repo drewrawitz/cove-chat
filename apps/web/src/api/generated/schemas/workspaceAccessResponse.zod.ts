@@ -21,4 +21,6 @@ export const WorkspaceAccessResponse = zod.object({
 });
 
 export type WorkspaceAccessResponse = zod.input<typeof WorkspaceAccessResponse>;
-export type WorkspaceAccessResponseOutput = zod.output<typeof WorkspaceAccessResponse>;
+export type WorkspaceAccessResponseOutput = zod.output<
+  typeof WorkspaceAccessResponse
+>;
