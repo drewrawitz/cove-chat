@@ -9,7 +9,7 @@ Docker must be available. Install the browser runtime once, then run the suite:
 
 ```sh
 vp run install:browsers
-vp test
+vp run test
 ```
 
 Run those commands from `apps/acceptance`. Keep browser assertions focused on user-observable

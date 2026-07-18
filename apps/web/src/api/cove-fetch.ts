@@ -1,15 +1,13 @@
-import {
-  CoveAppErrorResponse,
-  type CoveAppErrorResponse as ApiErrorInfo,
-} from "./generated/schemas/coveAppErrorResponse.zod.ts";
+import type { ZodType } from "zod";
+import type { CoveAppErrorResponse as ApiErrorInfo } from "./generated/schemas/coveAppErrorResponse.zod.ts";
 
 export type { ApiErrorInfo };
 
-export class CoveApiError extends Error {
-  readonly info: ApiErrorInfo;
+export class CoveApiError<ErrorInfo extends ApiErrorInfo = ApiErrorInfo> extends Error {
+  readonly info: ErrorInfo;
   readonly status: number;
 
-  constructor(status: number, info: ApiErrorInfo) {
+  constructor(status: number, info: ErrorInfo) {
     super(`Cove API request failed with status ${status}.`);
     this.name = "CoveApiError";
     this.info = info;
@@ -17,11 +15,14 @@ export class CoveApiError extends Error {
   }
 }
 
-export function parseApiError(body: string | null): ApiErrorInfo {
+export function parseApiError<ErrorInfo extends ApiErrorInfo>(
+  body: string | null,
+  schema: ZodType<ErrorInfo>,
+): ErrorInfo {
   if (body === null) throw new TypeError("Expected a Cove API error response body.");
 
   const input: unknown = JSON.parse(body);
-  return CoveAppErrorResponse.parse(input);
+  return schema.parse(input);
 }
 
 function cookieValue(name: string): string | undefined {

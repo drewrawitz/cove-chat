@@ -159,7 +159,8 @@ export const BrowserAcceptanceLive = Layer.effect(
     yield* prepareDatabase(databaseUrl);
 
     const apiPort = yield* allocatePort();
-    const webPort = yield* allocatePort();
+    let webPort = yield* allocatePort();
+    while (webPort === apiPort) webPort = yield* allocatePort();
     const apiUrl = `http://127.0.0.1:${apiPort}`;
     const webUrl = `http://localhost:${webPort}`;
     const apiOutput: Array<string> = [];

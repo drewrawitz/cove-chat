@@ -1,6 +1,7 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
   invalidateWorkspacesListWorkspaces,
@@ -88,11 +89,33 @@ function WorkspaceHome() {
             >
               {endMembership.isPending ? "Leaving…" : "Leave workspace"}
             </Button>
+            {endMembership.error === null ? null : (
+              <p className="mt-3 text-sm text-destructive" role="alert">
+                {leaveErrorMessage(endMembership.error)}
+              </p>
+            )}
           </div>
         </div>
       </section>
     </main>
   );
+}
+
+function leaveErrorMessage(error: unknown): string {
+  if (!(error instanceof CoveApiError)) {
+    return "We couldn't leave the workspace. Try again in a moment.";
+  }
+
+  switch (error.info.code) {
+    case "LAST_WORKSPACE_OWNER":
+      return "You are the last workspace owner. Promote another member before leaving.";
+    case "UNAUTHENTICATED":
+      return "Your session has expired. Sign in again, then try leaving the workspace.";
+    case "CSRF_VALIDATION_FAILED":
+      return "We couldn't verify your session. Refresh the page and try again.";
+    default:
+      return "We couldn't leave the workspace. Try again in a moment.";
+  }
 }
 
 function WorkspaceMessage({

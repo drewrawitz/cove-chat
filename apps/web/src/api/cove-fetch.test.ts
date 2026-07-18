@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vite-plus/test";
-import { authLogin, authVerifyMagicLink } from "./generated/cove-app.ts";
+import { authLogin, authVerifyMagicLink, workspacesEndMembership } from "./generated/cove-app.ts";
 import { CoveApiError, coveFetch } from "./cove-fetch.ts";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -55,6 +55,31 @@ describe("Cove API transport", () => {
     }
   });
 
+  it("decodes an error declared by the requested operation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              code: "LAST_WORKSPACE_OWNER",
+              message: "The final workspace owner cannot leave.",
+            }),
+            { headers: { "content-type": "application/json" }, status: 409 },
+          ),
+        ),
+      ),
+    );
+
+    await expect(workspacesEndMembership("workspace-1")).rejects.toMatchObject({
+      info: {
+        code: "LAST_WORKSPACE_OWNER",
+        message: "The final workspace owner cannot leave.",
+      },
+      status: 409,
+    });
+  });
+
   it("rejects a success response that does not match the OpenAPI schema", async () => {
     vi.stubGlobal(
       "fetch",
@@ -74,15 +99,18 @@ describe("Cove API transport", () => {
     );
   });
 
-  it("rejects an error response with a code outside the generated API contract", async () => {
+  it("rejects an app error response outside the operation contract", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Promise.resolve(
-          new Response(JSON.stringify({ code: "UNKNOWN", message: "Unknown error." }), {
-            headers: { "content-type": "application/json" },
-            status: 500,
-          }),
+          new Response(
+            JSON.stringify({
+              code: "LAST_WORKSPACE_OWNER",
+              message: "The final workspace owner cannot leave.",
+            }),
+            { headers: { "content-type": "application/json" }, status: 409 },
+          ),
         ),
       ),
     );

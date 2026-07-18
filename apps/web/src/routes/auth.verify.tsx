@@ -30,7 +30,7 @@ function VerifyMagicLink() {
           invalidateAuthMe(queryClient),
           invalidateWorkspacesListWorkspaces(queryClient),
         ]);
-        await navigate({ to: "/", search: {} });
+        await navigate({ to: "/", search: {}, replace: true });
       },
     },
   });
