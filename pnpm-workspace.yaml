@@ -7,6 +7,9 @@ packages:
 catalogMode: prefer
 
 catalog:
+  "@tailwindcss/vite": ^4.1.18
+  "@types/react": ^19.2.0
+  "@types/react-dom": ^19.2.0
   "@effect/platform-node": 4.0.0-beta.98
   "@effect/sql-pg": 4.0.0-beta.98
   "@effect/vitest": 4.0.0-beta.98
@@ -14,6 +17,9 @@ catalog:
   "@types/node": ^24
   dotenv: 17.4.2
   effect: 4.0.0-beta.98
+  react: ^19.2.0
+  react-dom: ^19.2.0
+  tailwindcss: ^4.1.18
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
   vite-plus: 0.2.4
@@ -31,3 +37,5 @@ allowBuilds:
   prisma: true
   protobufjs: false
   ssh2: false
+minimumReleaseAgeExclude:
+  - shadcn@4.13.1
