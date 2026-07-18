@@ -2,6 +2,13 @@ import { Schema } from "effect";
 
 export const WorkspaceRoleResponse = Schema.Literals(["owner", "admin", "member", "guest"]);
 
+export const WorkspaceMembershipResponse = Schema.Struct({
+  role: WorkspaceRoleResponse,
+}).annotate({ identifier: "WorkspaceMembershipResponse" });
+export interface WorkspaceMembershipResponse extends Schema.Schema.Type<
+  typeof WorkspaceMembershipResponse
+> {}
+
 export const WorkspaceIdentityResponse = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -15,7 +22,7 @@ export const WorkspaceSummaryResponse = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   identity: WorkspaceIdentityResponse,
-  role: WorkspaceRoleResponse,
+  membership: WorkspaceMembershipResponse,
 }).annotate({ identifier: "WorkspaceSummaryResponse" });
 export interface WorkspaceSummaryResponse extends Schema.Schema.Type<
   typeof WorkspaceSummaryResponse
@@ -32,7 +39,7 @@ export const WorkspaceAccessResponse = Schema.Struct({
     name: Schema.String,
   }),
   identity: WorkspaceIdentityResponse,
-  role: WorkspaceRoleResponse,
+  membership: WorkspaceMembershipResponse,
 }).annotate({ identifier: "WorkspaceAccessResponse" });
 export interface WorkspaceAccessResponse extends Schema.Schema.Type<
   typeof WorkspaceAccessResponse

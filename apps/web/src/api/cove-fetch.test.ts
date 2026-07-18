@@ -71,7 +71,9 @@ describe("Cove API transport", () => {
       ),
     );
 
-    await expect(workspacesEndMembership("workspace-1")).rejects.toMatchObject({
+    await expect(
+      workspacesEndMembership("workspace-1", { commandId: "leave-workspace-command" }),
+    ).rejects.toMatchObject({
       info: {
         code: "LAST_WORKSPACE_OWNER",
         message: "The final workspace owner cannot leave.",

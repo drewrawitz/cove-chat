@@ -6,7 +6,13 @@
   "exports": {
     ".": {
       "types": "./src/index.ts",
+      "development": "./src/index.ts",
       "import": "./dist/index.mjs"
+    },
+    "./workspaces/internal": {
+      "types": "./src/workspaces/internal.ts",
+      "development": "./src/workspaces/internal.ts",
+      "import": "./dist/workspaces/internal.mjs"
     },
     "./package.json": "./package.json"
   },

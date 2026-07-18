@@ -12,7 +12,6 @@ import { Cookies, HttpBody, HttpClient, HttpRouter } from "effect/unstable/http"
 import { SqlClient } from "effect/unstable/sql";
 import { PostgresDatabaseReadiness } from "../../src/health/index.ts";
 import { makeHttpRoutes } from "../../src/http-live.ts";
-import { WorkspaceIdentifierGeneratorLive } from "../../src/workspaces/index.ts";
 
 const Server = HttpRouter.serve(makeHttpRoutes({ exposeAppApiDocs: false }), {
   disableListenLog: true,
@@ -54,7 +53,6 @@ const AuthenticationNotifierTest = Layer.effectContext(
 const Api = Server.pipe(
   Layer.provideMerge(DatabaseServicesLive),
   Layer.provideMerge(AuthenticationNotifierTest),
-  Layer.provideMerge(WorkspaceIdentifierGeneratorLive),
   Layer.provideMerge(NodeHttpServer.layerTest),
 );
 
@@ -195,7 +193,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
                 name: "Alice in Cove",
                 avatarUrl: "/avatars/alice.svg",
               },
-              role: "member",
+              membership: { role: "member" },
             },
           ],
         });
@@ -346,6 +344,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
         const leaveResponse = yield* HttpClient.del(AppRoutes.workspaceMembership, {
           headers: { cookie, "x-csrf-token": csrfToken },
+          body: HttpBody.jsonUnsafe({ commandId: "auth-routes-final-owner-leave" }),
         });
 
         expect(leaveResponse.status).toBe(409);

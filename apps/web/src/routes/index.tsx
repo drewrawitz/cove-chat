@@ -2,7 +2,7 @@ import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent } from "react";
+import { type FormEvent, useRef } from "react";
 import {
   invalidateWorkspacesListWorkspaces,
   useAuthMe,
@@ -12,6 +12,11 @@ import {
 import { PageMessage } from "../components/page-message.tsx";
 import { SignIn } from "../components/sign-in.tsx";
 import { requiredFormValue } from "../form-data.ts";
+import {
+  type PendingCommand,
+  releaseCommandId,
+  retainCommandId,
+} from "../api/stable-command-id.ts";
 
 interface HomeSearch {
   readonly left?: string;
@@ -33,6 +38,7 @@ function Home() {
     query: { enabled: account.isSuccess, retry: false },
   });
   const createWorkspace = useWorkspacesCreateWorkspace();
+  const createCommand = useRef<PendingCommand>(undefined);
 
   if (account.isPending) return <PageMessage message="Opening Cove…" />;
   if (account.isError && account.error.status === 401) return <SignIn />;
@@ -53,16 +59,23 @@ function Home() {
     const name = requiredFormValue(form, "workspaceName");
     const identityName = requiredFormValue(form, "identityName");
     const avatarUrl = requiredFormValue(form, "avatarUrl");
+    const pendingCommand = retainCommandId(
+      createCommand.current,
+      JSON.stringify([name, identityName, avatarUrl]),
+    );
+    createCommand.current = pendingCommand;
 
     createWorkspace.mutate(
       {
         data: {
+          commandId: pendingCommand.commandId,
           name,
           identity: { name: identityName, avatarUrl },
         },
       },
       {
         onSuccess: async (created) => {
+          createCommand.current = releaseCommandId(createCommand.current, pendingCommand.commandId);
           await invalidateWorkspacesListWorkspaces(queryClient);
           await navigate({
             to: "/workspaces/$workspaceId",
@@ -106,7 +119,7 @@ function Home() {
                 <span>
                   <span className="block font-heading text-lg font-semibold">{workspace.name}</span>
                   <span className="mt-1 block text-sm text-muted-foreground capitalize">
-                    {workspace.role}
+                    {workspace.membership.role}
                   </span>
                 </span>
                 <span className="text-sm font-medium text-primary">Enter {workspace.name}</span>

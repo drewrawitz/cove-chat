@@ -15,16 +15,32 @@ enum ChannelVisibility {
 }
 
 model User {
-  id                  String              @id
-  email               String              @unique
-  displayName         String              @map("display_name")
-  workspaceIdentities WorkspaceIdentity[]
-  magicLinks          MagicLink[]
-  sessions            Session[]
-  auditEvents         AuditEvent[]
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                      String                   @id
+  email                   String                   @unique
+  displayName             String                   @map("display_name")
+  workspaceIdentities     WorkspaceIdentity[]
+  magicLinks              MagicLink[]
+  sessions                Session[]
+  auditEvents             AuditEvent[]
+  workspaceAccessCommands WorkspaceAccessCommand[]
+  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
+}
+
+model WorkspaceAccessCommand {
+  actorUserId      String   @map("actor_user_id")
+  commandId        String   @map("command_id")
+  commandKind      String   @map("command_kind")
+  inputFingerprint String   @map("input_fingerprint")
+  outcomeVersion   Int      @map("outcome_version")
+  outcome          Json     @db.JsonB
+  committedAt      DateTime @map("committed_at") @db.Timestamptz(6)
+  actor            User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@id([actorUserId, commandId])
+  @@index([committedAt])
+  @@map("workspace_access_commands")
 }
 
 model MagicLink {

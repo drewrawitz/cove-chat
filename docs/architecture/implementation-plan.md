@@ -216,6 +216,7 @@ The dependency graph is below. `A → B` means package A may depend on package B
 ports           → domain
 application     → domain + ports
 infrastructure  → domain + ports
+infrastructure-postgres → application/workspaces/internal (exact restricted subpath only)
 sync            → db schema output
 apps/api        → application + infrastructure + protocol + sync
 apps/web        → protocol + sync + ui
@@ -230,7 +231,11 @@ Interpret the graph through these concrete rules:
 - `protocol` owns serialized transport contracts and explicit mappings; domain models are not treated as wire formats.
 - `db` is tooling-only: it owns the Prisma schema and committed SQL migrations, but exports no runtime domain model.
 - `sync` owns the generated Zero schema and named query definitions. It is a sync/transport concern, not the domain model.
-- Infrastructure packages implement ports and may depend on domain/application data contracts as needed.
+- Infrastructure packages implement ports and depend on domain contracts. The Postgres Workspace
+  Access adapter has one explicit exception: it imports the exact restricted
+  `@cove/application/workspaces/internal` subpath owned by the deep Workspace Access module. That
+  subpath is not re-exported from the application root, and no wildcard application-internal
+  dependency is allowed.
 - `apps/api` is the composition root. It selects Effect Layers and connects transports to application use cases.
 - `apps/web` consumes `protocol`, `sync`, and `ui`, not backend infrastructure or application internals.
 - No application use case imports HTTP, WebSocket, Postgres, filesystem, S3, or Node APIs.
@@ -477,6 +482,17 @@ UNIQUE (workspace_id, command_id)
 PRIMARY KEY (workspace_id, channel_id, channel_sequence)
 UNIQUE (workspace_id, event_id)
 ```
+
+Workspace Access commands deliberately use a different key:
+
+```sql
+PRIMARY KEY (actor_user_id, command_id)
+```
+
+Workspace creation has no workspace identifier before its transition, and HTTP retries belong to
+the authenticated actor. Its command record also stores command kind, a versioned canonical input
+fingerprint, outcome version, and encoded committed outcome. Reuse by the same actor with a
+different kind or input is a typed conflict; different actors may reuse the same opaque identifier.
 
 ### Message write transaction
 
@@ -727,7 +743,11 @@ Fast tests for:
 
 ### Application tests
 
-Use deterministic in-memory port Layers to test complete use cases, including retries, duplicate command IDs, denied access, and audit-event generation.
+Use deterministic in-memory port Layers where the dependency is genuinely remote or external.
+Deep modules backed by local-substitutable infrastructure are tested through their application
+interface with the local substitute. Workspace Access therefore uses local Postgres lifecycle
+tests rather than an in-memory repository adapter, including retries, duplicate command IDs,
+denied access, audit behavior, and concurrency invariants.
 
 ### Infrastructure integration tests
 

@@ -1,15 +1,12 @@
 import {
-  CreateWorkspaceInput,
-  EndWorkspaceMembershipInput,
-  GetWorkspaceAccessInput,
-  UpdateWorkspaceIdentityInput,
-  createWorkspace,
-  endWorkspaceMembership,
-  getWorkspaceAccess,
-  listWorkspaceAccess,
+  CommandId,
+  CreateWorkspaceCommand,
+  JoinWorkspaceCommand,
+  LeaveWorkspaceCommand,
+  UpdateWorkspaceIdentityCommand,
+  WorkspaceAccess,
   makeCsrfToken,
   makeSessionToken,
-  updateWorkspaceIdentity,
   validateCsrf,
 } from "@cove/application";
 import {
@@ -40,10 +37,33 @@ const workspaceUnavailableErrorResponse = (error: unknown) =>
     ? WorkspaceErrorResponses.unavailable
     : AuthErrorResponses.internalServerError;
 
+const workspaceCommandErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.WorkspaceAccessCommandConflict"
+    ? WorkspaceErrorResponses.commandConflict
+    : workspaceUnavailableErrorResponse(error);
+
+const createWorkspaceErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.WorkspaceAccessCommandConflict"
+    ? WorkspaceErrorResponses.commandConflict
+    : AuthErrorResponses.internalServerError;
+
 const endMembershipErrorResponse = (error: unknown) =>
   errorTag(error) === "Application.LastWorkspaceOwner"
     ? WorkspaceErrorResponses.lastOwner
-    : workspaceUnavailableErrorResponse(error);
+    : workspaceCommandErrorResponse(error);
+
+const joinWorkspaceErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.AlreadyWorkspaceMember":
+      return WorkspaceErrorResponses.alreadyMember;
+    case "Application.ExistingWorkspaceIdentityProfileNotAccepted":
+      return WorkspaceErrorResponses.existingProfileNotAccepted;
+    case "Application.InitialWorkspaceIdentityProfileRequired":
+      return WorkspaceErrorResponses.initialProfileRequired;
+    default:
+      return workspaceCommandErrorResponse(error);
+  }
+};
 
 const validateMutationCsrf = Effect.fn("WorkspaceApi.validateMutationCsrf")(function* (
   csrfHeader: string | undefined,
@@ -71,8 +91,8 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
       Effect.gen(function* () {
         const actor = yield* AuthenticatedActor;
         const actorId = yield* makeUserId(actor.userId);
-        const workspaces = yield* listWorkspaceAccess(actorId);
-        return workspaceListResponse(workspaces);
+        const workspaceAccess = yield* WorkspaceAccess;
+        return workspaceListResponse(yield* workspaceAccess.listForActor(actorId));
       }).pipe(Effect.mapError(() => AuthErrorResponses.internalServerError)),
     )
     .handle("createWorkspace", ({ headers, payload }) =>
@@ -82,16 +102,23 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         const actorId = yield* makeUserId(actor.userId).pipe(
           Effect.mapError(() => AuthErrorResponses.internalServerError),
         );
-        const access = yield* createWorkspace(
-          CreateWorkspaceInput.make({
-            actorId,
-            workspaceName: WorkspaceName.make(payload.name),
-            profile: WorkspaceIdentityProfile.make({
-              name: WorkspaceIdentityName.make(payload.identity.name),
-              avatarUrl: WorkspaceAvatarUrl.make(payload.identity.avatarUrl),
+        const workspaceAccess = yield* WorkspaceAccess;
+        const created = yield* workspaceAccess
+          .create(
+            CreateWorkspaceCommand.make({
+              actorAccountId: actorId,
+              commandId: CommandId.make(payload.commandId),
+              workspaceName: WorkspaceName.make(payload.name),
+              initialIdentityProfile: WorkspaceIdentityProfile.make({
+                name: WorkspaceIdentityName.make(payload.identity.name),
+                avatarUrl: WorkspaceAvatarUrl.make(payload.identity.avatarUrl),
+              }),
             }),
-          }),
-        ).pipe(Effect.mapError(() => AuthErrorResponses.internalServerError));
+          )
+          .pipe(Effect.mapError(createWorkspaceErrorResponse));
+        const access = yield* workspaceAccess
+          .getForActor(actorId, created.workspaceId)
+          .pipe(Effect.mapError(() => AuthErrorResponses.internalServerError));
         return workspaceAccessResponse(access);
       }),
     )
@@ -100,9 +127,8 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         const actor = yield* AuthenticatedActor;
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
-        const access = yield* getWorkspaceAccess(
-          GetWorkspaceAccessInput.make({ actorId, workspaceId }),
-        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const access = yield* workspaceAccess.getForActor(actorId, workspaceId);
         return workspaceAccessResponse(access);
       }).pipe(Effect.mapError(workspaceUnavailableErrorResponse)),
     )
@@ -116,20 +142,27 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
           Effect.mapError(workspaceUnavailableErrorResponse),
         );
-        const access = yield* updateWorkspaceIdentity(
-          UpdateWorkspaceIdentityInput.make({
-            actorId,
-            workspaceId,
-            profile: WorkspaceIdentityProfile.make({
-              name: WorkspaceIdentityName.make(payload.name),
-              avatarUrl: WorkspaceAvatarUrl.make(payload.avatarUrl),
+        const workspaceAccess = yield* WorkspaceAccess;
+        const outcome = yield* workspaceAccess
+          .updateMyIdentity(
+            UpdateWorkspaceIdentityCommand.make({
+              actorAccountId: actorId,
+              commandId: CommandId.make(payload.commandId),
+              workspaceId,
+              profile: WorkspaceIdentityProfile.make({
+                name: WorkspaceIdentityName.make(payload.name),
+                avatarUrl: WorkspaceAvatarUrl.make(payload.avatarUrl),
+              }),
             }),
-          }),
-        ).pipe(Effect.mapError(workspaceUnavailableErrorResponse));
+          )
+          .pipe(Effect.mapError(workspaceCommandErrorResponse));
+        const access = yield* workspaceAccess
+          .getForActor(actorId, outcome.workspaceId)
+          .pipe(Effect.mapError(workspaceUnavailableErrorResponse));
         return workspaceAccessResponse(access);
       }),
     )
-    .handle("endMembership", ({ headers, params }) =>
+    .handle("endMembership", ({ headers, params, payload }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
 
@@ -140,9 +173,50 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
           Effect.mapError(workspaceUnavailableErrorResponse),
         );
-        yield* endWorkspaceMembership(
-          EndWorkspaceMembershipInput.make({ actorId, workspaceId }),
-        ).pipe(Effect.mapError(endMembershipErrorResponse));
+        const workspaceAccess = yield* WorkspaceAccess;
+        yield* workspaceAccess
+          .leave(
+            LeaveWorkspaceCommand.make({
+              actorAccountId: actorId,
+              commandId: CommandId.make(payload.commandId),
+              workspaceId,
+            }),
+          )
+          .pipe(Effect.mapError(endMembershipErrorResponse));
+      }),
+    )
+    .handle("joinWorkspace", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
+          Effect.mapError(workspaceUnavailableErrorResponse),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const joined = yield* workspaceAccess
+          .join(
+            JoinWorkspaceCommand.make({
+              actorAccountId: actorId,
+              commandId: CommandId.make(payload.commandId),
+              workspaceId,
+              ...(payload.initialIdentityProfile === undefined
+                ? {}
+                : {
+                    initialIdentityProfile: WorkspaceIdentityProfile.make({
+                      name: WorkspaceIdentityName.make(payload.initialIdentityProfile.name),
+                      avatarUrl: WorkspaceAvatarUrl.make(payload.initialIdentityProfile.avatarUrl),
+                    }),
+                  }),
+            }),
+          )
+          .pipe(Effect.mapError(joinWorkspaceErrorResponse));
+        const access = yield* workspaceAccess
+          .getForActor(actorId, joined.workspaceId)
+          .pipe(Effect.mapError(workspaceUnavailableErrorResponse));
+        return workspaceAccessResponse(access);
       }),
     ),
 );

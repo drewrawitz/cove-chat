@@ -42,9 +42,10 @@ export interface WorkspaceIdentityProfile extends Schema.Schema.Type<
   typeof WorkspaceIdentityProfile
 > {}
 
-export const WorkspaceAccess = Schema.Struct({
-  workspace: Workspace,
-  identity: WorkspaceIdentity,
+export const WorkspaceMembership = Schema.Struct({
+  workspaceId: WorkspaceId,
+  identityId: WorkspaceIdentityId,
   role: WorkspaceRole,
+  startedAt: Schema.DateFromString,
 });
-export interface WorkspaceAccess extends Schema.Schema.Type<typeof WorkspaceAccess> {}
+export interface WorkspaceMembership extends Schema.Schema.Type<typeof WorkspaceMembership> {}

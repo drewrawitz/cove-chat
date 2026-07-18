@@ -1,7 +1,7 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type FormEvent } from "react";
+import { type FormEvent, useRef } from "react";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
@@ -12,6 +12,11 @@ import {
   useWorkspacesUpdateWorkspaceIdentity,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
+import {
+  type PendingCommand,
+  releaseCommandId,
+  retainCommandId,
+} from "../api/stable-command-id.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
 
@@ -23,6 +28,8 @@ function WorkspaceHome() {
   const workspaces = useWorkspacesListWorkspaces({ query: { retry: false } });
   const endMembership = useWorkspacesEndMembership();
   const updateIdentity = useWorkspacesUpdateWorkspaceIdentity();
+  const identityCommand = useRef<PendingCommand>(undefined);
+  const leaveCommand = useRef<PendingCommand>(undefined);
 
   if (workspace.isPending) {
     return <WorkspaceMessage message="Entering workspace…" />;
@@ -40,16 +47,28 @@ function WorkspaceHome() {
   const saveIdentity = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = requiredFormValue(form, "identityName");
+    const avatarUrl = requiredFormValue(form, "avatarUrl");
+    const pendingCommand = retainCommandId(
+      identityCommand.current,
+      JSON.stringify([workspaceId, name, avatarUrl]),
+    );
+    identityCommand.current = pendingCommand;
     updateIdentity.mutate(
       {
         workspaceId,
         data: {
-          name: requiredFormValue(form, "identityName"),
-          avatarUrl: requiredFormValue(form, "avatarUrl"),
+          commandId: pendingCommand.commandId,
+          name,
+          avatarUrl,
         },
       },
       {
         onSuccess: async (updated) => {
+          identityCommand.current = releaseCommandId(
+            identityCommand.current,
+            pendingCommand.commandId,
+          );
           queryClient.setQueryData(getWorkspacesGetWorkspaceQueryKey(workspaceId), updated);
           await invalidateWorkspacesListWorkspaces(queryClient);
         },
@@ -58,10 +77,13 @@ function WorkspaceHome() {
   };
 
   const leave = () => {
+    const pendingCommand = retainCommandId(leaveCommand.current, workspaceId);
+    leaveCommand.current = pendingCommand;
     endMembership.mutate(
-      { workspaceId },
+      { workspaceId, data: { commandId: pendingCommand.commandId } },
       {
         onSuccess: async () => {
+          leaveCommand.current = releaseCommandId(leaveCommand.current, pendingCommand.commandId);
           await invalidateWorkspacesListWorkspaces(queryClient);
           await navigate({
             to: "/",
@@ -102,12 +124,12 @@ function WorkspaceHome() {
                       to="/workspaces/$workspaceId"
                       params={{ workspaceId: item.id }}
                       aria-current={item.id === workspaceId ? "page" : undefined}
-                      aria-label={`${item.name} ${roleLabel(item.role)}`}
+                      aria-label={`${item.name} ${roleLabel(item.membership.role)}`}
                       className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-primary/10"
                     >
                       <span className="block truncate text-sm font-semibold">{item.name}</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {roleLabel(item.role)}
+                        {roleLabel(item.membership.role)}
                       </span>
                     </Link>
                   </li>
@@ -133,7 +155,7 @@ function WorkspaceHome() {
                   {workspace.data.identity.name}
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground capitalize">
-                  {workspace.data.role} · Workspace Identity
+                  {workspace.data.membership.role} · Workspace Identity
                 </p>
               </div>
             </div>
