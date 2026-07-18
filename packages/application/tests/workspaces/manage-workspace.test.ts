@@ -90,7 +90,9 @@ const workspaceAccessTestLayer = (options: WorkspaceAccessTestOptions = {}) =>
               });
               return [
                 Option.some(updated),
-                current.map((access) => (access.workspace.id === workspaceId ? updated : access)),
+                current.map((access) =>
+                  access.identity.id === existing.identity.id ? updated : access,
+                ),
               ] as const;
             }),
         ),
@@ -170,16 +172,29 @@ it.effect("creates a workspace with the current account as its owner and identit
   }),
 );
 
-it.effect("offers an existing workspace identity as profile defaults", () =>
+it.effect("offers the selected workspace identity as profile defaults", () =>
   Effect.gen(function* () {
     const existing = yield* makeExistingAccess();
-    const defaults = yield* getWorkspaceIdentityDefaults(existing.identity.accountId).pipe(
-      Effect.provide(workspaceAccessTestLayer({ initial: [existing] })),
-    );
+    const workspaceId = yield* makeWorkspaceId("workspace-2");
+    const selected = WorkspaceAccess.make({
+      workspace: { id: workspaceId, name: WorkspaceName.make("Design Guild") },
+      identity: {
+        id: yield* makeWorkspaceIdentityId("identity-2"),
+        workspaceId,
+        accountId: existing.identity.accountId,
+        name: WorkspaceIdentityName.make("Alice Design"),
+        avatarUrl: WorkspaceAvatarUrl.make("/avatars/design.svg"),
+      },
+      role: "member",
+    });
+    const defaults = yield* getWorkspaceIdentityDefaults(
+      existing.identity.accountId,
+      selected.workspace.id,
+    ).pipe(Effect.provide(workspaceAccessTestLayer({ initial: [existing, selected] })));
 
     expect(defaults).toEqual({
-      name: "Alice Product",
-      avatarUrl: "/avatars/alice.svg",
+      name: "Alice Design",
+      avatarUrl: "/avatars/design.svg",
     });
   }),
 );
@@ -239,7 +254,20 @@ it.effect("edits one workspace identity without changing another", () =>
       },
       role: "member",
     });
-    const layer = workspaceAccessTestLayer({ initial: [firstAccess, secondAccess] });
+    const otherAccountAccess = WorkspaceAccess.make({
+      workspace: secondAccess.workspace,
+      identity: {
+        id: yield* makeWorkspaceIdentityId("identity-3"),
+        workspaceId: secondWorkspaceId,
+        accountId: yield* makeUserId("account-2"),
+        name: WorkspaceIdentityName.make("Bob Design"),
+        avatarUrl: WorkspaceAvatarUrl.make("/avatars/bob.svg"),
+      },
+      role: "member",
+    });
+    const layer = workspaceAccessTestLayer({
+      initial: [firstAccess, secondAccess, otherAccountAccess],
+    });
 
     const result = yield* Effect.gen(function* () {
       const updated = yield* updateWorkspaceIdentity(

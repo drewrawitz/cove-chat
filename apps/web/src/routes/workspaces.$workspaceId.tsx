@@ -24,10 +24,10 @@ function WorkspaceHome() {
   const endMembership = useWorkspacesEndMembership();
   const updateIdentity = useWorkspacesUpdateWorkspaceIdentity();
 
-  if (workspace.isPending || workspaces.isPending) {
+  if (workspace.isPending) {
     return <WorkspaceMessage message="Entering workspace…" />;
   }
-  if (workspace.isError || workspaces.isError) {
+  if (workspace.isError) {
     return (
       <WorkspaceMessage message="This workspace is not available to your account.">
         <Link className="mt-4 inline-block text-sm font-medium text-primary hover:underline" to="/">
@@ -86,24 +86,34 @@ function WorkspaceHome() {
             </Link>
           </div>
           <nav className="mt-4" aria-label="Workspace switcher">
-            <ul className="grid gap-1.5">
-              {workspaces.data.workspaces.map((item) => (
-                <li key={item.id}>
-                  <Link
-                    to="/workspaces/$workspaceId"
-                    params={{ workspaceId: item.id }}
-                    aria-current={item.id === workspaceId ? "page" : undefined}
-                    aria-label={`${item.name} ${roleLabel(item.role)}`}
-                    className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-primary/10"
-                  >
-                    <span className="block truncate text-sm font-semibold">{item.name}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {roleLabel(item.role)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+            {workspaces.isPending ? (
+              <p className="px-3 py-2.5 text-sm text-muted-foreground" role="status">
+                Loading workspaces…
+              </p>
+            ) : workspaces.isError ? (
+              <p className="px-3 py-2.5 text-sm text-muted-foreground" role="alert">
+                Workspace switcher unavailable.
+              </p>
+            ) : (
+              <ul className="grid gap-1.5">
+                {workspaces.data.workspaces.map((item) => (
+                  <li key={item.id}>
+                    <Link
+                      to="/workspaces/$workspaceId"
+                      params={{ workspaceId: item.id }}
+                      aria-current={item.id === workspaceId ? "page" : undefined}
+                      aria-label={`${item.name} ${roleLabel(item.role)}`}
+                      className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-primary/10"
+                    >
+                      <span className="block truncate text-sm font-semibold">{item.name}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {roleLabel(item.role)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
           </nav>
         </aside>
 

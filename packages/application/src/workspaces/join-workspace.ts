@@ -16,18 +16,17 @@ export class WorkspaceIdentityDefaultsUnavailable extends Schema.TaggedErrorClas
 ) {}
 
 export const getWorkspaceIdentityDefaults = Effect.fn("Application.getWorkspaceIdentityDefaults")(
-  function* (actorId: UserId) {
+  function* (actorId: UserId, sourceWorkspaceId: WorkspaceId) {
     const workspaces = yield* WorkspaceAccessRepository;
-    const accesses = yield* workspaces.listForAccount(actorId);
-    const first = accesses[0];
+    const identity = yield* workspaces.findIdentityForAccount(actorId, sourceWorkspaceId);
 
-    if (first === undefined) {
+    if (Option.isNone(identity)) {
       return yield* Effect.fail(new WorkspaceIdentityDefaultsUnavailable({ actorId }));
     }
 
     return WorkspaceIdentityProfile.make({
-      name: first.identity.name,
-      avatarUrl: first.identity.avatarUrl,
+      name: identity.value.name,
+      avatarUrl: identity.value.avatarUrl,
     });
   },
 );
