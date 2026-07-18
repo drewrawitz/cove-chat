@@ -15,6 +15,7 @@ export {
   makeMagicLinkToken,
   makeSessionToken,
   requestMagicLink,
+  validateCsrf,
   verifyMagicLink,
   type AuthenticatedSession,
   type SessionIdentityResolverService,
@@ -24,3 +25,12 @@ export {
   GetChannelForActorInput,
   getChannelForActor,
 } from "./channels/index.ts";
+export {
+  EndWorkspaceMembershipInput,
+  GetWorkspaceAccessInput,
+  LastWorkspaceOwner,
+  WorkspaceUnavailable,
+  endWorkspaceMembership,
+  getWorkspaceAccess,
+  listWorkspaceAccess,
+} from "./workspaces/index.ts";

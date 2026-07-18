@@ -64,10 +64,10 @@ const seedFixtures = Effect.fn("PostgresIntegrationTest.seedFixtures")(function*
       (${fixtures.otherWorkspaceId}, 'Other Workspace')
   `;
   yield* sql`
-    INSERT INTO workspace_memberships (workspace_id, user_id)
+    INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url)
     VALUES
-      (${fixtures.workspaceId}, ${fixtures.privateMemberId}),
-      (${fixtures.workspaceId}, ${fixtures.workspaceMemberId})
+      (${`identity-${fixtures.privateMemberId}`}, ${fixtures.workspaceId}, ${fixtures.privateMemberId}, 'Private Member', '/avatars/default.svg'),
+      (${`identity-${fixtures.workspaceMemberId}`}, ${fixtures.workspaceId}, ${fixtures.workspaceMemberId}, 'Workspace Member', '/avatars/default.svg')
   `;
   yield* sql`
     INSERT INTO channels (id, workspace_id, name, visibility)
@@ -78,8 +78,8 @@ const seedFixtures = Effect.fn("PostgresIntegrationTest.seedFixtures")(function*
       (${fixtures.invalidChannelId}, ${fixtures.workspaceId}, '', 'public')
   `;
   yield* sql`
-    INSERT INTO channel_memberships (workspace_id, channel_id, user_id)
-    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${fixtures.privateMemberId})
+    INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
+    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${`identity-${fixtures.privateMemberId}`})
   `;
 });
 

@@ -2,13 +2,17 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   staged: {
-    "*": "vp check --fix",
+    "*": "vp run web#generate:api && vp check --fix",
   },
   fmt: {
-    ignorePatterns: ["**/routeTree.gen.ts"],
+    ignorePatterns: [
+      "**/routeTree.gen.ts",
+      "apps/web/src/api/generated/**",
+      "packages/protocol/openapi/app.json",
+    ],
   },
   lint: {
-    ignorePatterns: ["**/routeTree.gen.ts"],
+    ignorePatterns: ["**/routeTree.gen.ts", "apps/web/src/api/generated/**"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },

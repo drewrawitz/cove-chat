@@ -17,6 +17,10 @@ export interface SessionRepositoryService {
   readonly findCurrentUser: (
     token: SessionToken,
   ) => Effect.Effect<Option.Option<User>, PersistenceError>;
+  readonly validateCsrf: (
+    token: SessionToken,
+    csrfToken: CsrfToken,
+  ) => Effect.Effect<boolean, PersistenceError>;
   readonly revoke: (
     token: SessionToken,
     csrfToken: CsrfToken,

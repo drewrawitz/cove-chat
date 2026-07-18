@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Bob in Cove">
+  <rect width="160" height="160" rx="36" fill="#d9e8ff"/>
+  <circle cx="80" cy="67" r="31" fill="#b97854"/>
+  <path d="M47 61c3-28 21-40 39-40 20 0 34 13 36 39-17-7-28-16-34-27-8 14-22 24-41 28Z" fill="#2d2523"/>
+  <path d="M28 160c5-35 25-54 52-54s48 19 52 54Z" fill="#286f9e"/>
+  <circle cx="69" cy="69" r="3" fill="#241c19"/>
+  <circle cx="92" cy="69" r="3" fill="#241c19"/>
+  <path d="M71 84c6 5 13 5 19 0" fill="none" stroke="#754331" stroke-width="3" stroke-linecap="round"/>
+</svg>

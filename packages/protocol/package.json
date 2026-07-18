@@ -15,6 +15,7 @@
     "build": "vp pack",
     "check": "vp check",
     "dev": "vp pack --watch",
+    "generate:openapi": "node scripts/generate-app-openapi.ts",
     "test": "vp test run"
   },
   "dependencies": {

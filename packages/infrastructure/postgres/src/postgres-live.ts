@@ -9,6 +9,7 @@ import {
 import { PostgresChannelRepository } from "./channels/index.ts";
 import { PostgresMembershipRepository } from "./memberships/index.ts";
 import { PostgresTransactionManager } from "./transaction-manager.ts";
+import { PostgresWorkspaceAccessRepository } from "./workspaces/index.ts";
 
 export const PostgresClientLive = PgClient.layerConfig({
   url: Config.redacted("DATABASE_URL"),
@@ -21,6 +22,7 @@ export const PostgresRepositories = Layer.mergeAll(
   PostgresUserRepository,
   PostgresChannelRepository,
   PostgresMembershipRepository,
+  PostgresWorkspaceAccessRepository,
   PostgresTransactionManager,
 );
 

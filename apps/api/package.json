@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@cove/application": "workspace:*",
+    "@cove/domain": "workspace:*",
     "@cove/infrastructure-email": "workspace:*",
     "@cove/infrastructure-postgres": "workspace:*",
     "@cove/protocol": "workspace:*",

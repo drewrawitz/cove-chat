@@ -6,6 +6,7 @@ enum WorkspaceRole {
   OWNER  @map("owner")
   ADMIN  @map("admin")
   MEMBER @map("member")
+  GUEST  @map("guest")
 }
 
 enum ChannelVisibility {
@@ -14,14 +15,14 @@ enum ChannelVisibility {
 }
 
 model User {
-  id                   String                @id
-  email                String                @unique
-  displayName          String                @map("display_name")
-  workspaceMemberships WorkspaceMembership[]
-  magicLinks           MagicLink[]
-  sessions             Session[]
-  auditEvents          AuditEvent[]
-  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                  String              @id
+  email               String              @unique
+  displayName         String              @map("display_name")
+  workspaceIdentities WorkspaceIdentity[]
+  magicLinks          MagicLink[]
+  sessions            Session[]
+  auditEvents         AuditEvent[]
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
 }
@@ -66,27 +67,34 @@ model AuditEvent {
 }
 
 model Workspace {
-  id          String                @id
-  name        String
-  memberships WorkspaceMembership[]
-  channels    Channel[]
-  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  id         String              @id
+  name       String
+  identities WorkspaceIdentity[]
+  channels   Channel[]
+  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("workspaces")
 }
 
-model WorkspaceMembership {
-  workspaceId        String              @map("workspace_id")
-  userId             String              @map("user_id")
-  role               WorkspaceRole       @default(MEMBER)
-  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channelMemberships ChannelMembership[]
-  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+model WorkspaceIdentity {
+  id                  String
+  workspaceId         String              @map("workspace_id")
+  accountId           String              @map("account_id")
+  name                String
+  avatarUrl           String              @map("avatar_url")
+  role                WorkspaceRole       @default(MEMBER)
+  membershipStartedAt DateTime            @default(now()) @map("membership_started_at") @db.Timestamptz(6)
+  membershipEndedAt   DateTime?           @map("membership_ended_at") @db.Timestamptz(6)
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account             User                @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  channelMemberships  ChannelMembership[]
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@id([workspaceId, userId])
-  @@index([userId])
-  @@map("workspace_memberships")
+  @@id([workspaceId, id])
+  @@unique([workspaceId, accountId])
+  @@index([accountId])
+  @@index([workspaceId, membershipEndedAt])
+  @@map("workspace_identities")
 }
 
 model Channel {
@@ -104,14 +112,14 @@ model Channel {
 }
 
 model ChannelMembership {
-  workspaceId         String              @map("workspace_id")
-  channelId           String              @map("channel_id")
-  userId              String              @map("user_id")
-  channel             Channel             @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
-  workspaceMembership WorkspaceMembership @relation(fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspaceId       String            @map("workspace_id")
+  channelId         String            @map("channel_id")
+  identityId        String            @map("identity_id")
+  channel           Channel           @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
+  workspaceIdentity WorkspaceIdentity @relation(fields: [workspaceId, identityId], references: [workspaceId, id], onDelete: Cascade)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  @@id([workspaceId, channelId, userId])
-  @@index([workspaceId, userId])
+  @@id([workspaceId, channelId, identityId])
+  @@index([workspaceId, identityId])
   @@map("channel_memberships")
 }

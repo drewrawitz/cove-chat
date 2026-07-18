@@ -27,6 +27,10 @@ dist-ssr
 
 # AI agent worktrees
 .claude/worktrees/
+
+# Regenerated from CoveAppApi and Orval
+packages/protocol/openapi/app.json
+apps/web/src/api/generated/
 !.vscode/
 !.vscode/settings.json
 !.vscode/extensions.json

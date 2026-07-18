@@ -23,6 +23,10 @@ catalog:
   typescript: ^7.0.2
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
   vite-plus: 0.2.4
+  playwright: ^1.61.1
+  "@typescript/native-preview": 7.0.0-dev.20260707.2
+  orval: ^8.22.0
+  zod: ^4.4.3
 overrides:
   vite: "catalog:"
 peerDependencyRules:
@@ -33,6 +37,8 @@ peerDependencyRules:
 allowBuilds:
   "@prisma/engines": true
   cpu-features: false
+  esbuild: true
+  lightningcss: true
   msgpackr-extract: false
   prisma: true
   protobufjs: false

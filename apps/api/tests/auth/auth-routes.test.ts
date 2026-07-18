@@ -71,6 +71,9 @@ const AppRoutes = {
   verifyMagicLink: "/api/app/v1/auth/login/verify",
   logout: "/api/app/v1/auth/logout",
   me: "/api/app/v1/me",
+  workspaces: "/api/app/v1/workspaces",
+  workspace: "/api/app/v1/workspaces/demo-workspace",
+  workspaceMembership: "/api/app/v1/workspaces/demo-workspace/membership",
 };
 
 layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
@@ -175,6 +178,14 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
         expect(meResponse.status).toBe(200);
         expect(meBody).toEqual(verifyBody);
+
+        const workspacesResponse = yield* HttpClient.get(AppRoutes.workspaces, {
+          headers: { cookie },
+        });
+        expect(workspacesResponse.status).toBe(200);
+        expect(yield* workspacesResponse.json).toEqual({
+          workspaces: [{ id: "demo-workspace", name: "Cove Demo", role: "member" }],
+        });
       }),
     );
 
@@ -303,6 +314,37 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         });
 
         expect(meResponse.status).toBe(200);
+      }),
+    );
+
+    it.effect("keeps the final owner in the workspace", () =>
+      Effect.gen(function* () {
+        const delivery = yield* TestAuthenticationNotifier;
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
+        });
+        const message = yield* delivery.take();
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
+        });
+        const responseCookies = verifyResponse.cookies;
+        const cookie = authenticatedCookies(responseCookies);
+        const csrfToken = cookieValue(responseCookies, "cove_csrf");
+
+        const leaveResponse = yield* HttpClient.del(AppRoutes.workspaceMembership, {
+          headers: { cookie, "x-csrf-token": csrfToken },
+        });
+
+        expect(leaveResponse.status).toBe(409);
+        expect(yield* leaveResponse.json).toEqual({
+          code: "LAST_WORKSPACE_OWNER",
+          message: "The final workspace owner cannot leave.",
+        });
+
+        const workspaceResponse = yield* HttpClient.get(AppRoutes.workspace, {
+          headers: { cookie },
+        });
+        expect(workspaceResponse.status).toBe(200);
       }),
     );
 

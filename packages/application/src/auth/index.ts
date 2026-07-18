@@ -9,6 +9,7 @@ export {
 } from "./session-identity-resolver.ts";
 export { makeCsrfToken, makeMagicLinkToken, makeSessionToken } from "./tokens.ts";
 export { makeEmailAddress } from "./user-values.ts";
+export { validateCsrf } from "./validate-csrf.ts";
 export {
   InvalidMagicLink,
   VerifyMagicLinkInput,

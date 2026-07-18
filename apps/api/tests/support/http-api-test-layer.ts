@@ -7,6 +7,7 @@ import {
   SessionRepository,
   TransactionManager,
   UserRepository,
+  WorkspaceAccessRepository,
 } from "@cove/ports";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -17,6 +18,23 @@ const AuthPortsTest = Layer.mergeAll(
     AuthenticationNotifier,
     AuthenticationNotifier.of({
       sendMagicLink: Effect.fn("AuthenticationNotifier.Test.sendMagicLink")(() => Effect.void),
+    }),
+  ),
+  Layer.succeed(
+    WorkspaceAccessRepository,
+    WorkspaceAccessRepository.of({
+      listForAccount: Effect.fn("WorkspaceAccessRepository.Test.listForAccount")(() =>
+        Effect.succeed([]),
+      ),
+      findForAccount: Effect.fn("WorkspaceAccessRepository.Test.findForAccount")(() =>
+        Effect.succeed(Option.none()),
+      ),
+      findIdentityForAccount: Effect.fn("WorkspaceAccessRepository.Test.findIdentityForAccount")(
+        () => Effect.succeed(Option.none()),
+      ),
+      endMembership: Effect.fn("WorkspaceAccessRepository.Test.endMembership")(() =>
+        Effect.succeed("not-found" as const),
+      ),
     }),
   ),
   Layer.succeed(
@@ -41,6 +59,7 @@ const AuthPortsTest = Layer.mergeAll(
       findCurrentUser: Effect.fn("SessionRepository.Test.findCurrentUser")(() =>
         Effect.succeed(Option.none()),
       ),
+      validateCsrf: Effect.fn("SessionRepository.Test.validateCsrf")(() => Effect.succeed(true)),
       revoke: Effect.fn("SessionRepository.Test.revoke")(() => Effect.succeed(true)),
     }),
   ),

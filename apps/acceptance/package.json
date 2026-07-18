@@ -1,0 +1,21 @@
+{
+  "name": "@cove/acceptance",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "vp check",
+    "install:browsers": "playwright install chromium",
+    "test": "vp run web#generate:api && vp test run"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@testcontainers/postgresql": "catalog:",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "playwright": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
