@@ -44,3 +44,33 @@ export const WorkspaceAccessResponse = Schema.Struct({
 export interface WorkspaceAccessResponse extends Schema.Schema.Type<
   typeof WorkspaceAccessResponse
 > {}
+
+const workspaceMutationResponseFields = {
+  workspaceId: Schema.String,
+  workspaceIdentityId: Schema.String,
+  occurredAt: Schema.DateFromString,
+};
+
+export const WorkspaceCreatedResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceCreated"]),
+  ...workspaceMutationResponseFields,
+}).annotate({ identifier: "WorkspaceCreatedResponse" });
+export interface WorkspaceCreatedResponse extends Schema.Schema.Type<
+  typeof WorkspaceCreatedResponse
+> {}
+
+export const WorkspaceJoinedResponse = Schema.Struct({
+  outcome: Schema.Literals(["FirstMembershipStarted", "WorkspaceMembershipReactivated"]),
+  ...workspaceMutationResponseFields,
+}).annotate({ identifier: "WorkspaceJoinedResponse" });
+export interface WorkspaceJoinedResponse extends Schema.Schema.Type<
+  typeof WorkspaceJoinedResponse
+> {}
+
+export const WorkspaceIdentityUpdateResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceIdentityUpdated", "IdentityProfileUnchanged"]),
+  ...workspaceMutationResponseFields,
+}).annotate({ identifier: "WorkspaceIdentityUpdateResponse" });
+export interface WorkspaceIdentityUpdateResponse extends Schema.Schema.Type<
+  typeof WorkspaceIdentityUpdateResponse
+> {}

@@ -14,7 +14,13 @@ import {
   WorkspaceCommandConflictResponse,
   WorkspaceUnavailableResponse,
 } from "./workspace-error-response.ts";
-import { WorkspaceAccessResponse, WorkspaceListResponse } from "./workspace-response.ts";
+import {
+  WorkspaceAccessResponse,
+  WorkspaceCreatedResponse,
+  WorkspaceIdentityUpdateResponse,
+  WorkspaceJoinedResponse,
+  WorkspaceListResponse,
+} from "./workspace-response.ts";
 import {
   CreateWorkspaceRequest,
   EndWorkspaceMembershipRequest,
@@ -34,7 +40,7 @@ const ListWorkspacesEndpoint = HttpApiEndpoint.get("listWorkspaces", "/api/app/v
 const CreateWorkspaceEndpoint = HttpApiEndpoint.post("createWorkspace", "/api/app/v1/workspaces", {
   payload: CreateWorkspaceRequest,
   headers: CsrfHeaders,
-  success: WorkspaceAccessResponse,
+  success: WorkspaceCreatedResponse,
   error: [
     CsrfValidationFailedResponse,
     WorkspaceCommandConflictResponse,
@@ -76,7 +82,7 @@ const UpdateWorkspaceIdentityEndpoint = HttpApiEndpoint.patch(
     params: WorkspaceParams,
     payload: UpdateWorkspaceIdentityRequest,
     headers: CsrfHeaders,
-    success: WorkspaceAccessResponse,
+    success: WorkspaceIdentityUpdateResponse,
     error: [
       CsrfValidationFailedResponse,
       WorkspaceUnavailableResponse,
@@ -93,7 +99,7 @@ const JoinWorkspaceEndpoint = HttpApiEndpoint.post(
     params: WorkspaceParams,
     payload: JoinWorkspaceRequest,
     headers: CsrfHeaders,
-    success: WorkspaceAccessResponse,
+    success: WorkspaceJoinedResponse,
     error: [
       CsrfValidationFailedResponse,
       AlreadyWorkspaceMemberResponse,

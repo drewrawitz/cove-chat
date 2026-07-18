@@ -16,7 +16,10 @@ export {
 } from "./workspace-error-response.ts";
 export {
   WorkspaceAccessResponse,
+  WorkspaceCreatedResponse,
   WorkspaceIdentityResponse,
+  WorkspaceIdentityUpdateResponse,
+  WorkspaceJoinedResponse,
   WorkspaceListResponse,
   WorkspaceMembershipResponse,
   WorkspaceRoleResponse,

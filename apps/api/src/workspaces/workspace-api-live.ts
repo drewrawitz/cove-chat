@@ -26,7 +26,13 @@ import {
 } from "@cove/protocol";
 import { Effect, Redacted } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { workspaceAccessResponse, workspaceListResponse } from "./workspace-response.ts";
+import {
+  workspaceAccessResponse,
+  workspaceCreatedResponse,
+  workspaceIdentityUpdateResponse,
+  workspaceJoinedResponse,
+  workspaceListResponse,
+} from "./workspace-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -116,10 +122,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
             }),
           )
           .pipe(Effect.mapError(createWorkspaceErrorResponse));
-        const access = yield* workspaceAccess
-          .getForActor(actorId, created.workspaceId)
-          .pipe(Effect.mapError(() => AuthErrorResponses.internalServerError));
-        return workspaceAccessResponse(access);
+        return workspaceCreatedResponse(created);
       }),
     )
     .handle("getWorkspace", ({ params }) =>
@@ -156,10 +159,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
             }),
           )
           .pipe(Effect.mapError(workspaceCommandErrorResponse));
-        const access = yield* workspaceAccess
-          .getForActor(actorId, outcome.workspaceId)
-          .pipe(Effect.mapError(workspaceUnavailableErrorResponse));
-        return workspaceAccessResponse(access);
+        return workspaceIdentityUpdateResponse(outcome);
       }),
     )
     .handle("endMembership", ({ headers, params, payload }) =>
@@ -213,10 +213,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
             }),
           )
           .pipe(Effect.mapError(joinWorkspaceErrorResponse));
-        const access = yield* workspaceAccess
-          .getForActor(actorId, joined.workspaceId)
-          .pipe(Effect.mapError(workspaceUnavailableErrorResponse));
-        return workspaceAccessResponse(access);
+        return workspaceJoinedResponse(joined);
       }),
     ),
 );

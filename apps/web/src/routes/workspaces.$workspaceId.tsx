@@ -64,12 +64,14 @@ function WorkspaceHome() {
         },
       },
       {
-        onSuccess: async (updated) => {
+        onSuccess: async () => {
           identityCommand.current = releaseCommandId(
             identityCommand.current,
             pendingCommand.commandId,
           );
-          queryClient.setQueryData(getWorkspacesGetWorkspaceQueryKey(workspaceId), updated);
+          await queryClient.invalidateQueries({
+            queryKey: getWorkspacesGetWorkspaceQueryKey(workspaceId),
+          });
           await invalidateWorkspacesListWorkspaces(queryClient);
         },
       },

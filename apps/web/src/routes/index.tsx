@@ -79,7 +79,7 @@ function Home() {
           await invalidateWorkspacesListWorkspaces(queryClient);
           await navigate({
             to: "/workspaces/$workspaceId",
-            params: { workspaceId: created.workspace.id },
+            params: { workspaceId: created.workspaceId },
           });
         },
       },

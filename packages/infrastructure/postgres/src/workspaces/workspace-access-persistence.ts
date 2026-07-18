@@ -263,6 +263,8 @@ const make = Effect.gen(function* () {
     return { workspace, identity, membership };
   };
 
+  // Lifecycle mutations acquire locks in this order: actor/command advisory lock,
+  // account/workspace advisory lock, then workspace row lock.
   const inspectCommittedCommand: WorkspaceAccessTransaction["inspectCommittedCommand"] = Effect.fn(
     "PostgresWorkspaceAccess.inspectCommittedCommand",
   )(function* (actorAccountId, commandId) {
