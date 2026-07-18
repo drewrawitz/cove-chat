@@ -35,7 +35,7 @@ layer(DocumentationApi)("public API documentation", (it) => {
 
   it.effect("serves interactive documentation for only the public contract", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.get("/developers");
+      const response = yield* HttpClient.get("/docs");
       const html = yield* response.text;
 
       expect(response.status).toBe(200);
@@ -46,10 +46,10 @@ layer(DocumentationApi)("public API documentation", (it) => {
     }),
   );
 
-  it.effect("does not expose the former combined documentation routes", () =>
+  it.effect("does not expose superseded public documentation routes", () =>
     Effect.gen(function* () {
       const openApiResponse = yield* HttpClient.get("/openapi.json");
-      const scalarResponse = yield* HttpClient.get("/docs");
+      const scalarResponse = yield* HttpClient.get("/developers");
 
       expect(openApiResponse.status).toBe(404);
       expect(scalarResponse.status).toBe(404);
@@ -58,7 +58,7 @@ layer(DocumentationApi)("public API documentation", (it) => {
 
   it.effect("does not expose app documentation by default", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.get("/internal/developers");
+      const response = yield* HttpClient.get("/internal/docs");
 
       expect(response.status).toBe(404);
     }),
@@ -68,14 +68,16 @@ layer(DocumentationApi)("public API documentation", (it) => {
 layer(AppDocumentationApi)("app API documentation", (it) => {
   it.effect("serves interactive documentation for only the app contract", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.get("/internal/developers");
+      const response = yield* HttpClient.get("/internal/docs");
       const html = yield* response.text;
+      const supersededResponse = yield* HttpClient.get("/internal/developers");
 
       expect(response.status).toBe(200);
       expect(response.headers["content-type"]).toContain("text/html");
       expect(html).toContain("Cove App API");
       expect(html).toContain("/api/app/v1/auth/login");
       expect(html).not.toContain("/health/ready");
+      expect(supersededResponse.status).toBe(404);
     }),
   );
 });

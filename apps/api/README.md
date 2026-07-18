@@ -12,8 +12,8 @@ The initial HTTP surface exposes:
 - `GET /health/live` for process liveness.
 - `GET /health/ready` for PostgreSQL readiness.
 - `GET /openapi/public.json` for the generated public OpenAPI 3.1 contract.
-- `GET /developers` for interactive Scalar documentation of the public contract.
-- `GET /internal/developers` for interactive Scalar documentation of the first-party app contract
+- `GET /docs` for interactive Scalar documentation of the public contract.
+- `GET /internal/docs` for interactive Scalar documentation of the first-party app contract
   when `EXPOSE_APP_API_DOCS=true`.
 
 The server mounts three declarative contracts from `@cove/protocol` independently. `CoveAppApi`
@@ -44,15 +44,16 @@ remain code-owned rather than configurable.
 ## Compatibility
 
 This is a pre-release breaking route migration. First-party callers must replace `/api/v1` with
-`/api/app/v1`, public documentation callers must replace `/openapi.json` with
-`/openapi/public.json`, and Scalar moved from `/docs` to `/developers`. The former routes are
+`/api/app/v1`, and OpenAPI callers must replace `/openapi.json` with `/openapi/public.json`.
+`/docs` now renders only the public contract; the first-party reference is available at the opt-in
+`/internal/docs` route. The transitional `/developers` and `/internal/developers` routes are
 intentionally removed without redirects or compatibility aliases.
 
 Runtime configuration:
 
 - `DATABASE_URL` is required.
 - `EXPOSE_APP_API_DOCS` defaults to `false`. The local `.env.example` enables it; leave it disabled
-  unless `/internal/developers` is protected from public access.
+  unless `/internal/docs` is protected from public access.
 - `PUBLIC_APP_URL` is required. The local `.env.example` uses `http://localhost:3000`.
 - `HOST` defaults to `0.0.0.0`.
 - `PORT` defaults to `3001` so it does not collide with the local web app.

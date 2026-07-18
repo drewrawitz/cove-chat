@@ -22,14 +22,14 @@ const PublicApiRoutes = HttpApiBuilder.layer(CovePublicApi, {
 });
 
 const PublicApiDocumentation = HttpApiScalar.layer(CovePublicApi, {
-  path: "/developers",
+  path: "/docs",
   scalar: {
     hideTestRequestButton: true,
   },
 });
 
 const AppApiDocumentation = HttpApiScalar.layer(CoveAppApi, {
-  path: "/internal/developers",
+  path: "/internal/docs",
 });
 
 const CoreHttpRoutes = Layer.mergeAll(
