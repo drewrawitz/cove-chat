@@ -29,16 +29,23 @@ const make = Effect.gen(function* () {
       SELECT
         EXISTS (
           SELECT 1
-          FROM workspace_memberships
-          WHERE workspace_id = ${workspaceId}
-            AND user_id = ${actorId}
+          FROM workspace_memberships AS membership
+          INNER JOIN workspace_identities AS identity
+            ON identity.workspace_id = membership.workspace_id
+           AND identity.id = membership.identity_id
+          WHERE membership.workspace_id = ${workspaceId}
+            AND identity.account_id = ${actorId}
+            AND membership.ended_at IS NULL
         ) AS "isWorkspaceMember",
         EXISTS (
           SELECT 1
-          FROM channel_memberships
-          WHERE workspace_id = ${workspaceId}
-            AND channel_id = ${channelId}
-            AND user_id = ${actorId}
+          FROM channel_memberships AS channel_membership
+          INNER JOIN workspace_identities AS identity
+            ON identity.workspace_id = channel_membership.workspace_id
+           AND identity.id = channel_membership.identity_id
+          WHERE channel_membership.workspace_id = ${workspaceId}
+            AND channel_membership.channel_id = ${channelId}
+            AND identity.account_id = ${actorId}
         ) AS "isChannelMember"
     `,
   });

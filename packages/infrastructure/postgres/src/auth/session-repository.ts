@@ -49,6 +49,19 @@ const make = Effect.gen(function* () {
         Effect.mapError((cause) => persistenceError("SessionRepository.findCurrentUser", cause)),
       ),
     ),
+    validateCsrf: Effect.fn("PostgresSessionRepository.validateCsrf")(function* (token, csrfToken) {
+      const sessions = yield* sql<{ readonly exists: boolean }>`
+        SELECT EXISTS (
+          SELECT 1
+          FROM sessions
+          WHERE token_hash = ${hashOpaqueToken(token)}
+            AND csrf_token_hash = ${hashOpaqueToken(csrfToken)}
+            AND expires_at > CURRENT_TIMESTAMP
+        ) AS "exists"
+      `.pipe(Effect.mapError((cause) => persistenceError("SessionRepository.validateCsrf", cause)));
+
+      return sessions[0]?.exists ?? false;
+    }),
     revoke: Effect.fn("PostgresSessionRepository.revoke")(function* (token, csrfToken) {
       const deleted = yield* sql<{ readonly tokenHash: string }>`
         DELETE FROM sessions

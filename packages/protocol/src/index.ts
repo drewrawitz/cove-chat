@@ -24,3 +24,14 @@ export {
   type AuthenticatedSessionContext,
 } from "./auth/index.ts";
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
+export {
+  WorkspaceAccessResponse,
+  WorkspaceApiGroup,
+  WorkspaceErrorResponses,
+  WorkspaceIdentityResponse,
+  LastWorkspaceOwnerResponse,
+  WorkspaceListResponse,
+  WorkspaceRoleResponse,
+  WorkspaceSummaryResponse,
+  WorkspaceUnavailableResponse,
+} from "./workspaces/index.ts";

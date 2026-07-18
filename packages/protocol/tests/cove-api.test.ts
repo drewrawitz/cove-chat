@@ -29,6 +29,9 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
       "/api/app/v1/auth/login/verify",
       "/api/app/v1/auth/logout",
       "/api/app/v1/me",
+      "/api/app/v1/workspaces",
+      "/api/app/v1/workspaces/{workspaceId}",
+      "/api/app/v1/workspaces/{workspaceId}/membership",
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("202");
