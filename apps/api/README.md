@@ -4,24 +4,27 @@ Node composition root and HTTP transport for Cove.
 
 The initial HTTP surface exposes:
 
-- `POST /api/v1/auth/login` to request a short-lived magic link.
-- `POST /api/v1/auth/login/verify` to redeem a one-time magic-link token and issue a session.
-- `POST /api/v1/auth/logout` to revoke the current session after CSRF validation and expire its
-  cookies.
-- `GET /api/v1/me` to return the server-authenticated current user.
+- `POST /api/app/v1/auth/login` to request a short-lived magic link.
+- `POST /api/app/v1/auth/login/verify` to redeem a one-time magic-link token and issue a session.
+- `POST /api/app/v1/auth/logout` to revoke the current session after CSRF validation and expire
+  its cookies.
+- `GET /api/app/v1/me` to return the server-authenticated current user.
 - `GET /health/live` for process liveness.
 - `GET /health/ready` for PostgreSQL readiness.
-- `GET /openapi.json` for the generated OpenAPI 3.1 contract.
-- `GET /docs` for interactive Scalar API documentation.
+- `GET /openapi/public.json` for the generated public OpenAPI 3.1 contract.
+- `GET /developers` for interactive Scalar documentation of the public contract.
 
-Health handlers implement the declarative `CoveApi` contract from `@cove/protocol`; request and
-response encoding is performed from that shared contract.
+The server mounts three declarative contracts from `@cove/protocol` independently. `CoveAppApi`
+contains first-party application endpoints, `CoveOperationsApi` contains health checks, and
+`CovePublicApi` is reserved for supported integrations. Only `CovePublicApi` is exposed through
+OpenAPI and Scalar; it currently has no operations. Request and response encoding is performed from
+the relevant shared contract.
 
 Authentication uses an opaque `cove_session` cookie with `HttpOnly`, `Secure`, `SameSite=Strict`,
 and a root path. A separate readable `cove_csrf` cookie supplies the token clients must echo in the
 `x-csrf-token` header for cookie-authenticated state changes. Only SHA-256 hashes of magic-link,
-session, and CSRF tokens are stored in PostgreSQL. The generated OpenAPI document declares the
-cookie security scheme and CSRF header, so Scalar displays them on protected operations.
+session, and CSRF tokens are stored in PostgreSQL. `CoveAppApi` declares the cookie security scheme
+and CSRF header for protected first-party operations without publishing them in public Scalar docs.
 
 Magic-link verification delegates session creation to a provider-neutral application use case.
 Future passkey and Google sign-in adapters should authenticate their credential, resolve a Cove
@@ -34,6 +37,13 @@ production can provide a Resend adapter without changing authentication workflow
 
 `PUBLIC_APP_URL` is the deployment-specific web origin used to construct public links. Route paths
 remain code-owned rather than configurable.
+
+## Compatibility
+
+This is a pre-release breaking route migration. First-party callers must replace `/api/v1` with
+`/api/app/v1`, public documentation callers must replace `/openapi.json` with
+`/openapi/public.json`, and Scalar moved from `/docs` to `/developers`. The former routes are
+intentionally removed without redirects or compatibility aliases.
 
 Runtime configuration:
 

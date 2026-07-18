@@ -112,43 +112,44 @@ layer(AvailableApi, { timeout: "2 minutes" })("health routes with PostgreSQL", (
 });
 
 layer(UnavailableApi)("health routes without PostgreSQL", (it) => {
-  it.effect("serves the generated OpenAPI contract", () =>
+  it.effect("serves only the generated public OpenAPI contract", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.get("/openapi.json");
+      const response = yield* HttpClient.get("/openapi/public.json");
       const document = yield* response.json;
 
       expect(response.status).toBe(200);
       expect(document).toMatchObject({
         openapi: "3.1.0",
-        paths: {
-          "/api/v1/auth/login": {},
-          "/api/v1/auth/login/verify": {},
-          "/api/v1/auth/logout": {},
-          "/api/v1/me": {},
-          "/health/live": {},
-          "/health/ready": {},
+        info: {
+          title: "Cove Public API",
+          version: "1.0.0",
         },
-        components: {
-          securitySchemes: {
-            sessionCookie: {
-              type: "apiKey",
-              in: "cookie",
-              name: "cove_session",
-            },
-          },
-        },
+        paths: {},
       });
+      expect(JSON.stringify(document)).not.toContain("sessionCookie");
     }),
   );
 
-  it.effect("serves interactive API documentation", () =>
+  it.effect("serves interactive documentation for only the public contract", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.get("/docs");
+      const response = yield* HttpClient.get("/developers");
       const html = yield* response.text;
 
       expect(response.status).toBe(200);
       expect(response.headers["content-type"]).toContain("text/html");
-      expect(html).toContain("Cove API");
+      expect(html).toContain("Cove Public API");
+      expect(html).not.toContain("/api/app/v1");
+      expect(html).not.toContain("/health/ready");
+    }),
+  );
+
+  it.effect("does not expose the former combined documentation routes", () =>
+    Effect.gen(function* () {
+      const openApiResponse = yield* HttpClient.get("/openapi.json");
+      const scalarResponse = yield* HttpClient.get("/docs");
+
+      expect(openApiResponse.status).toBe(404);
+      expect(scalarResponse.status).toBe(404);
     }),
   );
 

@@ -1,4 +1,6 @@
-export { CoveApi } from "./cove-api.ts";
+export { CoveAppApi } from "./app-api.ts";
+export { CoveOperationsApi } from "./operations-api.ts";
+export { CovePublicApi } from "./public-api.ts";
 export {
   AuthenticatedActor,
   AuthenticatedActorId,

@@ -13,7 +13,7 @@ import {
 import {
   AuthErrorResponses,
   AuthenticatedSession,
-  CoveApi,
+  CoveAppApi,
   CsrfCookie,
   MagicLinkAcceptedResponse,
   SessionCookie,
@@ -81,7 +81,7 @@ const expireAuthenticationCookies = HttpEffect.appendPreResponseHandler((_reques
   ),
 );
 
-export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
+export const AuthApiLive = HttpApiBuilder.group(CoveAppApi, "auth", (handlers) =>
   handlers
     .handle("login", ({ payload }) =>
       requestMagicLink(

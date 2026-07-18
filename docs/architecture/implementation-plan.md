@@ -287,7 +287,9 @@ Application services perform authorization, orchestrate ports, preserve idempote
 
 Contains versioned schemas for:
 
-- `/api/v1` requests and responses.
+- supported integration requests and responses under `/api/v1`.
+- first-party application requests and responses under `/api/app/v1`.
+- operational health responses under `/health`.
 - WebSocket client and server envelopes.
 - Stable error codes and error payloads.
 - Pagination cursors.
@@ -295,9 +297,10 @@ Contains versioned schemas for:
 
 Define HTTP contracts declaratively with Effect `HttpApi`. The Node application implements those
 contracts with `HttpApiBuilder`; in-repo TypeScript consumers derive clients with `HttpApiClient`;
-and OpenAPI 3.1 plus interactive documentation are generated from the same value. OpenAPI is an
-integration and documentation artifact, not a second manually maintained contract or the source for
-a duplicate in-repo client.
+and public OpenAPI 3.1 plus interactive documentation are generated only from `CovePublicApi`.
+`CoveAppApi` and `CoveOperationsApi` remain separate interfaces and are not included in public
+documentation. OpenAPI is an integration and documentation artifact, not a second manually
+maintained contract or the source for a duplicate in-repo client.
 
 Use explicit mappers between domain/application values and protocol values:
 

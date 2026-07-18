@@ -66,13 +66,20 @@ function authenticatedCookies(cookies: Cookies.Cookies): string {
     .join("; ");
 }
 
+const AppRoutes = {
+  login: "/api/app/v1/auth/login",
+  verifyMagicLink: "/api/app/v1/auth/login/verify",
+  logout: "/api/app/v1/auth/logout",
+  me: "/api/app/v1/me",
+};
+
 layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
   "authentication routes with PostgreSQL",
   (it) => {
     it.effect("delivers a magic link for a seeded demo user", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        const loginResponse = yield* HttpClient.post("/api/v1/auth/login", {
+        const loginResponse = yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({
             email: "alice@cove.local",
           }),
@@ -92,7 +99,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
     it.effect("does not disclose whether an email belongs to a user", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        const response = yield* HttpClient.post("/api/v1/auth/login", {
+        const response = yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "unknown@cove.local" }),
         });
 
@@ -105,11 +112,11 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
     it.effect("redeems a magic link for an HTTP-only session and returns the current user", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        yield* HttpClient.post("/api/v1/auth/login", {
+        yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
         });
         const message = yield* delivery.take();
-        const verifyResponse = yield* HttpClient.post("/api/v1/auth/login/verify", {
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
           body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
         });
         const verifyBody = yield* verifyResponse.json;
@@ -161,7 +168,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         });
 
         const cookie = authenticatedCookies(responseCookies);
-        const meResponse = yield* HttpClient.get("/api/v1/me", {
+        const meResponse = yield* HttpClient.get(AppRoutes.me, {
           headers: { cookie },
         });
         const meBody = yield* meResponse.json;
@@ -173,7 +180,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("rejects a missing session with the stable unauthorized response", () =>
       Effect.gen(function* () {
-        const response = yield* HttpClient.get("/api/v1/me");
+        const response = yield* HttpClient.get(AppRoutes.me);
         const body = yield* response.json;
 
         expect(response.status).toBe(401);
@@ -186,7 +193,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("rejects an invalid session with the stable unauthorized response", () =>
       Effect.gen(function* () {
-        const response = yield* HttpClient.get("/api/v1/me", {
+        const response = yield* HttpClient.get(AppRoutes.me, {
           headers: { cookie: "cove_session=not-a-session" },
         });
         const body = yield* response.json;
@@ -201,7 +208,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("rejects an invalid magic link with a stable unauthorized response", () =>
       Effect.gen(function* () {
-        const response = yield* HttpClient.post("/api/v1/auth/login/verify", {
+        const response = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
           body: HttpBody.jsonUnsafe({ token: "not-a-magic-link" }),
         });
         const body = yield* response.json;
@@ -217,7 +224,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
     it.effect("consumes each magic link only once", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        yield* HttpClient.post("/api/v1/auth/login", {
+        yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
         });
         const message = yield* delivery.take();
@@ -225,8 +232,8 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
           body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
         };
 
-        const firstResponse = yield* HttpClient.post("/api/v1/auth/login/verify", request);
-        const replayResponse = yield* HttpClient.post("/api/v1/auth/login/verify", request);
+        const firstResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, request);
+        const replayResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, request);
 
         expect(firstResponse.status).toBe(200);
         expect(replayResponse.status).toBe(401);
@@ -241,11 +248,11 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
         const sql = yield* SqlClient.SqlClient;
-        yield* HttpClient.post("/api/v1/auth/login", {
+        yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
         });
         const message = yield* delivery.take();
-        const verifyResponse = yield* HttpClient.post("/api/v1/auth/login/verify", {
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
           body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
         });
         const cookie = authenticatedCookies(verifyResponse.cookies);
@@ -256,7 +263,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
           WHERE user_id = 'demo-alice'
         `;
 
-        const response = yield* HttpClient.get("/api/v1/me", {
+        const response = yield* HttpClient.get(AppRoutes.me, {
           headers: { cookie },
         });
         const body = yield* response.json;
@@ -272,16 +279,16 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
     it.effect("rejects logout without a CSRF token and keeps the session active", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        yield* HttpClient.post("/api/v1/auth/login", {
+        yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
         });
         const message = yield* delivery.take();
-        const verifyResponse = yield* HttpClient.post("/api/v1/auth/login/verify", {
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
           body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
         });
         const cookie = authenticatedCookies(verifyResponse.cookies);
 
-        const logoutResponse = yield* HttpClient.post("/api/v1/auth/logout", {
+        const logoutResponse = yield* HttpClient.post(AppRoutes.logout, {
           headers: { cookie },
         });
 
@@ -291,7 +298,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
           message: "CSRF validation failed.",
         });
 
-        const meResponse = yield* HttpClient.get("/api/v1/me", {
+        const meResponse = yield* HttpClient.get(AppRoutes.me, {
           headers: { cookie },
         });
 
@@ -302,18 +309,18 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
     it.effect("logs out by revoking the session and expiring its cookie", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;
-        yield* HttpClient.post("/api/v1/auth/login", {
+        yield* HttpClient.post(AppRoutes.login, {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
         });
         const message = yield* delivery.take();
-        const verifyResponse = yield* HttpClient.post("/api/v1/auth/login/verify", {
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
           body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
         });
         const responseCookies = verifyResponse.cookies;
         const cookie = authenticatedCookies(responseCookies);
         const csrfToken = cookieValue(responseCookies, "cove_csrf");
 
-        const logoutResponse = yield* HttpClient.post("/api/v1/auth/logout", {
+        const logoutResponse = yield* HttpClient.post(AppRoutes.logout, {
           headers: { cookie, "x-csrf-token": csrfToken },
         });
 
@@ -327,7 +334,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
           ),
         ).toBe(0);
 
-        const meResponse = yield* HttpClient.get("/api/v1/me", {
+        const meResponse = yield* HttpClient.get(AppRoutes.me, {
           headers: { cookie },
         });
 

@@ -12,7 +12,7 @@ import { LogoutHeaders } from "./logout-headers.ts";
 import { SessionAuth } from "./session-auth.ts";
 import { VerifyMagicLinkRequest } from "./verify-magic-link-request.ts";
 
-const LoginEndpoint = HttpApiEndpoint.post("login", "/api/v1/auth/login", {
+const LoginEndpoint = HttpApiEndpoint.post("login", "/api/app/v1/auth/login", {
   payload: LoginRequest,
   success: MagicLinkAcceptedResponse,
   error: InternalServerErrorResponse,
@@ -20,7 +20,7 @@ const LoginEndpoint = HttpApiEndpoint.post("login", "/api/v1/auth/login", {
 
 const VerifyMagicLinkEndpoint = HttpApiEndpoint.post(
   "verifyMagicLink",
-  "/api/v1/auth/login/verify",
+  "/api/app/v1/auth/login/verify",
   {
     payload: VerifyMagicLinkRequest,
     success: CurrentUserResponse,
@@ -28,12 +28,12 @@ const VerifyMagicLinkEndpoint = HttpApiEndpoint.post(
   },
 );
 
-const MeEndpoint = HttpApiEndpoint.get("me", "/api/v1/me", {
+const MeEndpoint = HttpApiEndpoint.get("me", "/api/app/v1/me", {
   success: CurrentUserResponse,
   error: [UnauthorizedResponse, InternalServerErrorResponse],
 }).middleware(SessionAuth);
 
-const LogoutEndpoint = HttpApiEndpoint.post("logout", "/api/v1/auth/logout", {
+const LogoutEndpoint = HttpApiEndpoint.post("logout", "/api/app/v1/auth/logout", {
   headers: LogoutHeaders,
   error: [CsrfValidationFailedResponse, InternalServerErrorResponse],
 }).middleware(SessionAuth);

@@ -1,5 +1,5 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { CoveApi } from "@cove/protocol";
+import { CoveAppApi, CoveOperationsApi, CovePublicApi } from "@cove/protocol";
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
@@ -8,13 +8,32 @@ import { ApiConfiguration } from "./api-configuration.ts";
 import { AuthApiLive, SessionAuthLive } from "./auth/index.ts";
 import { HealthApiLive } from "./health/index.ts";
 
-const ApiRoutes = HttpApiBuilder.layer(CoveApi, { openapiPath: "/openapi.json" }).pipe(
+const AppApiRoutes = HttpApiBuilder.layer(CoveAppApi).pipe(
   Layer.provide(AuthApiLive),
-  Layer.provide(HealthApiLive),
   Layer.provide(SessionAuthLive),
 );
 
-export const HttpRoutes = Layer.mergeAll(ApiRoutes, HttpApiScalar.layer(CoveApi));
+const OperationsApiRoutes = HttpApiBuilder.layer(CoveOperationsApi).pipe(
+  Layer.provide(HealthApiLive),
+);
+
+const PublicApiRoutes = HttpApiBuilder.layer(CovePublicApi, {
+  openapiPath: "/openapi/public.json",
+});
+
+const PublicApiDocumentation = HttpApiScalar.layer(CovePublicApi, {
+  path: "/developers",
+  scalar: {
+    hideTestRequestButton: true,
+  },
+});
+
+export const HttpRoutes = Layer.mergeAll(
+  AppApiRoutes,
+  OperationsApiRoutes,
+  PublicApiRoutes,
+  PublicApiDocumentation,
+);
 
 export const HttpLive = HttpRouter.serve(HttpRoutes);
 
