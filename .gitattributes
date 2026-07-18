@@ -1,2 +1,1 @@
-apps/web/src/api/generated/** linguist-generated=true
 apps/web/src/routeTree.gen.ts linguist-generated=true

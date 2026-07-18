@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ready": "vp check && vp run -r test && vp run -r build",
-    "dev": "vp run website#dev",
-    "prepare": "vp config"
+    "ready": "vp run check && vp run test && vp run -r build",
+    "check": "vp run web#generate:api && vp check",
+    "test": "vp run web#generate:api && vp run -r test",
+    "dev": "vp run web#dev",
+    "prepare": "vp config && vp run web#generate:api"
   },
   "devDependencies": {
     "vite": "catalog:",

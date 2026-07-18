@@ -6,13 +6,13 @@
     "#/*": "./src/*"
   },
   "scripts": {
-    "dev": "vp dev --port 3000",
+    "dev": "vp run generate:api && vp dev --port 3000",
     "generate:api": "vp run @cove/protocol#generate:openapi && orval --config orval.config.ts && node scripts/normalize-generated-api.ts",
     "generate-routes": "tsr generate",
     "build": "vp run generate:api && vp build",
     "check": "vp run generate:api && vp check",
     "preview": "vp preview",
-    "test": "vp test run --config vite.test.config.ts"
+    "test": "vp run generate:api && vp test run --config vite.test.config.ts"
   },
   "dependencies": {
     "@cove/protocol": "workspace:*",

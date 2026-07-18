@@ -31,6 +31,10 @@ Multi-context: `CONTEXT-MAP.md` at the root points to per-context `CONTEXT.md` f
 
 ### Generated artifacts
 
+From the workspace root, use `vp run check` and `vp run test` instead of the raw Vite+ commands
+listed in the generated checklist above. These repository-specific wrappers regenerate the ignored
+API client before validation.
+
 Do not read or search `apps/web/src/api/generated/`, `apps/web/src/routeTree.gen.ts`, or
 `packages/protocol/openapi/app.json` for implementation context. Read `CoveAppApi`, the protocol
 schemas, and `apps/web/orval.config.ts` instead. Regenerate the API artifacts with
