@@ -19,6 +19,7 @@ const PublicAppUrl = Schema.URL.check(
 );
 
 export interface ApiConfigurationService {
+  readonly exposeAppApiDocs: boolean;
   readonly host: string;
   readonly port: number;
   readonly publicAppUrl: URL;
@@ -30,6 +31,7 @@ export class ApiConfiguration extends Context.Service<ApiConfiguration, ApiConfi
 
 const make = Effect.gen(function* () {
   const configuration = yield* Config.all({
+    exposeAppApiDocs: Config.boolean("EXPOSE_APP_API_DOCS").pipe(Config.withDefault(false)),
     host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
     port: Config.port("PORT").pipe(Config.withDefault(3001)),
     publicAppUrl: Config.schema(PublicAppUrl, "PUBLIC_APP_URL"),

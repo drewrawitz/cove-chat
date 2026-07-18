@@ -9,11 +9,30 @@ it.effect("decodes API runtime configuration once with local server defaults", (
     expect(configuration.host).toBe("0.0.0.0");
     expect(configuration.port).toBe(3001);
     expect(configuration.publicAppUrl.href).toBe("http://localhost:3000/");
+    expect(configuration.exposeAppApiDocs).toBe(false);
   }).pipe(
     Effect.provide(ApiConfigurationLive),
     Effect.provide(
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
+          PUBLIC_APP_URL: "http://localhost:3000",
+        }),
+      ),
+    ),
+  ),
+);
+
+it.effect("enables app API documentation explicitly", () =>
+  Effect.gen(function* () {
+    const configuration = yield* ApiConfiguration;
+
+    expect(configuration.exposeAppApiDocs).toBe(true);
+  }).pipe(
+    Effect.provide(ApiConfigurationLive),
+    Effect.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromUnknown({
+          EXPOSE_APP_API_DOCS: "true",
           PUBLIC_APP_URL: "http://localhost:3000",
         }),
       ),

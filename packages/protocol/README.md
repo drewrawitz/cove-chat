@@ -5,7 +5,8 @@ The client-safe source of truth for Cove's serialized transport contracts.
 Three Effect `HttpApi` values keep Cove's HTTP audiences separate:
 
 - `CoveAppApi` is the first-party interface under `/api/app/v1`. It uses Cove's browser session
-  and CSRF model and is not included in public documentation.
+  and CSRF model and is not included in public documentation. The API server can render it through
+  an explicitly enabled internal Scalar page for local or protected environments.
 - `CovePublicApi` is the stable interface reserved for supported integrations under `/api/v1`.
   Its OpenAPI document is the only contract served publicly. It currently has no operations.
 - `CoveOperationsApi` contains liveness and readiness endpoints under `/health`. It is not included

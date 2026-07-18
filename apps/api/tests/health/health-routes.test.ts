@@ -1,89 +1,16 @@
-import { NodeHttpServer } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
-import { makeCsrfToken, makeMagicLinkToken, makeSessionToken } from "@cove/application";
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
-import {
-  AuthenticationNotifier,
-  MagicLinkRepository,
-  SessionRepository,
-  TransactionManager,
-  UserRepository,
-  AuditEventWriter,
-} from "@cove/ports";
 import { HealthOkResponse, HealthUnavailableResponse } from "@cove/protocol";
-import { Effect, Layer, Option } from "effect";
-import { HttpClient, HttpClientResponse, HttpRouter } from "effect/unstable/http";
+import { Effect, Layer } from "effect";
+import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { DatabaseReadiness, PostgresDatabaseReadiness } from "../../src/health/index.ts";
-import { HttpRoutes } from "../../src/http-live.ts";
-
-const Server = HttpRouter.serve(HttpRoutes, {
-  disableListenLog: true,
-  disableLogger: true,
-});
-
-const AuthPortsTest = Layer.mergeAll(
-  Layer.succeed(
-    AuthenticationNotifier,
-    AuthenticationNotifier.of({
-      sendMagicLink: Effect.fn("AuthenticationNotifier.Test.sendMagicLink")(() => Effect.void),
-    }),
-  ),
-  Layer.succeed(
-    MagicLinkRepository,
-    MagicLinkRepository.of({
-      issue: Effect.fn("MagicLinkRepository.Test.issue")(() =>
-        Effect.succeed(makeMagicLinkToken("unused")),
-      ),
-      consume: Effect.fn("MagicLinkRepository.Test.consume")(() => Effect.succeed(Option.none())),
-    }),
-  ),
-  Layer.succeed(
-    SessionRepository,
-    SessionRepository.of({
-      create: Effect.fn("SessionRepository.Test.create")((_userId, expiresAt) =>
-        Effect.succeed({
-          token: makeSessionToken("unused-session"),
-          csrfToken: makeCsrfToken("unused-csrf"),
-          expiresAt,
-        }),
-      ),
-      findCurrentUser: Effect.fn("SessionRepository.Test.findCurrentUser")(() =>
-        Effect.succeed(Option.none()),
-      ),
-      revoke: Effect.fn("SessionRepository.Test.revoke")(() => Effect.succeed(true)),
-    }),
-  ),
-  Layer.succeed(
-    UserRepository,
-    UserRepository.of({
-      findByEmail: Effect.fn("UserRepository.Test.findByEmail")(() =>
-        Effect.succeed(Option.none()),
-      ),
-    }),
-  ),
-  Layer.succeed(
-    AuditEventWriter,
-    AuditEventWriter.of({
-      append: Effect.fn("AuditEventWriter.Test.append")(() => Effect.void),
-    }),
-  ),
-  Layer.succeed(
-    TransactionManager,
-    TransactionManager.of({
-      run: (effect) => effect,
-    }),
-  ),
-);
-
-const apiWithDependencies = <R, E>(dependencies: Layer.Layer<R, E>) =>
-  Server.pipe(Layer.provide(dependencies), Layer.provideMerge(NodeHttpServer.layerTest));
+import { makeHttpApiTestLayer } from "../support/http-api-test-layer.ts";
 
 const AvailableServices = Layer.mergeAll(PostgresDatabaseReadiness, PostgresRepositories).pipe(
   Layer.provide(TestDatabase),
-  Layer.provideMerge(AuthPortsTest),
 );
-const AvailableApi = apiWithDependencies(AvailableServices);
+const AvailableApi = makeHttpApiTestLayer({ exposeAppApiDocs: false }, AvailableServices);
 
 const UnavailableDatabase = Layer.succeed(
   DatabaseReadiness,
@@ -91,9 +18,7 @@ const UnavailableDatabase = Layer.succeed(
     check: Effect.fn("DatabaseReadiness.Test.unavailable")(() => Effect.succeed(false)),
   }),
 );
-const UnavailableApi = apiWithDependencies(
-  UnavailableDatabase.pipe(Layer.provideMerge(AuthPortsTest)),
-);
+const UnavailableApi = makeHttpApiTestLayer({ exposeAppApiDocs: false }, UnavailableDatabase);
 
 const decodeHealthOkResponse = HttpClientResponse.schemaBodyJson(HealthOkResponse);
 const decodeHealthUnavailableResponse =
@@ -112,47 +37,6 @@ layer(AvailableApi, { timeout: "2 minutes" })("health routes with PostgreSQL", (
 });
 
 layer(UnavailableApi)("health routes without PostgreSQL", (it) => {
-  it.effect("serves only the generated public OpenAPI contract", () =>
-    Effect.gen(function* () {
-      const response = yield* HttpClient.get("/openapi/public.json");
-      const document = yield* response.json;
-
-      expect(response.status).toBe(200);
-      expect(document).toMatchObject({
-        openapi: "3.1.0",
-        info: {
-          title: "Cove Public API",
-          version: "1.0.0",
-        },
-        paths: {},
-      });
-      expect(JSON.stringify(document)).not.toContain("sessionCookie");
-    }),
-  );
-
-  it.effect("serves interactive documentation for only the public contract", () =>
-    Effect.gen(function* () {
-      const response = yield* HttpClient.get("/developers");
-      const html = yield* response.text;
-
-      expect(response.status).toBe(200);
-      expect(response.headers["content-type"]).toContain("text/html");
-      expect(html).toContain("Cove Public API");
-      expect(html).not.toContain("/api/app/v1");
-      expect(html).not.toContain("/health/ready");
-    }),
-  );
-
-  it.effect("does not expose the former combined documentation routes", () =>
-    Effect.gen(function* () {
-      const openApiResponse = yield* HttpClient.get("/openapi.json");
-      const scalarResponse = yield* HttpClient.get("/docs");
-
-      expect(openApiResponse.status).toBe(404);
-      expect(scalarResponse.status).toBe(404);
-    }),
-  );
-
   it.effect("reports that the process is live", () =>
     Effect.gen(function* () {
       const response = yield* HttpClient.get("/health/live");

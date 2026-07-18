@@ -20,6 +20,6 @@ const InfrastructureLive = Layer.mergeAll(
   PostgresHealthLive,
   PostgresAuthLive,
   EmailLive,
-).pipe(Layer.provide(ApiConfigurationLive));
+).pipe(Layer.provideMerge(ApiConfigurationLive));
 
 export const ApiLive = HttpLive.pipe(Layer.provide(InfrastructureLive));

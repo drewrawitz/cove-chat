@@ -13,12 +13,15 @@ The initial HTTP surface exposes:
 - `GET /health/ready` for PostgreSQL readiness.
 - `GET /openapi/public.json` for the generated public OpenAPI 3.1 contract.
 - `GET /developers` for interactive Scalar documentation of the public contract.
+- `GET /internal/developers` for interactive Scalar documentation of the first-party app contract
+  when `EXPOSE_APP_API_DOCS=true`.
 
 The server mounts three declarative contracts from `@cove/protocol` independently. `CoveAppApi`
 contains first-party application endpoints, `CoveOperationsApi` contains health checks, and
 `CovePublicApi` is reserved for supported integrations. Only `CovePublicApi` is exposed through
-OpenAPI and Scalar; it currently has no operations. Request and response encoding is performed from
-the relevant shared contract.
+public OpenAPI and Scalar; it currently has no operations. `CoveAppApi` documentation can be mounted
+explicitly for local or protected environments. Request and response encoding is performed from the
+relevant shared contract.
 
 Authentication uses an opaque `cove_session` cookie with `HttpOnly`, `Secure`, `SameSite=Strict`,
 and a root path. A separate readable `cove_csrf` cookie supplies the token clients must echo in the
@@ -48,6 +51,8 @@ intentionally removed without redirects or compatibility aliases.
 Runtime configuration:
 
 - `DATABASE_URL` is required.
+- `EXPOSE_APP_API_DOCS` defaults to `false`. The local `.env.example` enables it; leave it disabled
+  unless `/internal/developers` is protected from public access.
 - `PUBLIC_APP_URL` is required. The local `.env.example` uses `http://localhost:3000`.
 - `HOST` defaults to `0.0.0.0`.
 - `PORT` defaults to `3001` so it does not collide with the local web app.

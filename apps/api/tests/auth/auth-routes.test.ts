@@ -11,9 +11,9 @@ import { Context, Duration, Effect, Layer, Option, Queue, Redacted } from "effec
 import { Cookies, HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { PostgresDatabaseReadiness } from "../../src/health/index.ts";
-import { HttpRoutes } from "../../src/http-live.ts";
+import { makeHttpRoutes } from "../../src/http-live.ts";
 
-const Server = HttpRouter.serve(HttpRoutes, {
+const Server = HttpRouter.serve(makeHttpRoutes({ exposeAppApiDocs: false }), {
   disableListenLog: true,
   disableLogger: true,
 });

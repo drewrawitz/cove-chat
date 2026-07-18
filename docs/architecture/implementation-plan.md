@@ -299,8 +299,10 @@ Define HTTP contracts declaratively with Effect `HttpApi`. The Node application 
 contracts with `HttpApiBuilder`; in-repo TypeScript consumers derive clients with `HttpApiClient`;
 and public OpenAPI 3.1 plus interactive documentation are generated only from `CovePublicApi`.
 `CoveAppApi` and `CoveOperationsApi` remain separate interfaces and are not included in public
-documentation. OpenAPI is an integration and documentation artifact, not a second manually
-maintained contract or the source for a duplicate in-repo client.
+documentation. The API application may mount `CoveAppApi` Scalar documentation behind an explicit,
+production-off configuration for local or otherwise protected environments. OpenAPI is an
+integration and documentation artifact, not a second manually maintained contract or the source
+for a duplicate in-repo client.
 
 Use explicit mappers between domain/application values and protocol values:
 

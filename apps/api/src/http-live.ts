@@ -28,14 +28,25 @@ const PublicApiDocumentation = HttpApiScalar.layer(CovePublicApi, {
   },
 });
 
-export const HttpRoutes = Layer.mergeAll(
+const AppApiDocumentation = HttpApiScalar.layer(CoveAppApi, {
+  path: "/internal/developers",
+});
+
+const CoreHttpRoutes = Layer.mergeAll(
   AppApiRoutes,
   OperationsApiRoutes,
   PublicApiRoutes,
   PublicApiDocumentation,
 );
 
-export const HttpLive = HttpRouter.serve(HttpRoutes);
+export const makeHttpRoutes = (options: { readonly exposeAppApiDocs: boolean }) =>
+  options.exposeAppApiDocs ? Layer.mergeAll(CoreHttpRoutes, AppApiDocumentation) : CoreHttpRoutes;
+
+export const HttpLive = Layer.unwrap(
+  Effect.map(ApiConfiguration, ({ exposeAppApiDocs }) =>
+    HttpRouter.serve(makeHttpRoutes({ exposeAppApiDocs })),
+  ),
+);
 
 export const NodeServerLive = Layer.unwrap(
   Effect.map(ApiConfiguration, ({ host, port }) =>
