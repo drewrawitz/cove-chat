@@ -27,6 +27,7 @@ catalog:
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   orval: ^8.22.0
   zod: ^4.4.3
+  react-doctor: ^0.7.8
 overrides:
   vite: "catalog:"
 peerDependencyRules:

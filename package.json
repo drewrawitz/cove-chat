@@ -12,6 +12,7 @@
     "doctor": "npx react-doctor@latest"
   },
   "devDependencies": {
+    "react-doctor": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
