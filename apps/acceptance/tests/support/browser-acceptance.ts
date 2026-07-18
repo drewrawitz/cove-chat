@@ -38,17 +38,35 @@ const stopProcess = Effect.fn("BrowserAcceptance.stopProcess")((child: ChildProc
   Effect.promise(
     () =>
       new Promise<void>((resolve) => {
-        if (child.exitCode !== null || child.signalCode !== null) {
+        const killProcessTree = (signal: NodeJS.Signals) => {
+          if (child.pid === undefined) return;
+
+          try {
+            if (process.platform === "win32") {
+              child.kill(signal);
+            } else {
+              process.kill(-child.pid, signal);
+            }
+          } catch {
+            // The process group has already exited.
+          }
+        };
+
+        const streamsClosed =
+          (child.stdout === null || child.stdout.closed) &&
+          (child.stderr === null || child.stderr.closed);
+        if ((child.exitCode !== null || child.signalCode !== null) && streamsClosed) {
+          killProcessTree("SIGTERM");
           resolve();
           return;
         }
 
-        const forceStop = setTimeout(() => child.kill("SIGKILL"), 5_000);
-        child.once("exit", () => {
+        const forceStop = setTimeout(() => killProcessTree("SIGKILL"), 5_000);
+        child.once("close", () => {
           clearTimeout(forceStop);
           resolve();
         });
-        child.kill("SIGTERM");
+        killProcessTree("SIGTERM");
       }),
   ),
 );
@@ -64,6 +82,7 @@ const startProcess = Effect.fn("BrowserAcceptance.startProcess")(
       Effect.sync(() => {
         const child = spawn(command, args, {
           cwd: options.cwd,
+          detached: process.platform !== "win32",
           env: options.env,
           stdio: ["ignore", "pipe", "pipe"],
         });
