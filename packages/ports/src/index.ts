@@ -1,6 +1,6 @@
 export {
-  MagicLinkDelivery,
-  MagicLinkDeliveryError,
+  AuthenticationNotificationError,
+  AuthenticationNotifier,
   MagicLinkRepository,
   SessionRepository,
   UserRepository,
@@ -10,17 +10,25 @@ export {
   MagicLinkTokenValue,
   SessionToken,
   SessionTokenValue,
-  type MagicLinkDeliveryService,
-  type MagicLinkMessage,
+  type AuthenticationNotifierService,
+  type MagicLinkNotification,
   type MagicLinkRepositoryService,
   type SessionCredentials,
   type SessionRepositoryService,
   type UserRepositoryService,
 } from "./auth/index.ts";
 export {
+  EmailDeliveryError,
+  EmailSender,
+  type EmailMessage,
+  type EmailSenderService,
+} from "./email/index.ts";
+export {
+  AuditEvent,
   AuditEventWriter,
+  AuthenticationSignInAuditEvent,
+  AuthenticationSignInAuditMetadata,
   type AuditEventWriterService,
-  type SignInAuditEvent,
 } from "./audit-event-writer.ts";
 export { ChannelRepository, type ChannelRepositoryService } from "./channels/index.ts";
 export { MembershipRepository, type MembershipRepositoryService } from "./memberships/index.ts";

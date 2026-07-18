@@ -1,6 +1,7 @@
 export {
   InvalidMagicLink,
   InvalidCsrfToken,
+  IssueSessionInput,
   RequestMagicLinkInput,
   SessionIdentityResolver,
   SessionIdentityResolverLive,

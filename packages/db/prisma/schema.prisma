@@ -53,11 +53,13 @@ model Session {
 }
 
 model AuditEvent {
-  id          String   @id
-  eventType   String   @map("event_type")
-  actorUserId String   @map("actor_user_id")
-  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
-  occurredAt  DateTime @map("occurred_at") @db.Timestamptz(6)
+  id           String   @id
+  eventType    String   @map("event_type")
+  eventVersion Int      @map("event_version")
+  actorUserId  String   @map("actor_user_id")
+  actor        User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  occurredAt   DateTime @map("occurred_at") @db.Timestamptz(6)
+  metadata     Json     @db.JsonB
 
   @@index([actorUserId, occurredAt])
   @@map("audit_events")

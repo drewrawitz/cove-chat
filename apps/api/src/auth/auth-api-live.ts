@@ -11,6 +11,7 @@ import {
   verifyMagicLink,
 } from "@cove/application";
 import {
+  AuthErrorResponses,
   AuthenticatedSession,
   CoveApi,
   CsrfCookie,
@@ -21,12 +22,6 @@ import { Effect, Redacted } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { currentUserResponse } from "./current-user-response.ts";
-import {
-  csrfValidationFailedResponse,
-  internalServerErrorResponse,
-  invalidMagicLinkResponse,
-  unauthorizedResponse,
-} from "./error-responses.ts";
 
 const setAuthenticationCookies = (
   sessionToken: Redacted.Redacted<string>,
@@ -94,7 +89,7 @@ export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
           email: makeEmailAddress(payload.email),
         }),
       ).pipe(
-        Effect.mapError(internalServerErrorResponse),
+        Effect.mapError(() => AuthErrorResponses.internalServerError),
         Effect.as(MagicLinkAcceptedResponse.make({ status: "accepted" })),
       ),
     )
@@ -106,8 +101,8 @@ export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
       ).pipe(
         Effect.mapError((error) =>
           error._tag === "Application.InvalidMagicLink"
-            ? invalidMagicLinkResponse()
-            : internalServerErrorResponse(),
+            ? AuthErrorResponses.invalidMagicLink
+            : AuthErrorResponses.internalServerError,
         ),
         Effect.tap(({ session }) =>
           setAuthenticationCookies(session.token, session.csrfToken, session.expiresAt),
@@ -121,7 +116,7 @@ export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
         const csrfHeader = headers["x-csrf-token"];
 
         if (csrfHeader === undefined) {
-          return yield* Effect.fail(csrfValidationFailedResponse());
+          return yield* Effect.fail(AuthErrorResponses.csrfValidationFailed);
         }
 
         yield* logout(
@@ -130,8 +125,8 @@ export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
         ).pipe(
           Effect.mapError((error) =>
             error._tag === "Application.InvalidCsrfToken"
-              ? csrfValidationFailedResponse()
-              : internalServerErrorResponse(),
+              ? AuthErrorResponses.csrfValidationFailed
+              : AuthErrorResponses.internalServerError,
           ),
         );
         yield* expireAuthenticationCookies;
@@ -143,8 +138,8 @@ export const AuthApiLive = HttpApiBuilder.group(CoveApi, "auth", (handlers) =>
         const user = yield* getCurrentUser(makeSessionToken(Redacted.value(session.token))).pipe(
           Effect.mapError((error) =>
             error._tag === "Application.Unauthenticated"
-              ? unauthorizedResponse()
-              : internalServerErrorResponse(),
+              ? AuthErrorResponses.unauthorized
+              : AuthErrorResponses.internalServerError,
           ),
         );
 

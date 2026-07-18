@@ -1,3 +1,5 @@
+export { AuthenticationMethod } from "./authentication/index.ts";
+
 export {
   Channel,
   ChannelAccessFacts,

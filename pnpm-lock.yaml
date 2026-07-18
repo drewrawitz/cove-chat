@@ -252,9 +252,9 @@ importers:
       '@cove/application':
         specifier: workspace:*
         version: link:../../packages/application
-      '@cove/infrastructure-auth-local':
+      '@cove/infrastructure-email':
         specifier: workspace:*
-        version: link:../../packages/infrastructure/auth-local
+        version: link:../../packages/infrastructure/email
       '@cove/infrastructure-postgres':
         specifier: workspace:*
         version: link:../../packages/infrastructure/postgres
@@ -441,7 +441,7 @@ importers:
         specifier: 'catalog:'
         version: 0.2.4(@types/node@26.1.1)(@voidzero-dev/vite-plus-core@0.2.4(@types/node@24.13.3)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))(jiti@2.7.0)(jsdom@28.1.0)(typescript@7.0.2)(yaml@2.9.0)
 
-  packages/infrastructure/auth-local:
+  packages/infrastructure/email:
     dependencies:
       '@cove/ports':
         specifier: workspace:*
@@ -450,6 +450,12 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-beta.98
     devDependencies:
+      '@cove/domain':
+        specifier: workspace:*
+        version: link:../../domain
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-beta.98(effect@4.0.0-beta.98)(vitest@4.1.10)
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3

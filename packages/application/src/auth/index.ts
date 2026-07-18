@@ -1,5 +1,5 @@
 export { Unauthenticated, getCurrentUser } from "./get-current-user.ts";
-export { issueSession } from "./issue-session.ts";
+export { IssueSessionInput, issueSession } from "./issue-session.ts";
 export { InvalidCsrfToken, logout } from "./logout.ts";
 export { RequestMagicLinkInput, requestMagicLink } from "./request-magic-link.ts";
 export {

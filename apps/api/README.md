@@ -27,14 +27,17 @@ Magic-link verification delegates session creation to a provider-neutral applica
 Future passkey and Google sign-in adapters should authenticate their credential, resolve a Cove
 user, and call that same session issuer; passwords are not part of this design.
 
-The current delivery adapter prints one-time magic links for local development. It is intentionally
-isolated behind `MagicLinkDelivery`; replace it with an email adapter before a hosted deployment.
-Set `MAGIC_LINK_VERIFY_URL` to the web route that accepts the token and posts it to the verification
-endpoint.
+Authentication use cases publish notification intent through `AuthenticationNotifier`. The email
+infrastructure owns the magic-link template and `/auth/verify` route, then delegates the rendered
+message to the generic `EmailSender` port. Local development uses `ConsoleEmailSender`; staging and
+production can provide a Resend adapter without changing authentication workflows or templates.
+
+`PUBLIC_APP_URL` is the deployment-specific web origin used to construct public links. Route paths
+remain code-owned rather than configurable.
 
 Runtime configuration:
 
 - `DATABASE_URL` is required.
-- `MAGIC_LINK_VERIFY_URL` defaults to `http://localhost:3000/auth/verify`.
+- `PUBLIC_APP_URL` is required. The local `.env.example` uses `http://localhost:3000`.
 - `HOST` defaults to `0.0.0.0`.
-- `PORT` defaults to `3000`.
+- `PORT` defaults to `3001` so it does not collide with the local web app.

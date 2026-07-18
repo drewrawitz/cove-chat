@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@cove/application": "workspace:*",
-    "@cove/infrastructure-auth-local": "workspace:*",
+    "@cove/infrastructure-email": "workspace:*",
     "@cove/infrastructure-postgres": "workspace:*",
     "@cove/protocol": "workspace:*",
     "@effect/platform-node": "catalog:",

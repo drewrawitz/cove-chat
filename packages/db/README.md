@@ -15,3 +15,6 @@ Run `vp run @cove/db#seed` from the repository root to upsert the two passwordle
 - `bob@cove.local` (`demo-bob`)
 
 Sign-in is by one-time magic link; the seed contains no passwords or reusable login credentials.
+
+Audit rows retain common indexed columns alongside an event version and JSONB metadata payload, so
+new event-specific context can be added without a migration for every field.

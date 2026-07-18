@@ -3,6 +3,7 @@ export {
   AuthenticatedActor,
   AuthenticatedActorId,
   AuthenticatedSession,
+  AuthErrorResponses,
   CsrfCookie,
   CsrfValidationFailedResponse,
   CurrentUserResponse,

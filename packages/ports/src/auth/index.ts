@@ -1,9 +1,9 @@
 export {
-  MagicLinkDelivery,
-  MagicLinkDeliveryError,
-  type MagicLinkDeliveryService,
-  type MagicLinkMessage,
-} from "./magic-link-delivery.ts";
+  AuthenticationNotificationError,
+  AuthenticationNotifier,
+  type AuthenticationNotifierService,
+  type MagicLinkNotification,
+} from "./authentication-notifier.ts";
 export { MagicLinkRepository, type MagicLinkRepositoryService } from "./magic-link-repository.ts";
 export {
   SessionRepository,

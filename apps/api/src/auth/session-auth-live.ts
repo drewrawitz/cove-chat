@@ -4,6 +4,7 @@ import {
   makeSessionToken,
 } from "@cove/application";
 import {
+  AuthErrorResponses,
   AuthenticatedActor,
   AuthenticatedActorId,
   AuthenticatedSession,
@@ -12,7 +13,6 @@ import {
   SessionCookieTokenValue,
 } from "@cove/protocol";
 import { Effect, Layer, Redacted } from "effect";
-import { internalServerErrorResponse, unauthorizedResponse } from "./error-responses.ts";
 
 const make = Effect.gen(function* () {
   const identities = yield* SessionIdentityResolver;
@@ -22,14 +22,14 @@ const make = Effect.gen(function* () {
       const credentialValue = Redacted.value(credential);
 
       if (credentialValue.length === 0) {
-        return Effect.fail(unauthorizedResponse());
+        return Effect.fail(AuthErrorResponses.unauthorized);
       }
 
       return identities.resolve(makeSessionToken(credentialValue)).pipe(
         Effect.mapError((error) =>
           error._tag === "Application.Unauthenticated"
-            ? unauthorizedResponse()
-            : internalServerErrorResponse(),
+            ? AuthErrorResponses.unauthorized
+            : AuthErrorResponses.internalServerError,
         ),
         Effect.flatMap((user) => {
           const actor = AuthenticatedActor.of({

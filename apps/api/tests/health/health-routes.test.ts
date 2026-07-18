@@ -4,7 +4,7 @@ import { makeCsrfToken, makeMagicLinkToken, makeSessionToken } from "@cove/appli
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import {
-  MagicLinkDelivery,
+  AuthenticationNotifier,
   MagicLinkRepository,
   SessionRepository,
   TransactionManager,
@@ -24,9 +24,9 @@ const Server = HttpRouter.serve(HttpRoutes, {
 
 const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
-    MagicLinkDelivery,
-    MagicLinkDelivery.of({
-      send: Effect.fn("MagicLinkDelivery.Test.send")(() => Effect.void),
+    AuthenticationNotifier,
+    AuthenticationNotifier.of({
+      sendMagicLink: Effect.fn("AuthenticationNotifier.Test.sendMagicLink")(() => Effect.void),
     }),
   ),
   Layer.succeed(
@@ -65,7 +65,7 @@ const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
     AuditEventWriter,
     AuditEventWriter.of({
-      writeSignIn: Effect.fn("AuditEventWriter.Test.writeSignIn")(() => Effect.void),
+      append: Effect.fn("AuditEventWriter.Test.append")(() => Effect.void),
     }),
   ),
   Layer.succeed(

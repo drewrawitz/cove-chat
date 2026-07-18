@@ -6,7 +6,7 @@ import {
   type SessionCredentials,
 } from "@cove/ports";
 import { Effect, Option, Schema } from "effect";
-import { issueSession } from "./issue-session.ts";
+import { IssueSessionInput, issueSession } from "./issue-session.ts";
 
 export const VerifyMagicLinkInput = Schema.Struct({
   token: MagicLinkToken,
@@ -38,7 +38,12 @@ export const verifyMagicLink = Effect.fn("Application.verifyMagicLink")(function
         return yield* Effect.fail(new InvalidMagicLink());
       }
 
-      const session = yield* issueSession(user.value.id);
+      const session = yield* issueSession(
+        IssueSessionInput.make({
+          userId: user.value.id,
+          authenticationMethod: "magic_link",
+        }),
+      );
 
       return { user: user.value, session } satisfies AuthenticatedSession;
     }),

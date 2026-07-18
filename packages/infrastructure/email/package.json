@@ -1,5 +1,5 @@
 {
-  "name": "@cove/infrastructure-auth-local",
+  "name": "@cove/infrastructure-email",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,13 +13,16 @@
   "scripts": {
     "build": "vp pack",
     "check": "vp check",
-    "dev": "vp pack --watch"
+    "dev": "vp pack --watch",
+    "test": "vp test run"
   },
   "dependencies": {
     "@cove/ports": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@cove/domain": "workspace:*",
+    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

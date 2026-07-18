@@ -201,7 +201,7 @@ packages/
     realtime-memory/         # in-process ephemeral socket fan-out
     storage-filesystem/      # local development file storage
     storage-s3/              # optional S3-compatible file storage
-    auth-local/              # initial auth/session implementation
+    email/                   # transactional-email templates and provider adapters
 ```
 
 These are workspace packages, not packages intended for npm publication.

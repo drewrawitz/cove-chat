@@ -3,9 +3,9 @@ import { expect, layer } from "@effect/vitest";
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import {
-  MagicLinkDelivery,
-  type MagicLinkDeliveryService,
-  type MagicLinkMessage,
+  AuthenticationNotifier,
+  type AuthenticationNotifierService,
+  type MagicLinkNotification,
 } from "@cove/ports";
 import { Context, Duration, Effect, Layer, Option, Queue, Redacted } from "effect";
 import { Cookies, HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
@@ -22,37 +22,37 @@ const DatabaseServicesLive = Layer.mergeAll(PostgresDatabaseReadiness, PostgresR
   Layer.provideMerge(TestDatabase),
 );
 
-interface TestMagicLinkDeliveryService extends MagicLinkDeliveryService {
-  readonly poll: () => Effect.Effect<Option.Option<MagicLinkMessage>>;
-  readonly take: () => Effect.Effect<MagicLinkMessage>;
+interface TestAuthenticationNotifierService extends AuthenticationNotifierService {
+  readonly poll: () => Effect.Effect<Option.Option<MagicLinkNotification>>;
+  readonly take: () => Effect.Effect<MagicLinkNotification>;
 }
 
-class TestMagicLinkDelivery extends Context.Service<
-  TestMagicLinkDelivery,
-  TestMagicLinkDeliveryService
->()("@cove/api/test/TestMagicLinkDelivery") {}
+class TestAuthenticationNotifier extends Context.Service<
+  TestAuthenticationNotifier,
+  TestAuthenticationNotifierService
+>()("@cove/api/test/TestAuthenticationNotifier") {}
 
-const MagicLinkDeliveryTest = Layer.effectContext(
+const AuthenticationNotifierTest = Layer.effectContext(
   Effect.gen(function* () {
-    const messages = yield* Queue.unbounded<MagicLinkMessage>();
-    const service = TestMagicLinkDelivery.of({
-      send: Effect.fn("TestMagicLinkDelivery.send")((message) =>
+    const messages = yield* Queue.unbounded<MagicLinkNotification>();
+    const service = TestAuthenticationNotifier.of({
+      sendMagicLink: Effect.fn("TestAuthenticationNotifier.sendMagicLink")((message) =>
         Queue.offer(messages, message).pipe(Effect.asVoid),
       ),
-      poll: Effect.fn("TestMagicLinkDelivery.poll")(() => Queue.poll(messages)),
-      take: Effect.fn("TestMagicLinkDelivery.take")(() => Queue.take(messages)),
+      poll: Effect.fn("TestAuthenticationNotifier.poll")(() => Queue.poll(messages)),
+      take: Effect.fn("TestAuthenticationNotifier.take")(() => Queue.take(messages)),
     });
 
     return Context.empty().pipe(
-      Context.add(MagicLinkDelivery, service),
-      Context.add(TestMagicLinkDelivery, service),
+      Context.add(AuthenticationNotifier, service),
+      Context.add(TestAuthenticationNotifier, service),
     );
   }),
 );
 
 const Api = Server.pipe(
   Layer.provideMerge(DatabaseServicesLive),
-  Layer.provideMerge(MagicLinkDeliveryTest),
+  Layer.provideMerge(AuthenticationNotifierTest),
   Layer.provideMerge(NodeHttpServer.layerTest),
 );
 
@@ -71,7 +71,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
   (it) => {
     it.effect("delivers a magic link for a seeded demo user", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         const loginResponse = yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({
             email: "alice@cove.local",
@@ -91,7 +91,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("does not disclose whether an email belongs to a user", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         const response = yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "unknown@cove.local" }),
         });
@@ -104,7 +104,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("redeems a magic link for an HTTP-only session and returns the current user", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
         });
@@ -139,16 +139,26 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         const auditEvents = yield* sql<{
           readonly actorUserId: string;
           readonly eventType: string;
+          readonly eventVersion: number;
+          readonly metadata: unknown;
         }>`
           SELECT
             actor_user_id AS "actorUserId",
-            event_type AS "eventType"
+            event_type AS "eventType",
+            event_version AS "eventVersion",
+            metadata
           FROM audit_events
           WHERE actor_user_id = 'demo-alice'
             AND event_type = 'authentication.sign_in'
         `;
 
         expect(auditEvents.length).toBeGreaterThan(0);
+        expect(auditEvents[0]).toEqual({
+          actorUserId: "demo-alice",
+          eventType: "authentication.sign_in",
+          eventVersion: 1,
+          metadata: { authenticationMethod: "magic_link" },
+        });
 
         const cookie = authenticatedCookies(responseCookies);
         const meResponse = yield* HttpClient.get("/api/v1/me", {
@@ -206,7 +216,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("consumes each magic link only once", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
         });
@@ -229,7 +239,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("rejects an expired session with the stable unauthorized response", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         const sql = yield* SqlClient.SqlClient;
         yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
@@ -261,7 +271,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("rejects logout without a CSRF token and keeps the session active", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
         });
@@ -291,7 +301,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
     it.effect("logs out by revoking the session and expiring its cookie", () =>
       Effect.gen(function* () {
-        const delivery = yield* TestMagicLinkDelivery;
+        const delivery = yield* TestAuthenticationNotifier;
         yield* HttpClient.post("/api/v1/auth/login", {
           body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
         });

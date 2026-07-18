@@ -1,5 +1,6 @@
 export { AuthApiGroup } from "./auth-api.ts";
 export {
+  AuthErrorResponses,
   CsrfValidationFailedResponse,
   InternalServerErrorResponse,
   InvalidMagicLinkResponse,
