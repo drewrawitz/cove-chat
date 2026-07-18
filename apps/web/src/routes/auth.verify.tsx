@@ -1,6 +1,11 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { verifyMagicLink } from "../api-client.ts";
+import { useEffect, useRef } from "react";
+import {
+  invalidateAuthMe,
+  invalidateWorkspacesListWorkspaces,
+  useAuthVerifyMagicLink,
+} from "../api/generated/cove-app.ts";
 
 interface VerifySearch {
   readonly token?: string;
@@ -16,24 +21,28 @@ export const Route = createFileRoute("/auth/verify")({
 function VerifyMagicLink() {
   const { token } = Route.useSearch();
   const navigate = useNavigate();
-  const [failed, setFailed] = useState(token === undefined);
+  const queryClient = useQueryClient();
+  const attemptedToken = useRef<string | undefined>(undefined);
+  const verify = useAuthVerifyMagicLink({
+    mutation: {
+      onSuccess: async () => {
+        await Promise.all([
+          invalidateAuthMe(queryClient),
+          invalidateWorkspacesListWorkspaces(queryClient),
+        ]);
+        await navigate({ to: "/", search: {} });
+      },
+    },
+  });
+  const verifyMagicLink = verify.mutate;
 
   useEffect(() => {
-    if (token === undefined) return;
-    let cancelled = false;
+    if (token === undefined || attemptedToken.current === token) return;
+    attemptedToken.current = token;
+    verifyMagicLink({ data: { token } });
+  }, [token, verifyMagicLink]);
 
-    void verifyMagicLink(token)
-      .then(() => {
-        if (!cancelled) void navigate({ to: "/", search: {} });
-      })
-      .catch(() => {
-        if (!cancelled) setFailed(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate, token]);
+  const failed = token === undefined || verify.isError;
 
   return (
     <main className="flex min-h-svh items-center justify-center bg-muted/30 p-5">

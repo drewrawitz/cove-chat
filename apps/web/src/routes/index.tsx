@@ -1,19 +1,11 @@
 import { Button } from "@cove/ui/components/button";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { type FormEvent, useEffect, useState } from "react";
-import { getCurrentAccount, listWorkspaces, requestMagicLink } from "../api-client.ts";
+import { type FormEvent, useState } from "react";
+import { useAuthLogin, useAuthMe, useWorkspacesListWorkspaces } from "../api/generated/cove-app.ts";
 
 interface HomeSearch {
   readonly left?: string;
 }
-
-type WorkspaceItem = Awaited<ReturnType<typeof listWorkspaces>>["workspaces"][number];
-
-type HomeState =
-  | { readonly status: "loading" }
-  | { readonly status: "signed-out" }
-  | { readonly status: "ready"; readonly workspaces: ReadonlyArray<WorkspaceItem> }
-  | { readonly status: "error" };
 
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch => ({
@@ -24,38 +16,18 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const { left } = Route.useSearch();
-  const [state, setState] = useState<HomeState>({ status: "loading" });
+  const account = useAuthMe({ query: { retry: false } });
+  const workspaces = useWorkspacesListWorkspaces({
+    query: { enabled: account.isSuccess, retry: false },
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadHome = async () => {
-      try {
-        await getCurrentAccount();
-      } catch {
-        if (!cancelled) setState({ status: "signed-out" });
-        return;
-      }
-
-      try {
-        const { workspaces } = await listWorkspaces();
-        if (!cancelled) setState({ status: "ready", workspaces });
-      } catch {
-        if (!cancelled) setState({ status: "error" });
-      }
-    };
-
-    void loadHome();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (state.status === "loading") return <PageMessage message="Opening Cove…" />;
-  if (state.status === "signed-out") return <SignIn />;
-  if (state.status === "error")
+  if (account.isPending) return <PageMessage message="Opening Cove…" />;
+  if (account.isError && account.error.status === 401) return <SignIn />;
+  if (account.isError) return <PageMessage message="Cove could not load your account." />;
+  if (workspaces.isPending) return <PageMessage message="Opening Cove…" />;
+  if (workspaces.isError) {
     return <PageMessage message="Cove could not load your workspaces." />;
+  }
 
   return (
     <main className="min-h-svh bg-muted/30 px-5 py-12 sm:px-8">
@@ -80,7 +52,7 @@ function Home() {
         )}
 
         <ul className="mt-8 grid gap-3">
-          {state.workspaces.map((workspace) => (
+          {workspaces.data.workspaces.map((workspace) => (
             <li key={workspace.id}>
               <Link
                 to="/workspaces/$workspaceId"
@@ -99,7 +71,7 @@ function Home() {
           ))}
         </ul>
 
-        {state.workspaces.length === 0 ? (
+        {workspaces.data.workspaces.length === 0 ? (
           <p className="mt-8 rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
             You do not currently have access to a workspace.
           </p>
@@ -111,20 +83,21 @@ function Home() {
 
 function SignIn() {
   const [message, setMessage] = useState<string>();
-  const [submitting, setSubmitting] = useState(false);
+  const login = useAuthLogin();
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const emailValue = form.get("email");
     const email = typeof emailValue === "string" ? emailValue : "";
-    setSubmitting(true);
     setMessage(undefined);
-
-    void requestMagicLink(email)
-      .then(() => setMessage("Check your email for a one-time sign-in link."))
-      .catch(() => setMessage("Cove could not send the sign-in link. Please try again."))
-      .finally(() => setSubmitting(false));
+    login.mutate(
+      { data: { email } },
+      {
+        onSuccess: () => setMessage("Check your email for a one-time sign-in link."),
+        onError: () => setMessage("Cove could not send the sign-in link. Please try again."),
+      },
+    );
   };
 
   return (
@@ -153,8 +126,8 @@ function SignIn() {
             className="mt-2 h-11 w-full rounded-xl border bg-background px-3 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             placeholder="you@example.com"
           />
-          <Button className="mt-4 w-full" size="lg" type="submit" disabled={submitting}>
-            {submitting ? "Sending…" : "Send magic link"}
+          <Button className="mt-4 w-full" size="lg" type="submit" disabled={login.isPending}>
+            {login.isPending ? "Sending…" : "Send magic link"}
           </Button>
         </form>
 

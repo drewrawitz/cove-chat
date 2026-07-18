@@ -1,7 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { OpenApi } from "effect/unstable/httpapi";
-import { CoveAppApi, CoveOperationsApi, CovePublicApi } from "../src/index.ts";
+import { CoveOperationsApi, CovePublicApi } from "../src/index.ts";
+import { makeCoveAppOpenApi } from "../src/app-openapi.ts";
 
 it.effect("publishes only the deliberate public HTTP contract", () =>
   Effect.sync(() => {
@@ -18,7 +19,7 @@ it.effect("publishes only the deliberate public HTTP contract", () =>
 
 it.effect("keeps first-party authentication in the app HTTP contract", () =>
   Effect.sync(() => {
-    const document = OpenApi.fromApi(CoveAppApi);
+    const document = makeCoveAppOpenApi();
 
     expect(document.info).toMatchObject({
       title: "Cove App API",
@@ -57,6 +58,30 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
         type: "apiKey",
         in: "cookie",
         name: "cove_session",
+      },
+    });
+    expect(document.components.schemas).toMatchObject({
+      CoveAppErrorResponse: {
+        anyOf: expect.arrayContaining([
+          { $ref: "#/components/schemas/InvalidMagicLinkResponse" },
+          { $ref: "#/components/schemas/WorkspaceUnavailableResponse" },
+        ]),
+      },
+      LoginRequest: {
+        properties: {
+          email: {
+            type: "string",
+            allOf: expect.arrayContaining([expect.objectContaining({ type: "string" })]),
+          },
+        },
+      },
+      VerifyMagicLinkRequest: {
+        properties: {
+          token: {
+            type: "string",
+            allOf: [expect.objectContaining({ minLength: 1, type: "string" })],
+          },
+        },
       },
     });
   }),

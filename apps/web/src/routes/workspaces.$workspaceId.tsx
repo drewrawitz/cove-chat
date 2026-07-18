@@ -1,41 +1,24 @@
 import { Button } from "@cove/ui/components/button";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { getWorkspace, leaveWorkspace } from "../api-client.ts";
-
-type WorkspaceAccess = Awaited<ReturnType<typeof getWorkspace>>;
-
-type WorkspaceState =
-  | { readonly status: "loading" }
-  | { readonly status: "ready"; readonly access: WorkspaceAccess }
-  | { readonly status: "unavailable" };
+import {
+  getWorkspacesGetWorkspaceQueryKey,
+  invalidateWorkspacesListWorkspaces,
+  useWorkspacesEndMembership,
+  useWorkspacesGetWorkspace,
+} from "../api/generated/cove-app.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
 
 function WorkspaceHome() {
   const { workspaceId } = Route.useParams();
   const navigate = useNavigate();
-  const [state, setState] = useState<WorkspaceState>({ status: "loading" });
-  const [leaving, setLeaving] = useState(false);
+  const queryClient = useQueryClient();
+  const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
+  const endMembership = useWorkspacesEndMembership();
 
-  useEffect(() => {
-    let cancelled = false;
-
-    void getWorkspace(workspaceId)
-      .then((access) => {
-        if (!cancelled) setState({ status: "ready", access });
-      })
-      .catch(() => {
-        if (!cancelled) setState({ status: "unavailable" });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId]);
-
-  if (state.status === "loading") return <WorkspaceMessage message="Entering workspace…" />;
-  if (state.status === "unavailable") {
+  if (workspace.isPending) return <WorkspaceMessage message="Entering workspace…" />;
+  if (workspace.isError) {
     return (
       <WorkspaceMessage message="This workspace is not available to your account.">
         <Link className="mt-4 inline-block text-sm font-medium text-primary hover:underline" to="/">
@@ -46,15 +29,19 @@ function WorkspaceHome() {
   }
 
   const leave = () => {
-    setLeaving(true);
-    void leaveWorkspace(workspaceId)
-      .then(() =>
-        navigate({
-          to: "/",
-          search: { left: state.access.workspace.name },
-        }),
-      )
-      .catch(() => setLeaving(false));
+    endMembership.mutate(
+      { workspaceId },
+      {
+        onSuccess: async () => {
+          await invalidateWorkspacesListWorkspaces(queryClient);
+          await navigate({
+            to: "/",
+            search: { left: workspace.data.workspace.name },
+          });
+          queryClient.removeQueries({ queryKey: getWorkspacesGetWorkspaceQueryKey(workspaceId) });
+        },
+      },
+    );
   };
 
   return (
@@ -62,20 +49,20 @@ function WorkspaceHome() {
       <section className="mx-auto w-full max-w-3xl overflow-hidden rounded-3xl border bg-card shadow-sm">
         <header className="border-b bg-primary/5 p-6 sm:p-8">
           <p className="font-heading text-sm font-semibold tracking-[0.18em] text-primary uppercase">
-            {state.access.workspace.name}
+            {workspace.data.workspace.name}
           </p>
           <div className="mt-6 flex items-center gap-4">
             <img
               className="size-20 rounded-2xl border bg-background object-cover"
-              src={state.access.identity.avatarUrl}
-              alt={state.access.identity.name}
+              src={workspace.data.identity.avatarUrl}
+              alt={workspace.data.identity.name}
             />
             <div>
               <h1 className="font-heading text-3xl font-semibold tracking-tight">
-                {state.access.identity.name}
+                {workspace.data.identity.name}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground capitalize">
-                {state.access.role} · Workspace Identity
+                {workspace.data.role} · Workspace Identity
               </p>
             </div>
           </div>
@@ -96,10 +83,10 @@ function WorkspaceHome() {
               className="mt-4"
               variant="destructive"
               type="button"
-              disabled={leaving}
+              disabled={endMembership.isPending}
               onClick={leave}
             >
-              {leaving ? "Leaving…" : "Leave workspace"}
+              {endMembership.isPending ? "Leaving…" : "Leave workspace"}
             </Button>
           </div>
         </div>

@@ -77,34 +77,24 @@ model Workspace {
 }
 
 model WorkspaceIdentity {
-  id                 String
-  workspaceId        String               @map("workspace_id")
-  accountId          String               @map("account_id")
-  name               String
-  avatarUrl          String               @map("avatar_url")
-  workspace          Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  account            User                 @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  membership         WorkspaceMembership?
-  channelMemberships ChannelMembership[]
-  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                  String
+  workspaceId         String              @map("workspace_id")
+  accountId           String              @map("account_id")
+  name                String
+  avatarUrl           String              @map("avatar_url")
+  role                WorkspaceRole       @default(MEMBER)
+  membershipStartedAt DateTime            @default(now()) @map("membership_started_at") @db.Timestamptz(6)
+  membershipEndedAt   DateTime?           @map("membership_ended_at") @db.Timestamptz(6)
+  workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  account             User                @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  channelMemberships  ChannelMembership[]
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
   @@unique([workspaceId, accountId])
   @@index([accountId])
+  @@index([workspaceId, membershipEndedAt])
   @@map("workspace_identities")
-}
-
-model WorkspaceMembership {
-  workspaceId String            @map("workspace_id")
-  identityId  String            @map("identity_id")
-  role        WorkspaceRole     @default(MEMBER)
-  identity    WorkspaceIdentity @relation(fields: [workspaceId, identityId], references: [workspaceId, id], onDelete: Cascade)
-  startedAt   DateTime          @default(now()) @map("started_at") @db.Timestamptz(6)
-  endedAt     DateTime?         @map("ended_at") @db.Timestamptz(6)
-
-  @@id([workspaceId, identityId])
-  @@index([workspaceId, endedAt])
-  @@map("workspace_memberships")
 }
 
 model Channel {
@@ -122,12 +112,12 @@ model Channel {
 }
 
 model ChannelMembership {
-  workspaceId         String              @map("workspace_id")
-  channelId           String              @map("channel_id")
-  identityId          String              @map("identity_id")
-  channel             Channel             @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
-  workspaceIdentity   WorkspaceIdentity   @relation(fields: [workspaceId, identityId], references: [workspaceId, id], onDelete: Cascade)
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  workspaceId       String            @map("workspace_id")
+  channelId         String            @map("channel_id")
+  identityId        String            @map("identity_id")
+  channel           Channel           @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
+  workspaceIdentity WorkspaceIdentity @relation(fields: [workspaceId, identityId], references: [workspaceId, id], onDelete: Cascade)
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, channelId, identityId])
   @@index([workspaceId, identityId])

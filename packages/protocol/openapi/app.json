@@ -1,0 +1,782 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Cove App API",
+    "version": "1.0.0",
+    "description": "The first-party HTTP interface used by Cove applications."
+  },
+  "paths": {
+    "/api/app/v1/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth.login",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "202": {
+            "description": "MagicLinkAcceptedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MagicLinkAcceptedResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalServerErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/app/v1/auth/login/verify": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth.verifyMagicLink",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "CurrentUserResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "InvalidMagicLinkResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidMagicLinkResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalServerErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyMagicLinkRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/app/v1/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "auth.logout",
+        "parameters": [
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "UnauthorizedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CsrfValidationFailedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfValidationFailedResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/v1/me": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "auth.me",
+        "parameters": [],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CurrentUserResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/v1/workspaces": {
+      "get": {
+        "tags": ["workspaces"],
+        "operationId": "workspaces.listWorkspaces",
+        "parameters": [],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WorkspaceListResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/v1/workspaces/{workspaceId}": {
+      "get": {
+        "tags": ["workspaces"],
+        "operationId": "workspaces.getWorkspace",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              ]
+            },
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "WorkspaceAccessResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceAccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WorkspaceUnavailableResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUnavailableResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/app/v1/workspaces/{workspaceId}/membership": {
+      "delete": {
+        "tags": ["workspaces"],
+        "operationId": "workspaces.endMembership",
+        "parameters": [
+          {
+            "name": "workspaceId",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              ]
+            },
+            "required": true
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "allOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "401": {
+            "description": "UnauthorizedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CsrfValidationFailedResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfValidationFailedResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "WorkspaceUnavailableResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceUnavailableResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "LastWorkspaceOwnerResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LastWorkspaceOwnerResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "InternalServerErrorResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InternalServerErrorResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CoveAppErrorResponse": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CsrfValidationFailedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/InternalServerErrorResponse"
+          },
+          {
+            "$ref": "#/components/schemas/InvalidMagicLinkResponse"
+          },
+          {
+            "$ref": "#/components/schemas/UnauthorizedResponse"
+          },
+          {
+            "$ref": "#/components/schemas/LastWorkspaceOwnerResponse"
+          },
+          {
+            "$ref": "#/components/schemas/WorkspaceUnavailableResponse"
+          }
+        ]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "allOf": [
+              {
+                "pattern": "^\\S[\\s\\S]*\\S$|^\\S$|^$",
+                "type": "string"
+              },
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "pattern": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": ["email"],
+        "additionalProperties": false
+      },
+      "MagicLinkAcceptedResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["accepted"]
+              }
+            ]
+          }
+        },
+        "required": ["status"],
+        "additionalProperties": false
+      },
+      "InternalServerErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["INTERNAL_SERVER_ERROR"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["The server could not complete the request."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "VerifyMagicLinkRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "allOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": ["token"],
+        "additionalProperties": false
+      },
+      "CurrentUserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "email", "displayName"],
+        "additionalProperties": false
+      },
+      "InvalidMagicLinkResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["INVALID_MAGIC_LINK"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["Magic link is invalid or expired."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "CsrfValidationFailedResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["CSRF_VALIDATION_FAILED"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["CSRF validation failed."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "UnauthorizedResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["UNAUTHENTICATED"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["Authentication is required."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "WorkspaceSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["owner", "admin", "member", "guest"]
+          }
+        },
+        "required": ["id", "name", "role"],
+        "additionalProperties": false
+      },
+      "WorkspaceListResponse": {
+        "type": "object",
+        "properties": {
+          "workspaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceSummaryResponse"
+            }
+          }
+        },
+        "required": ["workspaces"],
+        "additionalProperties": false
+      },
+      "WorkspaceIdentityResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name", "avatarUrl"],
+        "additionalProperties": false
+      },
+      "WorkspaceAccessResponse": {
+        "type": "object",
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["id", "name"],
+            "additionalProperties": false
+          },
+          "identity": {
+            "$ref": "#/components/schemas/WorkspaceIdentityResponse"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["owner", "admin", "member", "guest"]
+          }
+        },
+        "required": ["workspace", "identity", "role"],
+        "additionalProperties": false
+      },
+      "WorkspaceUnavailableResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["WORKSPACE_UNAVAILABLE"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["Workspace is unavailable."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      },
+      "LastWorkspaceOwnerResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["LAST_WORKSPACE_OWNER"]
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["The final workspace owner cannot leave."]
+              }
+            ]
+          }
+        },
+        "required": ["code", "message"],
+        "additionalProperties": false
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "description": "HTTP-only session cookie issued after magic-link verification.",
+        "type": "apiKey",
+        "name": "cove_session",
+        "in": "cookie"
+      }
+    }
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "auth"
+    },
+    {
+      "name": "workspaces"
+    }
+  ]
+}

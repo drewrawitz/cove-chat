@@ -70,12 +70,6 @@ const seedFixtures = Effect.fn("PostgresIntegrationTest.seedFixtures")(function*
       (${`identity-${fixtures.workspaceMemberId}`}, ${fixtures.workspaceId}, ${fixtures.workspaceMemberId}, 'Workspace Member', '/avatars/default.svg')
   `;
   yield* sql`
-    INSERT INTO workspace_memberships (workspace_id, identity_id)
-    VALUES
-      (${fixtures.workspaceId}, ${`identity-${fixtures.privateMemberId}`}),
-      (${fixtures.workspaceId}, ${`identity-${fixtures.workspaceMemberId}`})
-  `;
-  yield* sql`
     INSERT INTO channels (id, workspace_id, name, visibility)
     VALUES
       (${fixtures.publicChannel.id}, ${fixtures.workspaceId}, ${fixtures.publicChannel.name}, 'public'),

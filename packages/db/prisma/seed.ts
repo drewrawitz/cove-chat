@@ -21,25 +21,17 @@ const seed = Effect.gen(function* () {
     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
   `;
   yield* sql`
-    INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url)
+    INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url, role)
     VALUES
-      ('demo-alice-identity', 'demo-workspace', 'demo-alice', 'Alice in Cove', '/avatars/alice.svg'),
-      ('demo-bob-identity', 'demo-workspace', 'demo-bob', 'Bob in Cove', '/avatars/bob.svg')
+      ('demo-alice-identity', 'demo-workspace', 'demo-alice', 'Alice in Cove', '/avatars/alice.svg', 'member'),
+      ('demo-bob-identity', 'demo-workspace', 'demo-bob', 'Bob in Cove', '/avatars/bob.svg', 'owner')
     ON CONFLICT (workspace_id, id) DO UPDATE
     SET
       account_id = EXCLUDED.account_id,
       name = EXCLUDED.name,
-      avatar_url = EXCLUDED.avatar_url
-  `;
-  yield* sql`
-    INSERT INTO workspace_memberships (workspace_id, identity_id, role)
-    VALUES
-      ('demo-workspace', 'demo-alice-identity', 'member'),
-      ('demo-workspace', 'demo-bob-identity', 'owner')
-    ON CONFLICT (workspace_id, identity_id) DO UPDATE
-    SET
       role = EXCLUDED.role,
-      ended_at = NULL
+      avatar_url = EXCLUDED.avatar_url,
+      membership_ended_at = NULL
   `;
 });
 

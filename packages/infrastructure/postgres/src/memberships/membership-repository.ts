@@ -29,13 +29,10 @@ const make = Effect.gen(function* () {
       SELECT
         EXISTS (
           SELECT 1
-          FROM workspace_memberships AS membership
-          INNER JOIN workspace_identities AS identity
-            ON identity.workspace_id = membership.workspace_id
-           AND identity.id = membership.identity_id
-          WHERE membership.workspace_id = ${workspaceId}
+          FROM workspace_identities AS identity
+          WHERE identity.workspace_id = ${workspaceId}
             AND identity.account_id = ${actorId}
-            AND membership.ended_at IS NULL
+            AND identity.membership_ended_at IS NULL
         ) AS "isWorkspaceMember",
         EXISTS (
           SELECT 1

@@ -12,6 +12,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("workspace access with PostgreSQL"
       const accountId = yield* makeUserId("demo-alice");
       const workspaceId = yield* makeWorkspaceId("demo-workspace");
 
+      const listedAccess = yield* workspaces.listForAccount(accountId);
       const accessBeforeLeaving = yield* workspaces.findForAccount(accountId, workspaceId);
       const identityBeforeLeaving = yield* workspaces.findIdentityForAccount(
         accountId,
@@ -21,6 +22,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("workspace access with PostgreSQL"
       expect(Option.getOrThrow(accessBeforeLeaving).identity).toEqual(
         Option.getOrThrow(identityBeforeLeaving),
       );
+      expect(listedAccess).toEqual([Option.getOrThrow(accessBeforeLeaving)]);
 
       expect(
         yield* workspaces.endMembership(accountId, workspaceId, new Date("2026-07-18T12:00:00Z")),
@@ -42,8 +44,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("workspace access with PostgreSQL"
       const workspaceId = yield* makeWorkspaceId("demo-workspace");
 
       yield* sql`
-        UPDATE workspace_memberships
-        SET role = 'owner', ended_at = NULL
+        UPDATE workspace_identities
+        SET role = 'owner', membership_ended_at = NULL
         WHERE workspace_id = ${workspaceId}
       `;
 

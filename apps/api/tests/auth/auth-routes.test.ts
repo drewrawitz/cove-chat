@@ -71,6 +71,7 @@ const AppRoutes = {
   verifyMagicLink: "/api/app/v1/auth/login/verify",
   logout: "/api/app/v1/auth/logout",
   me: "/api/app/v1/me",
+  workspaces: "/api/app/v1/workspaces",
   workspace: "/api/app/v1/workspaces/demo-workspace",
   workspaceMembership: "/api/app/v1/workspaces/demo-workspace/membership",
 };
@@ -177,6 +178,14 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
         expect(meResponse.status).toBe(200);
         expect(meBody).toEqual(verifyBody);
+
+        const workspacesResponse = yield* HttpClient.get(AppRoutes.workspaces, {
+          headers: { cookie },
+        });
+        expect(workspacesResponse.status).toBe(200);
+        expect(yield* workspacesResponse.json).toEqual({
+          workspaces: [{ id: "demo-workspace", name: "Cove Demo", role: "member" }],
+        });
       }),
     );
 

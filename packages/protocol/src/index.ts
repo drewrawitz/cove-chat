@@ -1,4 +1,4 @@
-export { CoveAppApi } from "./app-api.ts";
+export { CoveAppApi, CoveAppErrorResponse } from "./app-api.ts";
 export { CoveOperationsApi } from "./operations-api.ts";
 export { CovePublicApi } from "./public-api.ts";
 export {

@@ -12,8 +12,10 @@ Three Effect `HttpApi` values keep Cove's HTTP audiences separate:
 - `CoveOperationsApi` contains liveness and readiness endpoints under `/health`. It is not included
   in public documentation and should be restricted by deployment ingress policy.
 
-The API server implements each contract independently, and consumers can derive a typed
-`HttpApiClient` from the contract appropriate to their audience.
+The API server implements each contract independently. The web application generates its fetch
+functions, TanStack Query hooks, and runtime Zod decoders with Orval from a deterministic OpenAPI
+document derived from `CoveAppApi`; other Effect consumers can still derive an `HttpApiClient`
+directly when appropriate.
 
 Domain and application models are mapped into these contracts explicitly; they are not treated as
 wire formats.

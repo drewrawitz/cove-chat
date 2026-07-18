@@ -64,15 +64,12 @@ const make = Effect.gen(function* () {
         identity.account_id AS "accountId",
         identity.name AS "identityName",
         identity.avatar_url AS "avatarUrl",
-        membership.role
-      FROM workspace_memberships AS membership
-      INNER JOIN workspace_identities AS identity
-        ON identity.workspace_id = membership.workspace_id
-       AND identity.id = membership.identity_id
+        identity.role
+      FROM workspace_identities AS identity
       INNER JOIN workspaces AS workspace
-        ON workspace.id = membership.workspace_id
+        ON workspace.id = identity.workspace_id
       WHERE identity.account_id = ${accountId}
-        AND membership.ended_at IS NULL
+        AND identity.membership_ended_at IS NULL
       ORDER BY lower(workspace.name), workspace.id
     `,
   });
@@ -88,16 +85,13 @@ const make = Effect.gen(function* () {
         identity.account_id AS "accountId",
         identity.name AS "identityName",
         identity.avatar_url AS "avatarUrl",
-        membership.role
-      FROM workspace_memberships AS membership
-      INNER JOIN workspace_identities AS identity
-        ON identity.workspace_id = membership.workspace_id
-       AND identity.id = membership.identity_id
+        identity.role
+      FROM workspace_identities AS identity
       INNER JOIN workspaces AS workspace
-        ON workspace.id = membership.workspace_id
+        ON workspace.id = identity.workspace_id
       WHERE identity.account_id = ${accountId}
         AND workspace.id = ${workspaceId}
-        AND membership.ended_at IS NULL
+        AND identity.membership_ended_at IS NULL
       LIMIT 1
     `,
   });
@@ -123,47 +117,44 @@ const make = Effect.gen(function* () {
     Request: EndMembershipRequest,
     Result: EndMembershipResult,
     execute: ({ accountId, endedAt, workspaceId }) => sql`
-      WITH locked_memberships AS MATERIALIZED (
-        SELECT membership.identity_id, membership.role
-        FROM workspace_memberships AS membership
-        WHERE membership.workspace_id = ${workspaceId}
-          AND membership.ended_at IS NULL
-        ORDER BY membership.identity_id
+      WITH locked_identities AS MATERIALIZED (
+        SELECT identity.id, identity.account_id, identity.role
+        FROM workspace_identities AS identity
+        WHERE identity.workspace_id = ${workspaceId}
+          AND identity.membership_ended_at IS NULL
+        ORDER BY identity.id
         FOR UPDATE
-      ), target_membership AS (
-        SELECT locked_membership.identity_id, locked_membership.role
-        FROM locked_memberships AS locked_membership
-        INNER JOIN workspace_identities AS identity
-          ON identity.workspace_id = ${workspaceId}
-         AND identity.id = locked_membership.identity_id
-        WHERE identity.account_id = ${accountId}
+      ), target_identity AS (
+        SELECT locked_identity.id, locked_identity.role
+        FROM locked_identities AS locked_identity
+        WHERE locked_identity.account_id = ${accountId}
       ), ended_membership AS (
-        UPDATE workspace_memberships AS membership
-        SET ended_at = ${endedAt}
-        FROM target_membership
-        WHERE membership.workspace_id = ${workspaceId}
-          AND membership.identity_id = target_membership.identity_id
+        UPDATE workspace_identities AS identity
+        SET membership_ended_at = ${endedAt}
+        FROM target_identity
+        WHERE identity.workspace_id = ${workspaceId}
+          AND identity.id = target_identity.id
           AND (
-            target_membership.role <> 'owner'
+            target_identity.role <> 'owner'
             OR EXISTS (
               SELECT 1
-              FROM locked_memberships AS other_membership
-              WHERE other_membership.role = 'owner'
-                AND other_membership.identity_id <> target_membership.identity_id
+              FROM locked_identities AS other_identity
+              WHERE other_identity.role = 'owner'
+                AND other_identity.id <> target_identity.id
             )
           )
-        RETURNING membership.workspace_id, membership.identity_id
+        RETURNING identity.workspace_id, identity.id
       ), removed_channel_memberships AS (
         DELETE FROM channel_memberships AS channel_membership
         USING ended_membership
         WHERE channel_membership.workspace_id = ended_membership.workspace_id
-          AND channel_membership.identity_id = ended_membership.identity_id
+          AND channel_membership.identity_id = ended_membership.id
       )
       SELECT CASE
         WHEN EXISTS(SELECT 1 FROM ended_membership) THEN 'ended'
         WHEN EXISTS(
           SELECT 1
-          FROM target_membership
+          FROM target_identity
           WHERE role = 'owner'
         ) THEN 'last-owner'
         ELSE 'not-found'
