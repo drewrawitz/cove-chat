@@ -9,11 +9,11 @@ The global sign-in identity through which a person can participate in multiple w
 _Avoid_: Workspace member, workspace identity
 
 **Workspace Identity**:
-The persistent persona of an account inside one workspace, including its workspace-specific name and avatar. It remains available for attribution after workspace access ends.
+The persistent persona of an Account inside one Workspace, including its workspace-specific name and avatar; an Account may change it only while it has an active Workspace Membership. It remains stable and available for attribution after access ends, and rejoining preserves it while restoring edit authority.
 _Avoid_: Global profile, active membership
 
 **Workspace Membership**:
-The time-bounded relationship that grants a workspace identity access to a workspace and assigns its current workspace role. Ending it removes access without removing the workspace identity or its history.
+The time-bounded relationship that grants a Workspace Identity access to a Workspace and assigns its current Workspace Role. Ending it removes access and every Channel Membership established under it while preserving the Workspace Identity and its history; a later Workspace Membership does not restore those Channel Memberships.
 _Avoid_: Workspace identity
 
 **Workspace Role**:
@@ -23,7 +23,7 @@ _Avoid_: Account role, global role
 ## Roles
 
 **Owner**:
-A full member with ultimate workspace authority, including appointing other owners and archiving the workspace. Every active workspace has at least one owner.
+A full member with ultimate Workspace authority, including appointing other Owners and archiving the Workspace. Until archived, a Workspace must have at least one Owner with an active Workspace Membership; no departure, removal, or Workspace Role change may eliminate the final active Owner.
 
 **Admin**:
 A full member who manages workspace membership, roles below owner, and plugin installation without automatically gaining access to private conversations.
@@ -42,7 +42,7 @@ _Avoid_: Full member
 ## Channel participation
 
 **Channel Membership**:
-An explicit relationship between a workspace identity and a channel. It represents joining a public channel and grants access to a private channel or any channel shared with a guest.
+An explicit relationship between a Workspace Identity with an active Workspace Membership and a Channel. It represents joining a public Channel and grants access to a private Channel or any Channel shared with a Guest; it ends with the Workspace Membership and must be established again after rejoining.
 _Avoid_: Workspace membership, topic membership
 
 **Channel Steward**:
