@@ -11,11 +11,6 @@ const lastOwnerDefinition = {
   message: "The final workspace owner cannot leave.",
 } as const;
 
-const commandConflictDefinition = {
-  code: "WORKSPACE_COMMAND_CONFLICT",
-  message: "The command identifier was already used for another workspace operation.",
-} as const;
-
 const alreadyMemberDefinition = {
   code: "ALREADY_WORKSPACE_MEMBER",
   message: "The account already has active workspace access.",
@@ -51,13 +46,6 @@ export interface LastWorkspaceOwnerResponse extends Schema.Schema.Type<
   typeof LastWorkspaceOwnerResponse
 > {}
 
-export const WorkspaceCommandConflictResponse = Schema.Struct({
-  code: Schema.Literals([commandConflictDefinition.code]),
-  message: Schema.Literals([commandConflictDefinition.message]),
-})
-  .annotate({ identifier: "WorkspaceCommandConflictResponse" })
-  .pipe(HttpApiSchema.status("Conflict"));
-
 export const AlreadyWorkspaceMemberResponse = Schema.Struct({
   code: Schema.Literals([alreadyMemberDefinition.code]),
   message: Schema.Literals([alreadyMemberDefinition.message]),
@@ -81,7 +69,6 @@ export const ExistingWorkspaceIdentityProfileNotAcceptedResponse = Schema.Struct
 
 export const WorkspaceErrorResponses = {
   alreadyMember: AlreadyWorkspaceMemberResponse.make(alreadyMemberDefinition),
-  commandConflict: WorkspaceCommandConflictResponse.make(commandConflictDefinition),
   existingProfileNotAccepted: ExistingWorkspaceIdentityProfileNotAcceptedResponse.make(
     existingProfileNotAcceptedDefinition,
   ),

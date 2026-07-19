@@ -1,5 +1,4 @@
 import {
-  CommandId,
   CreateWorkspaceCommand,
   JoinWorkspaceCommand,
   LeaveWorkspaceCommand,
@@ -43,20 +42,10 @@ const workspaceUnavailableErrorResponse = (error: unknown) =>
     ? WorkspaceErrorResponses.unavailable
     : AuthErrorResponses.internalServerError;
 
-const workspaceCommandErrorResponse = (error: unknown) =>
-  errorTag(error) === "Application.WorkspaceAccessCommandConflict"
-    ? WorkspaceErrorResponses.commandConflict
-    : workspaceUnavailableErrorResponse(error);
-
-const createWorkspaceErrorResponse = (error: unknown) =>
-  errorTag(error) === "Application.WorkspaceAccessCommandConflict"
-    ? WorkspaceErrorResponses.commandConflict
-    : AuthErrorResponses.internalServerError;
-
 const endMembershipErrorResponse = (error: unknown) =>
   errorTag(error) === "Application.LastWorkspaceOwner"
     ? WorkspaceErrorResponses.lastOwner
-    : workspaceCommandErrorResponse(error);
+    : workspaceUnavailableErrorResponse(error);
 
 const joinWorkspaceErrorResponse = (error: unknown) => {
   switch (errorTag(error)) {
@@ -67,7 +56,7 @@ const joinWorkspaceErrorResponse = (error: unknown) => {
     case "Application.InitialWorkspaceIdentityProfileRequired":
       return WorkspaceErrorResponses.initialProfileRequired;
     default:
-      return workspaceCommandErrorResponse(error);
+      return workspaceUnavailableErrorResponse(error);
   }
 };
 
@@ -113,7 +102,6 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           .create(
             CreateWorkspaceCommand.make({
               actorAccountId: actorId,
-              commandId: CommandId.make(payload.commandId),
               workspaceName: WorkspaceName.make(payload.name),
               initialIdentityProfile: WorkspaceIdentityProfile.make({
                 name: WorkspaceIdentityName.make(payload.identity.name),
@@ -121,7 +109,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
               }),
             }),
           )
-          .pipe(Effect.mapError(createWorkspaceErrorResponse));
+          .pipe(Effect.mapError(() => AuthErrorResponses.internalServerError));
         return workspaceCreatedResponse(created);
       }),
     )
@@ -150,7 +138,6 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           .updateMyIdentity(
             UpdateWorkspaceIdentityCommand.make({
               actorAccountId: actorId,
-              commandId: CommandId.make(payload.commandId),
               workspaceId,
               profile: WorkspaceIdentityProfile.make({
                 name: WorkspaceIdentityName.make(payload.name),
@@ -158,11 +145,11 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
               }),
             }),
           )
-          .pipe(Effect.mapError(workspaceCommandErrorResponse));
+          .pipe(Effect.mapError(workspaceUnavailableErrorResponse));
         return workspaceIdentityUpdateResponse(outcome);
       }),
     )
-    .handle("endMembership", ({ headers, params, payload }) =>
+    .handle("endMembership", ({ headers, params }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
 
@@ -178,7 +165,6 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           .leave(
             LeaveWorkspaceCommand.make({
               actorAccountId: actorId,
-              commandId: CommandId.make(payload.commandId),
               workspaceId,
             }),
           )
@@ -200,7 +186,6 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           .join(
             JoinWorkspaceCommand.make({
               actorAccountId: actorId,
-              commandId: CommandId.make(payload.commandId),
               workspaceId,
               ...(payload.initialIdentityProfile === undefined
                 ? {}

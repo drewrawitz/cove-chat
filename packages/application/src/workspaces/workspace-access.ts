@@ -9,11 +9,6 @@ import {
 } from "@cove/domain";
 import { Context, type Effect, Schema } from "effect";
 
-export const CommandId = Schema.Trimmed.check(Schema.isNonEmpty()).pipe(
-  Schema.brand("WorkspaceAccessCommandId"),
-);
-export type CommandId = typeof CommandId.Type;
-
 export const WorkspaceAccessView = Schema.Struct({
   workspace: Workspace,
   identity: WorkspaceIdentity,
@@ -23,7 +18,6 @@ export interface WorkspaceAccessView extends Schema.Schema.Type<typeof Workspace
 
 export const CreateWorkspaceCommand = Schema.Struct({
   actorAccountId: UserId,
-  commandId: CommandId,
   workspaceName: WorkspaceName,
   initialIdentityProfile: WorkspaceIdentityProfile,
 });
@@ -31,7 +25,6 @@ export interface CreateWorkspaceCommand extends Schema.Schema.Type<typeof Create
 
 export const JoinWorkspaceCommand = Schema.Struct({
   actorAccountId: UserId,
-  commandId: CommandId,
   workspaceId: WorkspaceId,
   initialIdentityProfile: Schema.optionalKey(WorkspaceIdentityProfile),
 });
@@ -39,7 +32,6 @@ export interface JoinWorkspaceCommand extends Schema.Schema.Type<typeof JoinWork
 
 export const UpdateWorkspaceIdentityCommand = Schema.Struct({
   actorAccountId: UserId,
-  commandId: CommandId,
   workspaceId: WorkspaceId,
   profile: WorkspaceIdentityProfile,
 });
@@ -49,7 +41,6 @@ export interface UpdateWorkspaceIdentityCommand extends Schema.Schema.Type<
 
 export const LeaveWorkspaceCommand = Schema.Struct({
   actorAccountId: UserId,
-  commandId: CommandId,
   workspaceId: WorkspaceId,
 });
 export interface LeaveWorkspaceCommand extends Schema.Schema.Type<typeof LeaveWorkspaceCommand> {}
@@ -124,31 +115,21 @@ export class LastWorkspaceOwner extends Schema.TaggedErrorClass<LastWorkspaceOwn
   { workspaceId: WorkspaceId },
 ) {}
 
-export class WorkspaceAccessCommandConflict extends Schema.TaggedErrorClass<WorkspaceAccessCommandConflict>()(
-  "Application.WorkspaceAccessCommandConflict",
-  { commandId: CommandId },
-) {}
-
 export class WorkspaceAccessFailure extends Schema.TaggedErrorClass<WorkspaceAccessFailure>()(
   "Application.WorkspaceAccessFailure",
   { operation: Schema.String },
 ) {}
 
-export type CreateWorkspaceFailure = WorkspaceAccessCommandConflict | WorkspaceAccessFailure;
+export type CreateWorkspaceFailure = WorkspaceAccessFailure;
 export type JoinWorkspaceFailure =
   | AlreadyWorkspaceMember
   | ExistingWorkspaceIdentityProfileNotAccepted
   | InitialWorkspaceIdentityProfileRequired
-  | WorkspaceAccessCommandConflict
   | WorkspaceAccessFailure
   | WorkspaceUnavailable;
-export type UpdateWorkspaceIdentityFailure =
-  | WorkspaceAccessCommandConflict
-  | WorkspaceAccessFailure
-  | WorkspaceUnavailable;
+export type UpdateWorkspaceIdentityFailure = WorkspaceAccessFailure | WorkspaceUnavailable;
 export type LeaveWorkspaceFailure =
   | LastWorkspaceOwner
-  | WorkspaceAccessCommandConflict
   | WorkspaceAccessFailure
   | WorkspaceUnavailable;
 

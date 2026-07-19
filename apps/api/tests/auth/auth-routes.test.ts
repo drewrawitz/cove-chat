@@ -344,7 +344,6 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
 
         const leaveResponse = yield* HttpClient.del(AppRoutes.workspaceMembership, {
           headers: { cookie, "x-csrf-token": csrfToken },
-          body: HttpBody.jsonUnsafe({ commandId: "auth-routes-final-owner-leave" }),
         });
 
         expect(leaveResponse.status).toBe(409);

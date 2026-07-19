@@ -1,6 +1,5 @@
 export {
   AlreadyWorkspaceMember,
-  CommandId,
   CreateWorkspaceCommand,
   ExistingWorkspaceIdentityProfileNotAccepted,
   FirstMembershipStarted,
@@ -11,7 +10,6 @@ export {
   LeaveWorkspaceCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
-  WorkspaceAccessCommandConflict,
   WorkspaceAccessFailure,
   WorkspaceAccessView,
   WorkspaceCreated,

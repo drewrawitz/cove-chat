@@ -1,8 +1,6 @@
 export {
-  WorkspaceAccessCommandKind,
   WorkspaceAccessPersistence,
   WorkspaceAccessPersistenceFailure,
-  type CommittedWorkspaceAccessCommand,
   type IdentityMembershipFacts,
   type WorkspaceAccessAuditEvent,
   type WorkspaceAccessPersistenceService,

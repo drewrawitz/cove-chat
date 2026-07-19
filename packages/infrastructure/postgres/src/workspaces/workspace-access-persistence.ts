@@ -1,10 +1,8 @@
 import {
   WorkspaceAccessLive,
   WorkspaceAccess,
-  WorkspaceAccessCommandKind,
   WorkspaceAccessPersistence,
   WorkspaceAccessPersistenceFailure,
-  type CommittedWorkspaceAccessCommand,
   type WorkspaceAccessAuditEvent,
   type WorkspaceAccessTransaction,
   type WorkspaceAccessView,
@@ -26,10 +24,6 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 const AccountRequest = Schema.Struct({ actorAccountId: UserId });
 const WorkspaceRequest = Schema.Struct({ actorAccountId: UserId, workspaceId: WorkspaceId });
 const WorkspaceIdRequest = Schema.Struct({ workspaceId: WorkspaceId });
-const CommandRequest = Schema.Struct({
-  actorAccountId: UserId,
-  commandId: Schema.String,
-});
 
 const WorkspaceAccessRow = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -42,13 +36,6 @@ const WorkspaceAccessRow = Schema.Struct({
   membershipStartedAt: Schema.Date,
 });
 interface WorkspaceAccessRow extends Schema.Schema.Type<typeof WorkspaceAccessRow> {}
-
-const CommittedCommandRow = Schema.Struct({
-  commandKind: WorkspaceAccessCommandKind,
-  inputFingerprint: Schema.String,
-  outcomeVersion: Schema.Number,
-  outcome: Schema.Unknown,
-});
 
 const IdentityMembershipFactsRow = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -74,12 +61,8 @@ interface WorkspaceTransitionFactsRow extends Schema.Schema.Type<
 
 const LockedWorkspaceRow = Schema.Struct({ workspaceId: WorkspaceId });
 
-const persistenceFailure = (
-  operation: string,
-  cause: unknown,
-  retryable = false,
-): WorkspaceAccessPersistenceFailure =>
-  new WorkspaceAccessPersistenceFailure({ operation, cause, retryable });
+const persistenceFailure = (operation: string, cause: unknown): WorkspaceAccessPersistenceFailure =>
+  new WorkspaceAccessPersistenceFailure({ operation, cause });
 
 const accessFromRow = (row: WorkspaceAccessRow): WorkspaceAccessView => ({
   workspace: {
@@ -146,22 +129,6 @@ const make = Effect.gen(function* () {
       WHERE identity.account_id = ${actorAccountId}
         AND identity.membership_ended_at IS NULL
       ORDER BY lower(workspace.name), workspace.id
-    `,
-  });
-
-  const inspectCommittedCommandRow = SqlSchema.findOneOption({
-    Request: CommandRequest,
-    Result: CommittedCommandRow,
-    execute: ({ actorAccountId, commandId }) => sql`
-      SELECT
-        command_kind AS "commandKind",
-        input_fingerprint AS "inputFingerprint",
-        outcome_version AS "outcomeVersion",
-        outcome
-      FROM workspace_access_commands
-      WHERE actor_user_id = ${actorAccountId}
-        AND command_id = ${commandId}
-      LIMIT 1
     `,
   });
 
@@ -263,43 +230,7 @@ const make = Effect.gen(function* () {
     return { workspace, identity, membership };
   };
 
-  // Lifecycle mutations acquire locks in this order: actor/command advisory lock,
-  // account/workspace advisory lock, then workspace row lock.
-  const inspectCommittedCommand: WorkspaceAccessTransaction["inspectCommittedCommand"] = Effect.fn(
-    "PostgresWorkspaceAccess.inspectCommittedCommand",
-  )(function* (actorAccountId, commandId) {
-    yield* sql`
-        SELECT pg_advisory_xact_lock(
-          hashtextextended(${JSON.stringify([actorAccountId, commandId])}, 918273)
-        )
-      `.pipe(
-      Effect.asVoid,
-      Effect.mapError((cause) =>
-        persistenceFailure("WorkspaceAccess.inspectCommittedCommand.lock", cause, true),
-      ),
-    );
-    const row = yield* inspectCommittedCommandRow({ actorAccountId, commandId }).pipe(
-      Effect.mapError((cause) =>
-        persistenceFailure("WorkspaceAccess.inspectCommittedCommand.read", cause),
-      ),
-    );
-    if (row._tag === "None") return undefined;
-    if (row.value.outcomeVersion !== 1) {
-      return yield* Effect.fail(
-        persistenceFailure(
-          "WorkspaceAccess.inspectCommittedCommand.outcomeVersion",
-          row.value.outcomeVersion,
-        ),
-      );
-    }
-    return {
-      commandKind: row.value.commandKind,
-      inputFingerprint: row.value.inputFingerprint,
-      outcomeVersion: 1,
-      outcome: row.value.outcome,
-    } satisfies CommittedWorkspaceAccessCommand;
-  });
-
+  // Lifecycle mutations acquire the account/workspace advisory lock before a workspace row lock.
   const lockAccountWorkspaceRelationship = Effect.fn(
     "PostgresWorkspaceAccess.lockAccountWorkspaceRelationship",
   )(function* (actorAccountId: UserId, workspaceId: WorkspaceId) {
@@ -310,19 +241,18 @@ const make = Effect.gen(function* () {
     `.pipe(
       Effect.asVoid,
       Effect.mapError((cause) =>
-        persistenceFailure("WorkspaceAccess.lockAccountWorkspaceRelationship", cause, true),
+        persistenceFailure("WorkspaceAccess.lockAccountWorkspaceRelationship", cause),
       ),
     );
   });
 
   const transaction: WorkspaceAccessTransaction = {
-    inspectCommittedCommand,
     serializeWorkspaceTransition: Effect.fn("PostgresWorkspaceAccess.serializeWorkspaceTransition")(
       function* (actorAccountId, workspaceId) {
         yield* lockAccountWorkspaceRelationship(actorAccountId, workspaceId);
         const locked = yield* lockWorkspaceRow({ workspaceId }).pipe(
           Effect.mapError((cause) =>
-            persistenceFailure("WorkspaceAccess.serializeWorkspaceTransition.lock", cause, true),
+            persistenceFailure("WorkspaceAccess.serializeWorkspaceTransition.lock", cause),
           ),
         );
         if (locked._tag === "None") {
@@ -335,7 +265,7 @@ const make = Effect.gen(function* () {
         }
         const row = yield* workspaceTransitionFactsRow({ actorAccountId, workspaceId }).pipe(
           Effect.mapError((cause) =>
-            persistenceFailure("WorkspaceAccess.serializeWorkspaceTransition.read", cause, true),
+            persistenceFailure("WorkspaceAccess.serializeWorkspaceTransition.read", cause),
           ),
         );
         return row._tag === "Some"
@@ -507,33 +437,6 @@ const make = Effect.gen(function* () {
           Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.appendAudit", cause)),
         ),
     ),
-    storeCommittedOutcome: Effect.fn("PostgresWorkspaceAccess.storeCommittedOutcome")((record) =>
-      sql`
-          INSERT INTO workspace_access_commands (
-            actor_user_id,
-            command_id,
-            command_kind,
-            input_fingerprint,
-            outcome_version,
-            outcome,
-            committed_at
-          )
-          VALUES (
-            ${record.actorAccountId},
-            ${record.commandId},
-            ${record.commandKind},
-            ${record.inputFingerprint},
-            ${record.outcomeVersion},
-            ${JSON.stringify(record.outcome)}::jsonb,
-            ${record.committedAt}
-          )
-        `.pipe(
-        Effect.asVoid,
-        Effect.mapError((cause) =>
-          persistenceFailure("WorkspaceAccess.storeCommittedOutcome", cause),
-        ),
-      ),
-    ),
   };
 
   return WorkspaceAccessPersistence.of({
@@ -555,7 +458,7 @@ const make = Effect.gen(function* () {
         .withTransaction(use(transaction))
         .pipe(
           Effect.catchTag("SqlError", (cause) =>
-            Effect.fail(persistenceFailure("WorkspaceAccess.transact", cause, true)),
+            Effect.fail(persistenceFailure("WorkspaceAccess.transact", cause)),
           ),
         ),
   });

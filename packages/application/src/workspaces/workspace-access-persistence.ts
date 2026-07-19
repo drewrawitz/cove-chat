@@ -7,31 +7,15 @@ import type {
   WorkspaceMembership,
 } from "@cove/domain";
 import { Context, type Effect, Schema } from "effect";
-import type { CommandId, WorkspaceAccessView } from "./workspace-access.ts";
-
-export const WorkspaceAccessCommandKind = Schema.Literals([
-  "create_workspace",
-  "join_workspace",
-  "update_workspace_identity",
-  "leave_workspace",
-]);
-export type WorkspaceAccessCommandKind = typeof WorkspaceAccessCommandKind.Type;
+import type { WorkspaceAccessView } from "./workspace-access.ts";
 
 export class WorkspaceAccessPersistenceFailure extends Schema.TaggedErrorClass<WorkspaceAccessPersistenceFailure>()(
   "Application.WorkspaceAccessPersistenceFailure",
   {
     operation: Schema.String,
-    retryable: Schema.Boolean,
     cause: Schema.Defect(),
   },
 ) {}
-
-export interface CommittedWorkspaceAccessCommand {
-  readonly commandKind: WorkspaceAccessCommandKind;
-  readonly inputFingerprint: string;
-  readonly outcomeVersion: 1;
-  readonly outcome: unknown;
-}
 
 export interface IdentityMembershipFacts {
   readonly workspace: Workspace | undefined;
@@ -46,7 +30,6 @@ export interface WorkspaceTransitionFacts extends IdentityMembershipFacts {
 export type WorkspaceIdentityChangedField = "avatarUrl" | "name";
 
 interface WorkspaceAuditMetadata {
-  readonly commandId: CommandId;
   readonly workspaceId: WorkspaceId;
   readonly workspaceIdentityId: WorkspaceIdentity["id"];
 }
@@ -90,13 +73,6 @@ export type WorkspaceAccessAuditEvent =
     };
 
 export interface WorkspaceAccessTransaction {
-  readonly inspectCommittedCommand: (
-    actorAccountId: UserId,
-    commandId: CommandId,
-  ) => Effect.Effect<
-    CommittedWorkspaceAccessCommand | undefined,
-    WorkspaceAccessPersistenceFailure
-  >;
   readonly serializeWorkspaceTransition: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
@@ -128,15 +104,6 @@ export interface WorkspaceAccessTransaction {
   readonly appendAudit: (
     event: WorkspaceAccessAuditEvent,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
-  readonly storeCommittedOutcome: (record: {
-    readonly actorAccountId: UserId;
-    readonly commandId: CommandId;
-    readonly commandKind: WorkspaceAccessCommandKind;
-    readonly inputFingerprint: string;
-    readonly outcomeVersion: 1;
-    readonly outcome: unknown;
-    readonly committedAt: Date;
-  }) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
 }
 
 export interface WorkspaceAccessPersistenceService {

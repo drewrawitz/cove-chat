@@ -1,7 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import {
   AlreadyWorkspaceMember,
-  CommandId,
   CreateWorkspaceCommand,
   ExistingWorkspaceIdentityProfileNotAccepted,
   GetChannelForActorInput,
@@ -11,7 +10,6 @@ import {
   LeaveWorkspaceCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
-  WorkspaceAccessCommandConflict,
   WorkspaceAccessFailure,
   WorkspaceUnavailable,
   getChannelForActor,
@@ -37,7 +35,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const accountId = yield* makeUserId(`workspace-create-account-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
-      const commandId = CommandId.make(`create-${suffix}`);
 
       yield* sql`
         INSERT INTO users (id, email, display_name)
@@ -47,7 +44,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const created = yield* workspaces.create(
         CreateWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId,
           workspaceName: WorkspaceName.make("Product Studio"),
           initialIdentityProfile: {
             name: WorkspaceIdentityName.make("Alice Product"),
@@ -66,15 +62,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           occurred_at AS "occurredAt",
           metadata
         FROM audit_events
-        WHERE metadata ->> 'commandId' = ${commandId}
-      `;
-      const commandRecords = yield* sql<{ inputFingerprint: string; outcome: unknown }>`
-        SELECT
-          input_fingerprint AS "inputFingerprint",
-          outcome
-        FROM workspace_access_commands
         WHERE actor_user_id = ${accountId}
-          AND command_id = ${commandId}
+          AND event_type = 'workspace.created'
+          AND metadata ->> 'workspaceId' = ${created.workspaceId}
       `;
 
       expect(found.membership.role).toBe("owner");
@@ -83,25 +73,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           eventType: "workspace.created",
           occurredAt: created.occurredAt,
           metadata: {
-            commandId,
             workspaceId: created.workspaceId,
             workspaceIdentityId: created.workspaceIdentityId,
           },
         },
       ]);
-      expect(commandRecords).toEqual([
-        {
-          inputFingerprint: expect.stringMatching(/^v1:sha256:[0-9a-f]{64}$/),
-          outcome: {
-            _tag: "WorkspaceCreated",
-            workspaceId: created.workspaceId,
-            workspaceIdentityId: created.workspaceIdentityId,
-            occurredAt: created.occurredAt.toISOString(),
-          },
-        },
-      ]);
-      expect(JSON.stringify(commandRecords)).not.toContain("Alice Product");
-      expect(JSON.stringify(commandRecords)).not.toContain("/avatars/alice.svg");
     }),
   );
 
@@ -125,7 +101,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const joined = yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`join-${suffix}`),
           workspaceId,
           initialIdentityProfile: {
             name: WorkspaceIdentityName.make("Alice Design"),
@@ -149,7 +124,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const identityId = yield* makeWorkspaceIdentityId(`workspace-update-identity-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
-      const commandId = CommandId.make(`update-${suffix}`);
 
       yield* sql`
         INSERT INTO users (id, email, display_name)
@@ -181,7 +155,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const updated = yield* workspaces.updateMyIdentity(
         UpdateWorkspaceIdentityCommand.make({
           actorAccountId: accountId,
-          commandId,
           workspaceId,
           profile: {
             name: WorkspaceIdentityName.make("Alice After"),
@@ -192,7 +165,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const auditEvents = yield* sql<{ metadata: unknown }>`
         SELECT metadata
         FROM audit_events
-        WHERE metadata ->> 'commandId' = ${commandId}
+        WHERE actor_user_id = ${accountId}
+          AND event_type = 'workspace.identity_profile_changed'
+          AND metadata ->> 'workspaceId' = ${workspaceId}
       `;
       const access = yield* workspaces.getForActor(accountId, workspaceId);
 
@@ -205,7 +180,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       expect(auditEvents).toEqual([
         {
           metadata: {
-            commandId,
             workspaceId,
             workspaceIdentityId: identityId,
             changedFields: ["name", "avatarUrl"],
@@ -269,7 +243,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const ended = yield* workspaces.leave(
         LeaveWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`leave-${suffix}`),
           workspaceId,
         }),
       );
@@ -277,7 +250,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const reactivated = yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`rejoin-${suffix}`),
           workspaceId,
         }),
       );
@@ -353,12 +325,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           )
       `;
 
-      const firstCommandId = CommandId.make(`join-first-${suffix}`);
       const missingProfile = yield* workspaces
         .join(
           JoinWorkspaceCommand.make({
             actorAccountId: firstAccountId,
-            commandId: firstCommandId,
             workspaceId,
           }),
         )
@@ -366,7 +336,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const firstStarted = yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: firstAccountId,
-          commandId: firstCommandId,
           workspaceId,
           initialIdentityProfile: {
             name: WorkspaceIdentityName.make("First Profile"),
@@ -375,12 +344,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         }),
       );
 
-      const returningCommandId = CommandId.make(`join-returning-${suffix}`);
       const suppliedExistingProfile = yield* workspaces
         .join(
           JoinWorkspaceCommand.make({
             actorAccountId: returningAccountId,
-            commandId: returningCommandId,
             workspaceId,
             initialIdentityProfile: {
               name: WorkspaceIdentityName.make("Replacement Profile"),
@@ -392,7 +359,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: returningAccountId,
-          commandId: returningCommandId,
           workspaceId,
         }),
       );
@@ -401,7 +367,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         .join(
           JoinWorkspaceCommand.make({
             actorAccountId: activeAccountId,
-            commandId: CommandId.make(`join-active-${suffix}`),
             workspaceId,
           }),
         )
@@ -444,7 +409,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .join(
               JoinWorkspaceCommand.make({
                 actorAccountId: accountId,
-                commandId: CommandId.make(`concurrent-join-a-${suffix}`),
                 workspaceId,
                 initialIdentityProfile: {
                   name: WorkspaceIdentityName.make("Concurrent A"),
@@ -457,7 +421,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .join(
               JoinWorkspaceCommand.make({
                 actorAccountId: accountId,
-                commandId: CommandId.make(`concurrent-join-b-${suffix}`),
                 workspaceId,
                 initialIdentityProfile: {
                   name: WorkspaceIdentityName.make("Concurrent B"),
@@ -475,109 +438,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       expect(successes).toHaveLength(1);
       expect(failures).toHaveLength(1);
       expect(failures[0]?.failure).toBeInstanceOf(AlreadyWorkspaceMember);
-    }),
-  );
-
-  it.effect("replays concurrent duplicate commands and rejects conflicting reuse", () =>
-    Effect.gen(function* () {
-      const suffix = randomUUID();
-      const accountId = yield* makeUserId(`command-replay-account-${suffix}`);
-      const sql = yield* SqlClient.SqlClient;
-      const workspaces = yield* WorkspaceAccess;
-      const commandId = CommandId.make(`command-replay-${suffix}`);
-
-      yield* sql`
-        INSERT INTO users (id, email, display_name)
-        VALUES (${accountId}, ${`${accountId}@example.test`}, 'Command Replayer')
-      `;
-      const command = CreateWorkspaceCommand.make({
-        actorAccountId: accountId,
-        commandId,
-        workspaceName: WorkspaceName.make("Replay Team"),
-        initialIdentityProfile: {
-          name: WorkspaceIdentityName.make("Replay Profile"),
-          avatarUrl: WorkspaceAvatarUrl.make("/avatars/replay.svg"),
-        },
-      });
-
-      const outcomes = yield* Effect.all([workspaces.create(command), workspaces.create(command)], {
-        concurrency: "unbounded",
-      });
-      const conflict = yield* workspaces
-        .create(
-          CreateWorkspaceCommand.make({
-            ...command,
-            workspaceName: WorkspaceName.make("Conflicting Team"),
-          }),
-        )
-        .pipe(Effect.flip);
-      const kindConflict = yield* workspaces
-        .updateMyIdentity(
-          UpdateWorkspaceIdentityCommand.make({
-            actorAccountId: accountId,
-            commandId,
-            workspaceId: outcomes[0].workspaceId,
-            profile: {
-              name: WorkspaceIdentityName.make("Replay Profile"),
-              avatarUrl: WorkspaceAvatarUrl.make("/avatars/replay.svg"),
-            },
-          }),
-        )
-        .pipe(Effect.flip);
-      const auditCounts = yield* sql<{ count: number }>`
-        SELECT COUNT(*)::int AS count
-        FROM audit_events
-        WHERE metadata ->> 'commandId' = ${commandId}
-      `;
-
-      expect(outcomes[0]).toEqual(outcomes[1]);
-      expect(conflict).toBeInstanceOf(WorkspaceAccessCommandConflict);
-      expect(kindConflict).toBeInstanceOf(WorkspaceAccessCommandConflict);
-      expect(auditCounts).toEqual([{ count: 1 }]);
-    }),
-  );
-
-  it.effect("scopes command identifiers to the actor account", () =>
-    Effect.gen(function* () {
-      const suffix = randomUUID();
-      const firstAccountId = yield* makeUserId(`command-scope-a-${suffix}`);
-      const secondAccountId = yield* makeUserId(`command-scope-b-${suffix}`);
-      const commandId = CommandId.make(`shared-command-${suffix}`);
-      const sql = yield* SqlClient.SqlClient;
-      const workspaces = yield* WorkspaceAccess;
-
-      yield* sql`
-        INSERT INTO users (id, email, display_name)
-        VALUES
-          (${firstAccountId}, ${`${firstAccountId}@example.test`}, 'Command Scope A'),
-          (${secondAccountId}, ${`${secondAccountId}@example.test`}, 'Command Scope B')
-      `;
-      const [first, second] = yield* Effect.all([
-        workspaces.create(
-          CreateWorkspaceCommand.make({
-            actorAccountId: firstAccountId,
-            commandId,
-            workspaceName: WorkspaceName.make("Command Scope A"),
-            initialIdentityProfile: {
-              name: WorkspaceIdentityName.make("Command Scope A"),
-              avatarUrl: WorkspaceAvatarUrl.make("/avatars/scope-a.svg"),
-            },
-          }),
-        ),
-        workspaces.create(
-          CreateWorkspaceCommand.make({
-            actorAccountId: secondAccountId,
-            commandId,
-            workspaceName: WorkspaceName.make("Command Scope B"),
-            initialIdentityProfile: {
-              name: WorkspaceIdentityName.make("Command Scope B"),
-              avatarUrl: WorkspaceAvatarUrl.make("/avatars/scope-b.svg"),
-            },
-          }),
-        ),
-      ]);
-
-      expect(first.workspaceId).not.toBe(second.workspaceId);
     }),
   );
 
@@ -622,7 +482,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .leave(
               LeaveWorkspaceCommand.make({
                 actorAccountId: firstOwnerId,
-                commandId: CommandId.make(`leave-owner-a-${suffix}`),
                 workspaceId,
               }),
             )
@@ -631,7 +490,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .leave(
               LeaveWorkspaceCommand.make({
                 actorAccountId: secondOwnerId,
-                commandId: CommandId.make(`leave-owner-b-${suffix}`),
                 workspaceId,
               }),
             )
@@ -662,8 +520,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const ownerIdentityId = yield* makeWorkspaceIdentityId(
         `leave-update-owner-identity-${suffix}`,
       );
-      const leaveCommandId = CommandId.make(`leave-update-leave-${suffix}`);
-      const updateCommandId = CommandId.make(`leave-update-update-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
 
@@ -749,7 +605,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .leave(
               LeaveWorkspaceCommand.make({
                 actorAccountId: accountId,
-                commandId: leaveCommandId,
                 workspaceId,
               }),
             )
@@ -760,7 +615,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             .updateMyIdentity(
               UpdateWorkspaceIdentityCommand.make({
                 actorAccountId: accountId,
-                commandId: updateCommandId,
                 workspaceId,
                 profile: {
                   name: WorkspaceIdentityName.make("Updated After Leave"),
@@ -778,13 +632,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const updateAudit = yield* sql<{ count: number }>`
         SELECT COUNT(*)::int AS count
         FROM audit_events
-        WHERE metadata ->> 'commandId' = ${updateCommandId}
-      `;
-      const updateLedger = yield* sql<{ count: number }>`
-        SELECT COUNT(*)::int AS count
-        FROM workspace_access_commands
         WHERE actor_user_id = ${accountId}
-          AND command_id = ${updateCommandId}
+          AND event_type = 'workspace.identity_profile_changed'
+          AND metadata ->> 'workspaceId' = ${workspaceId}
       `;
 
       expect(leaveResult._tag).toBe("Success");
@@ -793,79 +643,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         expect(updateResult.failure).toBeInstanceOf(WorkspaceUnavailable);
       }
       expect(updateAudit).toEqual([{ count: 0 }]);
-      expect(updateLedger).toEqual([{ count: 0 }]);
     }),
   );
 
-  it.effect("replays the pinned redacted v1 workspace-created outcome", () =>
-    Effect.gen(function* () {
-      const suffix = randomUUID();
-      const accountId = yield* makeUserId(`compatibility-account-${suffix}`);
-      const workspaceId = yield* makeWorkspaceId(`compatibility-workspace-${suffix}`);
-      const identityId = yield* makeWorkspaceIdentityId(`compatibility-identity-${suffix}`);
-      const commandId = CommandId.make(`compatibility-command-${suffix}`);
-      const occurredAt = new Date("2026-07-18T12:34:56.000Z");
-      const sql = yield* SqlClient.SqlClient;
-      const workspaces = yield* WorkspaceAccess;
-
-      yield* sql`
-        INSERT INTO users (id, email, display_name)
-        VALUES (${accountId}, ${`${accountId}@example.test`}, 'Compatibility Account')
-      `;
-      yield* sql`
-        INSERT INTO workspace_access_commands (
-          actor_user_id,
-          command_id,
-          command_kind,
-          input_fingerprint,
-          outcome_version,
-          outcome,
-          committed_at
-        )
-        VALUES (
-          ${accountId},
-          ${commandId},
-          'create_workspace',
-          'v1:sha256:bc0b1b5b317ab92b6f14491f5e926866479f12736e4c034d09bc100f76d4c785',
-          1,
-          ${JSON.stringify({
-            _tag: "WorkspaceCreated",
-            workspaceId,
-            workspaceIdentityId: identityId,
-            occurredAt: occurredAt.toISOString(),
-          })}::jsonb,
-          ${occurredAt}
-        )
-      `;
-
-      const replayed = yield* workspaces.create(
-        CreateWorkspaceCommand.make({
-          actorAccountId: accountId,
-          commandId,
-          workspaceName: WorkspaceName.make("Compatibility Team"),
-          initialIdentityProfile: {
-            name: WorkspaceIdentityName.make("Compatibility Profile"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/compat.svg"),
-          },
-        }),
-      );
-      const createdRows = yield* sql<{ count: number }>`
-        SELECT COUNT(*)::int AS count
-        FROM workspaces
-        WHERE id = ${workspaceId}
-      `;
-
-      expect(replayed).toEqual({
-        _tag: "WorkspaceCreated",
-        workspaceId,
-        workspaceIdentityId: identityId,
-        occurredAt,
-      });
-      expect(createdRows).toEqual([{ count: 0 }]);
-    }),
-  );
-
-  it.effect("commits and replays an authorized identity-profile no-op without audit", () =>
+  it.effect("returns an authorized identity-profile no-op without audit", () =>
     Effect.gen(function* () {
       const suffix = randomUUID();
       const accountId = yield* makeUserId(`profile-noop-account-${suffix}`);
@@ -873,7 +654,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const identityId = yield* makeWorkspaceIdentityId(`profile-noop-identity-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
-      const noOpCommandId = CommandId.make(`profile-noop-${suffix}`);
 
       yield* sql`
         INSERT INTO users (id, email, display_name)
@@ -904,38 +684,26 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
 
       const noOpCommand = UpdateWorkspaceIdentityCommand.make({
         actorAccountId: accountId,
-        commandId: noOpCommandId,
         workspaceId,
         profile: {
           name: WorkspaceIdentityName.make("Stable Profile"),
           avatarUrl: WorkspaceAvatarUrl.make("/avatars/stable.svg"),
         },
       });
-      const originalNoOp = yield* workspaces.updateMyIdentity(noOpCommand);
-      yield* workspaces.updateMyIdentity(
-        UpdateWorkspaceIdentityCommand.make({
-          actorAccountId: accountId,
-          commandId: CommandId.make(`profile-change-after-noop-${suffix}`),
-          workspaceId,
-          profile: {
-            name: WorkspaceIdentityName.make("Later Profile"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/later.svg"),
-          },
-        }),
-      );
-      const replayedNoOp = yield* workspaces.updateMyIdentity(noOpCommand);
+      const noOp = yield* workspaces.updateMyIdentity(noOpCommand);
       const current = yield* workspaces.getForActor(accountId, workspaceId);
       const noOpAuditCounts = yield* sql<{ count: number }>`
         SELECT COUNT(*)::int AS count
         FROM audit_events
-        WHERE metadata ->> 'commandId' = ${noOpCommandId}
+        WHERE actor_user_id = ${accountId}
+          AND event_type = 'workspace.identity_profile_changed'
+          AND metadata ->> 'workspaceId' = ${workspaceId}
       `;
 
-      expect(originalNoOp._tag).toBe("IdentityProfileUnchanged");
-      expect(replayedNoOp).toEqual(originalNoOp);
+      expect(noOp._tag).toBe("IdentityProfileUnchanged");
       expect(current.identity).toMatchObject({
-        name: "Later Profile",
-        avatarUrl: "/avatars/later.svg",
+        name: "Stable Profile",
+        avatarUrl: "/avatars/stable.svg",
       });
       expect(noOpAuditCounts).toEqual([{ count: 0 }]);
     }),
@@ -951,7 +719,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const workspaces = yield* WorkspaceAccess;
       const updateCommand = UpdateWorkspaceIdentityCommand.make({
         actorAccountId: accountId,
-        commandId: CommandId.make(`inactive-profile-update-${suffix}`),
         workspaceId,
         profile: {
           name: WorkspaceIdentityName.make("Inactive Profile"),
@@ -992,7 +759,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`inactive-profile-rejoin-${suffix}`),
           workspaceId,
         }),
       );
@@ -1057,14 +823,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       yield* workspaces.leave(
         LeaveWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`channel-revoke-leave-${suffix}`),
           workspaceId,
         }),
       );
       yield* workspaces.join(
         JoinWorkspaceCommand.make({
           actorAccountId: accountId,
-          commandId: CommandId.make(`channel-revoke-rejoin-${suffix}`),
           workspaceId,
         }),
       );
@@ -1104,7 +868,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const replacementIdentityId = yield* makeWorkspaceIdentityId(
         `replacement-owner-identity-${suffix}`,
       );
-      const commandId = CommandId.make(`last-owner-leave-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
 
@@ -1138,7 +901,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       `;
       const command = LeaveWorkspaceCommand.make({
         actorAccountId: ownerId,
-        commandId,
         workspaceId,
       });
 
@@ -1168,13 +930,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
     }),
   );
 
-  it.effect("rolls back lifecycle and command state when audit persistence fails", () =>
+  it.effect("rolls back lifecycle state when audit persistence fails", () =>
     Effect.gen(function* () {
       const suffix = randomUUID();
       const accountId = yield* makeUserId(`audit-failure-account-${suffix}`);
       const workspaceId = yield* makeWorkspaceId(`audit-failure-${suffix}`);
       const identityId = yield* makeWorkspaceIdentityId(`audit-failure-identity-${suffix}`);
-      const commandId = CommandId.make(`audit-failure-test-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
 
@@ -1210,7 +971,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         LANGUAGE plpgsql
         AS $test_function$
         BEGIN
-          IF NEW.metadata ->> 'commandId' LIKE 'audit-failure-test-%' THEN
+          IF NEW.metadata ->> 'workspaceId' LIKE 'audit-failure-%' THEN
             RAISE EXCEPTION 'forced workspace access audit failure';
           END IF;
           RETURN NEW;
@@ -1228,7 +989,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       `;
       const command = UpdateWorkspaceIdentityCommand.make({
         actorAccountId: accountId,
-        commandId,
         workspaceId,
         profile: {
           name: WorkspaceIdentityName.make("After Audit Failure"),
@@ -1238,12 +998,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
 
       const failure = yield* workspaces.updateMyIdentity(command).pipe(Effect.flip);
       const afterFailure = yield* workspaces.getForActor(accountId, workspaceId);
-      const ledgerAfterFailure = yield* sql<{ count: number }>`
-        SELECT COUNT(*)::int AS count
-        FROM workspace_access_commands
-        WHERE actor_user_id = ${accountId}
-          AND command_id = ${commandId}
-      `;
       yield* sql`DROP TRIGGER workspace_access_test_fail_audit_trigger ON audit_events`;
       const retried = yield* workspaces.updateMyIdentity(command);
 
@@ -1252,7 +1006,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         name: "Before Audit Failure",
         avatarUrl: "/avatars/before-audit.svg",
       });
-      expect(ledgerAfterFailure).toEqual([{ count: 0 }]);
       expect(retried._tag).toBe("WorkspaceIdentityUpdated");
     }),
   );

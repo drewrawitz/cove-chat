@@ -1,7 +1,7 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useRef } from "react";
+import { type FormEvent } from "react";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
@@ -12,11 +12,6 @@ import {
   useWorkspacesUpdateWorkspaceIdentity,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
-import {
-  type PendingCommand,
-  releaseCommandId,
-  retainCommandId,
-} from "../api/stable-command-id.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
 
@@ -28,8 +23,6 @@ function WorkspaceHome() {
   const workspaces = useWorkspacesListWorkspaces({ query: { retry: false } });
   const endMembership = useWorkspacesEndMembership();
   const updateIdentity = useWorkspacesUpdateWorkspaceIdentity();
-  const identityCommand = useRef<PendingCommand>(undefined);
-  const leaveCommand = useRef<PendingCommand>(undefined);
 
   if (workspace.isPending) {
     return <WorkspaceMessage message="Entering workspace…" />;
@@ -49,26 +42,16 @@ function WorkspaceHome() {
     const form = new FormData(event.currentTarget);
     const name = requiredFormValue(form, "identityName");
     const avatarUrl = requiredFormValue(form, "avatarUrl");
-    const pendingCommand = retainCommandId(
-      identityCommand.current,
-      JSON.stringify([workspaceId, name, avatarUrl]),
-    );
-    identityCommand.current = pendingCommand;
     updateIdentity.mutate(
       {
         workspaceId,
         data: {
-          commandId: pendingCommand.commandId,
           name,
           avatarUrl,
         },
       },
       {
         onSuccess: async () => {
-          identityCommand.current = releaseCommandId(
-            identityCommand.current,
-            pendingCommand.commandId,
-          );
           await queryClient.invalidateQueries({
             queryKey: getWorkspacesGetWorkspaceQueryKey(workspaceId),
           });
@@ -79,13 +62,10 @@ function WorkspaceHome() {
   };
 
   const leave = () => {
-    const pendingCommand = retainCommandId(leaveCommand.current, workspaceId);
-    leaveCommand.current = pendingCommand;
     endMembership.mutate(
-      { workspaceId, data: { commandId: pendingCommand.commandId } },
+      { workspaceId },
       {
         onSuccess: async () => {
-          leaveCommand.current = releaseCommandId(leaveCommand.current, pendingCommand.commandId);
           await invalidateWorkspacesListWorkspaces(queryClient);
           await navigate({
             to: "/",

@@ -483,17 +483,6 @@ PRIMARY KEY (workspace_id, channel_id, channel_sequence)
 UNIQUE (workspace_id, event_id)
 ```
 
-Workspace Access commands deliberately use a different key:
-
-```sql
-PRIMARY KEY (actor_user_id, command_id)
-```
-
-Workspace creation has no workspace identifier before its transition, and HTTP retries belong to
-the authenticated actor. Its command record also stores command kind, a versioned canonical input
-fingerprint, outcome version, and encoded committed outcome. Reuse by the same actor with a
-different kind or input is a typed conflict; different actors may reuse the same opaque identifier.
-
 ### Message write transaction
 
 One Postgres transaction should:
@@ -746,8 +735,8 @@ Fast tests for:
 Use deterministic in-memory port Layers where the dependency is genuinely remote or external.
 Deep modules backed by local-substitutable infrastructure are tested through their application
 interface with the local substitute. Workspace Access therefore uses local Postgres lifecycle
-tests rather than an in-memory repository adapter, including retries, duplicate command IDs,
-denied access, audit behavior, and concurrency invariants.
+tests rather than an in-memory repository adapter, including denied access, audit behavior, and
+concurrency invariants.
 
 ### Infrastructure integration tests
 

@@ -11,7 +11,6 @@ import {
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
-  WorkspaceCommandConflictResponse,
   WorkspaceUnavailableResponse,
 } from "./workspace-error-response.ts";
 import {
@@ -23,7 +22,6 @@ import {
 } from "./workspace-response.ts";
 import {
   CreateWorkspaceRequest,
-  EndWorkspaceMembershipRequest,
   JoinWorkspaceRequest,
   UpdateWorkspaceIdentityRequest,
 } from "./workspace-request.ts";
@@ -41,11 +39,7 @@ const CreateWorkspaceEndpoint = HttpApiEndpoint.post("createWorkspace", "/api/ap
   payload: CreateWorkspaceRequest,
   headers: CsrfHeaders,
   success: WorkspaceCreatedResponse,
-  error: [
-    CsrfValidationFailedResponse,
-    WorkspaceCommandConflictResponse,
-    InternalServerErrorResponse,
-  ],
+  error: [CsrfValidationFailedResponse, InternalServerErrorResponse],
 }).middleware(SessionAuth);
 
 const GetWorkspaceEndpoint = HttpApiEndpoint.get(
@@ -63,12 +57,10 @@ const EndMembershipEndpoint = HttpApiEndpoint.delete(
   "/api/app/v1/workspaces/:workspaceId/membership",
   {
     params: WorkspaceParams,
-    payload: EndWorkspaceMembershipRequest,
     headers: CsrfHeaders,
     error: [
       CsrfValidationFailedResponse,
       LastWorkspaceOwnerResponse,
-      WorkspaceCommandConflictResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,
     ],
@@ -86,7 +78,6 @@ const UpdateWorkspaceIdentityEndpoint = HttpApiEndpoint.patch(
     error: [
       CsrfValidationFailedResponse,
       WorkspaceUnavailableResponse,
-      WorkspaceCommandConflictResponse,
       InternalServerErrorResponse,
     ],
   },
@@ -105,7 +96,6 @@ const JoinWorkspaceEndpoint = HttpApiEndpoint.post(
       AlreadyWorkspaceMemberResponse,
       ExistingWorkspaceIdentityProfileNotAcceptedResponse,
       InitialWorkspaceIdentityProfileRequiredResponse,
-      WorkspaceCommandConflictResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,
     ],
