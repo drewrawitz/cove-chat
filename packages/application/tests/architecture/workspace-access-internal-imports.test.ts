@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const ignoredDirectories = new Set([".output", "dist", "generated", "node_modules"]);
+const ignoredFiles = new Set(["routeTree.gen.ts"]);
 
 const sourceFiles = (directory: string): ReadonlyArray<string> =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -12,7 +13,9 @@ const sourceFiles = (directory: string): ReadonlyArray<string> =>
     if (entry.isDirectory()) {
       return ignoredDirectories.has(entry.name) ? [] : sourceFiles(path);
     }
-    return entry.isFile() && (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx"))
+    return entry.isFile() &&
+      !ignoredFiles.has(entry.name) &&
+      (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx"))
       ? [path]
       : [];
   });

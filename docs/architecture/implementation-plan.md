@@ -286,7 +286,8 @@ Contains complete use cases such as:
 - `ListChannelMessages` for non-Zero API/export consumers when needed.
 - `MarkChannelRead`.
 
-Application services perform authorization, orchestrate ports, preserve idempotency, and return typed success or error values. They do not choose HTTP statuses or WebSocket frame formats.
+Application services perform authorization, orchestrate ports, enforce domain invariants, and return
+typed success or error values. They do not choose HTTP statuses or WebSocket frame formats.
 
 ### `protocol`
 
@@ -465,7 +466,7 @@ Replies receive channel sequence numbers because they affect activity, mentions,
 
 ### Idempotency and ordering
 
-Each durable client mutation includes a stable `command_id`. Retries reuse the same ID.
+Each durable messaging mutation includes a stable `command_id`. Retries reuse the same ID.
 
 Each committed channel event includes:
 
