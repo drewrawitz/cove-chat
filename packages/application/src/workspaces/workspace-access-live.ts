@@ -43,6 +43,10 @@ interface TransitionCommit<A> {
   readonly auditEvent: WorkspaceAccessAuditEvent | undefined;
 }
 
+type WorkspaceAccessAuditDetails<
+  Event extends WorkspaceAccessAuditEvent = WorkspaceAccessAuditEvent,
+> = Event extends WorkspaceAccessAuditEvent ? Pick<Event, "metadata" | "type"> : never;
+
 type JoinTransitionFailure =
   | AlreadyWorkspaceMember
   | ExistingWorkspaceIdentityProfileNotAccepted
@@ -50,6 +54,18 @@ type JoinTransitionFailure =
   | WorkspaceUnavailable;
 
 const internalFailure = (operation: string) => new WorkspaceAccessFailure({ operation });
+
+const makeAuditEvent = (
+  actorAccountId: UserId,
+  occurredAt: Date,
+  details: WorkspaceAccessAuditDetails,
+): WorkspaceAccessAuditEvent => ({
+  id: globalThis.crypto.randomUUID(),
+  version: 1,
+  actorAccountId,
+  occurredAt,
+  ...details,
+});
 
 const make = Effect.gen(function* () {
   const persistence = yield* WorkspaceAccessPersistence;
@@ -94,7 +110,10 @@ const make = Effect.gen(function* () {
   ) {
     const command = yield* Schema.decodeUnknownEffect(CreateWorkspaceCommand)(
       unvalidatedCommand,
-    ).pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.create.validate")));
+    ).pipe(
+      Effect.tapError((cause) => Effect.logError("WorkspaceAccess.create.validate", cause)),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.create.validate")),
+    );
     return yield* commitTransition<WorkspaceCreatedType, never>(
       "WorkspaceAccess.create",
       (transaction, occurredAt) =>
@@ -130,17 +149,13 @@ const make = Effect.gen(function* () {
 
           return {
             outcome,
-            auditEvent: {
-              id: globalThis.crypto.randomUUID(),
+            auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
               type: "workspace.created",
-              version: 1,
-              actorAccountId: command.actorAccountId,
-              occurredAt,
               metadata: {
                 workspaceId,
                 workspaceIdentityId,
               },
-            },
+            }),
           } satisfies TransitionCommit<WorkspaceCreatedType>;
         }),
     );
@@ -151,7 +166,10 @@ const make = Effect.gen(function* () {
   ) {
     const command = yield* Schema.decodeUnknownEffect(JoinWorkspaceCommand)(
       unvalidatedCommand,
-    ).pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.join.validate")));
+    ).pipe(
+      Effect.tapError((cause) => Effect.logError("WorkspaceAccess.join.validate", cause)),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.join.validate")),
+    );
     return yield* commitTransition<
       FirstMembershipStartedType | WorkspaceMembershipReactivatedType,
       JoinTransitionFailure
@@ -204,17 +222,13 @@ const make = Effect.gen(function* () {
           });
           return {
             outcome,
-            auditEvent: {
-              id: globalThis.crypto.randomUUID(),
+            auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
               type: "workspace.membership_started",
-              version: 1,
-              actorAccountId: command.actorAccountId,
-              occurredAt,
               metadata: {
                 workspaceId: command.workspaceId,
                 workspaceIdentityId,
               },
-            },
+            }),
           } satisfies TransitionCommit<FirstMembershipStartedType>;
         }
 
@@ -240,17 +254,13 @@ const make = Effect.gen(function* () {
         });
         return {
           outcome,
-          auditEvent: {
-            id: globalThis.crypto.randomUUID(),
+          auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
             type: "workspace.membership_reactivated",
-            version: 1,
-            actorAccountId: command.actorAccountId,
-            occurredAt,
             metadata: {
               workspaceId: command.workspaceId,
               workspaceIdentityId: facts.identity.id,
             },
-          },
+          }),
         } satisfies TransitionCommit<WorkspaceMembershipReactivatedType>;
       }),
     );
@@ -261,7 +271,12 @@ const make = Effect.gen(function* () {
   ) {
     const command = yield* Schema.decodeUnknownEffect(UpdateWorkspaceIdentityCommand)(
       unvalidatedCommand,
-    ).pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.updateMyIdentity.validate")));
+    ).pipe(
+      Effect.tapError((cause) =>
+        Effect.logError("WorkspaceAccess.updateMyIdentity.validate", cause),
+      ),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.updateMyIdentity.validate")),
+    );
     return yield* commitTransition<
       IdentityProfileUnchangedType | WorkspaceIdentityUpdatedType,
       WorkspaceUnavailable
@@ -306,18 +321,14 @@ const make = Effect.gen(function* () {
             workspaceIdentityId: facts.identity.id,
             occurredAt,
           }),
-          auditEvent: {
-            id: globalThis.crypto.randomUUID(),
+          auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
             type: "workspace.identity_profile_changed",
-            version: 1,
-            actorAccountId: command.actorAccountId,
-            occurredAt,
             metadata: {
               workspaceId: command.workspaceId,
               workspaceIdentityId: facts.identity.id,
               changedFields,
             },
-          },
+          }),
         } satisfies TransitionCommit<WorkspaceIdentityUpdatedType>;
       }),
     );
@@ -328,7 +339,10 @@ const make = Effect.gen(function* () {
   ) {
     const command = yield* Schema.decodeUnknownEffect(LeaveWorkspaceCommand)(
       unvalidatedCommand,
-    ).pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.leave.validate")));
+    ).pipe(
+      Effect.tapError((cause) => Effect.logError("WorkspaceAccess.leave.validate", cause)),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.leave.validate")),
+    );
     return yield* commitTransition<
       WorkspaceMembershipEndedType,
       LastWorkspaceOwner | WorkspaceUnavailable
@@ -356,18 +370,14 @@ const make = Effect.gen(function* () {
             workspaceIdentityId: facts.identity.id,
             endedAt: occurredAt,
           }),
-          auditEvent: {
-            id: globalThis.crypto.randomUUID(),
+          auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
             type: "workspace.membership_ended",
-            version: 1,
-            actorAccountId: command.actorAccountId,
-            occurredAt,
             metadata: {
               workspaceId: command.workspaceId,
               workspaceIdentityId: facts.identity.id,
               reason: "voluntary_departure",
             },
-          },
+          }),
         } satisfies TransitionCommit<WorkspaceMembershipEndedType>;
       }),
     );

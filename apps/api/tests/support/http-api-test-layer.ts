@@ -17,6 +17,9 @@ import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeHttpRoutes } from "../../src/http-live.ts";
 
+const unmockedWorkspaceAccess = (operation: string) =>
+  Effect.die(new Error(`WorkspaceAccess.${operation} not mocked for this test`));
+
 const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
     AuthenticationNotifier,
@@ -28,11 +31,15 @@ const AuthPortsTest = Layer.mergeAll(
     WorkspaceAccess,
     WorkspaceAccess.of({
       listForActor: Effect.fn("WorkspaceAccess.Test.listForActor")(() => Effect.succeed([])),
-      getForActor: Effect.fn("WorkspaceAccess.Test.getForActor")(() => Effect.never),
-      create: Effect.fn("WorkspaceAccess.Test.create")(() => Effect.never),
-      join: Effect.fn("WorkspaceAccess.Test.join")(() => Effect.never),
-      updateMyIdentity: Effect.fn("WorkspaceAccess.Test.updateMyIdentity")(() => Effect.never),
-      leave: Effect.fn("WorkspaceAccess.Test.leave")(() => Effect.never),
+      getForActor: Effect.fn("WorkspaceAccess.Test.getForActor")(() =>
+        unmockedWorkspaceAccess("getForActor"),
+      ),
+      create: Effect.fn("WorkspaceAccess.Test.create")(() => unmockedWorkspaceAccess("create")),
+      join: Effect.fn("WorkspaceAccess.Test.join")(() => unmockedWorkspaceAccess("join")),
+      updateMyIdentity: Effect.fn("WorkspaceAccess.Test.updateMyIdentity")(() =>
+        unmockedWorkspaceAccess("updateMyIdentity"),
+      ),
+      leave: Effect.fn("WorkspaceAccess.Test.leave")(() => unmockedWorkspaceAccess("leave")),
     }),
   ),
   Layer.succeed(

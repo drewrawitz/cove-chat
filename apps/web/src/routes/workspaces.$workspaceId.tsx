@@ -107,7 +107,7 @@ function WorkspaceHome() {
                       params={{ workspaceId: item.id }}
                       aria-current={item.id === workspaceId ? "page" : undefined}
                       aria-label={`${item.name} ${roleLabel(item.membership.role)}`}
-                      className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-primary/10"
+                      className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 outline-hidden aria-[current=page]:bg-primary/10"
                     >
                       <span className="block truncate text-sm font-semibold">{item.name}</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">

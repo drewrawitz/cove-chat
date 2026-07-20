@@ -577,6 +577,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         $$
       `;
       yield* sql`
+        DROP TRIGGER IF EXISTS delay_leave_update_membership_end ON workspace_identities
+      `;
+      yield* sql`
         CREATE TRIGGER delay_leave_update_membership_end
         BEFORE UPDATE ON workspace_identities
         FOR EACH ROW
@@ -628,6 +631,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
 
           return [yield* Fiber.join(leaveFiber), yield* Fiber.join(updateFiber)] as const;
         }),
+      ).pipe(
+        Effect.ensuring(
+          sql`
+            DROP TRIGGER IF EXISTS delay_leave_update_membership_end ON workspace_identities
+          `.pipe(Effect.orDie),
+        ),
       );
       const updateAudit = yield* sql<{ count: number }>`
         SELECT COUNT(*)::int AS count

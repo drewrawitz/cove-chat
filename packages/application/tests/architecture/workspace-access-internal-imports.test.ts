@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const ignoredDirectories = new Set([".output", "dist", "generated", "node_modules"]);
 const ignoredFiles = new Set(["routeTree.gen.ts"]);
+const workspaceAccessInternalPath = "@cove/application/workspaces/internal";
+const workspaceAccessInternalImport = new RegExp(`["']${workspaceAccessInternalPath}["']`);
 
 const sourceFiles = (directory: string): ReadonlyArray<string> =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -30,7 +32,7 @@ it("exports and consumes one exact Workspace Access internal subpath", () => {
 
   const applicationDeepImporters = ["apps", "packages"]
     .flatMap((root) => sourceFiles(join(repositoryRoot, root)))
-    .filter((path) => readFileSync(path, "utf8").includes("@cove/application/workspaces/internal"));
+    .filter((path) => readFileSync(path, "utf8").includes(workspaceAccessInternalPath));
 
   expect(applicationDeepImporters.map((path) => relative(repositoryRoot, path)).sort()).toEqual(
     [
@@ -41,7 +43,7 @@ it("exports and consumes one exact Workspace Access internal subpath", () => {
   );
   expect(
     applicationDeepImporters.every((path) =>
-      readFileSync(path, "utf8").includes('"@cove/application/workspaces/internal"'),
+      workspaceAccessInternalImport.test(readFileSync(path, "utf8")),
     ),
   ).toBe(true);
 });
