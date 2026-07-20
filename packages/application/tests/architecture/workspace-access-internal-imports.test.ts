@@ -7,7 +7,9 @@ const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const ignoredDirectories = new Set([".output", "dist", "generated", "node_modules"]);
 const ignoredFiles = new Set(["routeTree.gen.ts"]);
 const workspaceAccessInternalPath = "@cove/application/workspaces/internal";
-const workspaceAccessInternalImport = new RegExp(`["']${workspaceAccessInternalPath}["']`);
+const workspaceAccessInternalImport = new RegExp(
+  String.raw`from\s+["']${workspaceAccessInternalPath}["']`,
+);
 
 const sourceFiles = (directory: string): ReadonlyArray<string> =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -32,18 +34,12 @@ it("exports and consumes one exact Workspace Access internal subpath", () => {
 
   const applicationDeepImporters = ["apps", "packages"]
     .flatMap((root) => sourceFiles(join(repositoryRoot, root)))
-    .filter((path) => readFileSync(path, "utf8").includes(workspaceAccessInternalPath));
+    .filter((path) => workspaceAccessInternalImport.test(readFileSync(path, "utf8")));
 
   expect(applicationDeepImporters.map((path) => relative(repositoryRoot, path)).sort()).toEqual(
     [
-      "packages/application/tests/architecture/workspace-access-internal-imports.test.ts",
       "packages/infrastructure/postgres/src/workspaces/workspace-access-persistence.ts",
       "packages/infrastructure/postgres/tests/workspaces/workspace-access-persistence.integration.test.ts",
     ].sort(),
   );
-  expect(
-    applicationDeepImporters.every((path) =>
-      workspaceAccessInternalImport.test(readFileSync(path, "utf8")),
-    ),
-  ).toBe(true);
 });

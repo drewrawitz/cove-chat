@@ -145,7 +145,7 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
   (url: string, processOutput: ReadonlyArray<string>) =>
     Effect.tryPromise({
       try: async () => {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
         if (!response.ok) throw new Error(`${url} returned ${response.status}.`);
       },
       catch: (cause) => new Error(`Waiting for ${url} failed.`, { cause }),
