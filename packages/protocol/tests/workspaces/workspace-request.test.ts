@@ -5,6 +5,7 @@ import {
   ChangeWorkspaceRoleRequest,
   CreateWorkspaceRequest,
   InviteWorkspaceMemberRequest,
+  RedeemWorkspaceInvitationRequest,
   UpdateWorkspaceIdentityRequest,
 } from "../../src/index.ts";
 
@@ -107,6 +108,20 @@ it.effect("decodes invitation acceptance and role administration requests", () =
         initialIdentityProfile: { name: "Invited Member" },
       }),
     ).toEqual({
+      initialIdentityProfile: {
+        name: "Invited Member",
+        avatarUrl: "/avatars/default.svg",
+      },
+    });
+    expect(
+      yield* Schema.decodeUnknownEffect(RedeemWorkspaceInvitationRequest)({
+        token: "invitation-secret",
+        displayName: "Invited Account",
+        initialIdentityProfile: { name: "Invited Member" },
+      }),
+    ).toEqual({
+      token: "invitation-secret",
+      displayName: "Invited Account",
       initialIdentityProfile: {
         name: "Invited Member",
         avatarUrl: "/avatars/default.svg",

@@ -25,24 +25,34 @@ import {
   WorkspaceName,
   WorkspaceRole,
 } from "@cove/domain";
+import {
+  WorkspaceInvitationNotifier,
+  WorkspaceInvitationTokenValue,
+  type WorkspaceInvitationToken,
+} from "@cove/ports";
 import { Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { hashOpaqueToken, makeOpaqueToken } from "../auth/opaque-token.ts";
 
 const AccountRequest = Schema.Struct({ actorAccountId: UserId });
+const ActiveInvitationAccountRequest = Schema.Struct({
+  actorAccountId: UserId,
+  activeAt: Schema.Date,
+});
 const WorkspaceRequest = Schema.Struct({ actorAccountId: UserId, workspaceId: WorkspaceId });
 const WorkspaceIdRequest = Schema.Struct({ workspaceId: WorkspaceId });
-const InviteMemberRequest = Schema.Struct({
-  actorAccountId: UserId,
-  workspaceId: WorkspaceId,
-  inviteeEmail: EmailAddress,
-});
+const InviteeEmailRequest = Schema.Struct({ inviteeEmail: EmailAddress });
 const InvitationRequest = Schema.Struct({
   actorAccountId: UserId,
   invitationId: WorkspaceInvitationId,
 });
+const InvitationTokenRequest = Schema.Struct({
+  tokenHash: Schema.String,
+  redeemedAt: Schema.Date,
+});
 const WorkspaceInviteeRequest = Schema.Struct({
   workspaceId: WorkspaceId,
-  inviteeAccountId: UserId,
+  inviteeEmail: EmailAddress,
 });
 const MemberAdministrationRequest = Schema.Struct({
   actorAccountId: UserId,
@@ -71,10 +81,11 @@ interface UserRow extends Schema.Schema.Type<typeof UserRow> {}
 const PendingInvitationRow = Schema.Struct({
   id: WorkspaceInvitationId,
   workspaceId: WorkspaceId,
-  inviteeAccountId: UserId,
+  inviteeEmail: EmailAddress,
   invitedByAccountId: UserId,
   role: Schema.Literals(["member"]),
   invitedAt: Schema.Date,
+  tokenExpiresAt: Schema.Date,
 });
 interface PendingInvitationRow extends Schema.Schema.Type<typeof PendingInvitationRow> {}
 
@@ -154,10 +165,11 @@ const fullMemberFromRow = (row: FullMemberRow): FullMemberView => ({
 const invitationFromRow = (row: PendingInvitationRow): WorkspaceInvitationRecord => ({
   id: row.id,
   workspaceId: row.workspaceId,
-  inviteeAccountId: row.inviteeAccountId,
+  inviteeEmail: row.inviteeEmail,
   invitedByAccountId: row.invitedByAccountId,
   role: row.role,
   invitedAt: row.invitedAt,
+  tokenExpiresAt: row.tokenExpiresAt,
 });
 
 const invitationViewFromRow = (row: WorkspaceInvitationViewRow): WorkspaceInvitationView => ({
@@ -217,26 +229,30 @@ const make = Effect.gen(function* () {
   });
 
   const listPendingInvitationRows = SqlSchema.findAll({
-    Request: AccountRequest,
+    Request: ActiveInvitationAccountRequest,
     Result: WorkspaceInvitationViewRow,
-    execute: ({ actorAccountId }) => sql<WorkspaceInvitationViewRow>`
+    execute: ({ actorAccountId, activeAt }) => sql<WorkspaceInvitationViewRow>`
       SELECT
         invitation.id,
         invitation.workspace_id AS "workspaceId",
-        invitation.invitee_account_id AS "inviteeAccountId",
+        invitation.invitee_email AS "inviteeEmail",
         invitation.invited_by_account_id AS "invitedByAccountId",
         invitation.role,
         invitation.invited_at AS "invitedAt",
+        invitation.token_expires_at AS "tokenExpiresAt",
         workspace.name AS "workspaceName",
         identity.id IS NULL AS "requiresIdentityProfile"
       FROM workspace_invitations AS invitation
       INNER JOIN workspaces AS workspace
         ON workspace.id = invitation.workspace_id
+      INNER JOIN users AS actor
+        ON actor.id = ${actorAccountId}
       LEFT JOIN workspace_identities AS identity
         ON identity.workspace_id = invitation.workspace_id
-        AND identity.account_id = invitation.invitee_account_id
-      WHERE invitation.invitee_account_id = ${actorAccountId}
+        AND identity.account_id = actor.id
+      WHERE lower(invitation.invitee_email) = lower(actor.email)
         AND invitation.accepted_at IS NULL
+        AND invitation.token_expires_at > ${activeAt}
       ORDER BY invitation.invited_at, invitation.id
     `,
   });
@@ -274,7 +290,7 @@ const make = Effect.gen(function* () {
   });
 
   const userByEmailRow = SqlSchema.findOneOption({
-    Request: InviteMemberRequest,
+    Request: InviteeEmailRequest,
     Result: UserRow,
     execute: ({ inviteeEmail }) => sql<UserRow>`
       SELECT id, email, display_name AS "displayName"
@@ -287,17 +303,18 @@ const make = Effect.gen(function* () {
   const pendingInvitationForInviteeRow = SqlSchema.findOneOption({
     Request: WorkspaceInviteeRequest,
     Result: PendingInvitationRow,
-    execute: ({ workspaceId, inviteeAccountId }) => sql<PendingInvitationRow>`
+    execute: ({ workspaceId, inviteeEmail }) => sql<PendingInvitationRow>`
       SELECT
         id,
         workspace_id AS "workspaceId",
-        invitee_account_id AS "inviteeAccountId",
+        invitee_email AS "inviteeEmail",
         invited_by_account_id AS "invitedByAccountId",
         role,
-        invited_at AS "invitedAt"
+        invited_at AS "invitedAt",
+        token_expires_at AS "tokenExpiresAt"
       FROM workspace_invitations
       WHERE workspace_id = ${workspaceId}
-        AND invitee_account_id = ${inviteeAccountId}
+        AND lower(invitee_email) = lower(${inviteeEmail})
         AND accepted_at IS NULL
       LIMIT 1
     `,
@@ -308,16 +325,19 @@ const make = Effect.gen(function* () {
     Result: PendingInvitationRow,
     execute: ({ actorAccountId, invitationId }) => sql<PendingInvitationRow>`
       SELECT
-        id,
-        workspace_id AS "workspaceId",
-        invitee_account_id AS "inviteeAccountId",
-        invited_by_account_id AS "invitedByAccountId",
-        role,
-        invited_at AS "invitedAt"
-      FROM workspace_invitations
-      WHERE id = ${invitationId}
-        AND invitee_account_id = ${actorAccountId}
-        AND accepted_at IS NULL
+        invitation.id,
+        invitation.workspace_id AS "workspaceId",
+        invitation.invitee_email AS "inviteeEmail",
+        invitation.invited_by_account_id AS "invitedByAccountId",
+        invitation.role,
+        invitation.invited_at AS "invitedAt",
+        invitation.token_expires_at AS "tokenExpiresAt"
+      FROM workspace_invitations AS invitation
+      INNER JOIN users AS actor
+        ON actor.id = ${actorAccountId}
+        AND lower(actor.email) = lower(invitation.invitee_email)
+      WHERE invitation.id = ${invitationId}
+        AND invitation.accepted_at IS NULL
       LIMIT 1
     `,
   });
@@ -327,15 +347,58 @@ const make = Effect.gen(function* () {
     Result: PendingInvitationRow,
     execute: ({ actorAccountId, invitationId }) => sql<PendingInvitationRow>`
       SELECT
+        invitation.id,
+        invitation.workspace_id AS "workspaceId",
+        invitation.invitee_email AS "inviteeEmail",
+        invitation.invited_by_account_id AS "invitedByAccountId",
+        invitation.role,
+        invitation.invited_at AS "invitedAt",
+        invitation.token_expires_at AS "tokenExpiresAt"
+      FROM workspace_invitations AS invitation
+      INNER JOIN users AS actor
+        ON actor.id = ${actorAccountId}
+        AND lower(actor.email) = lower(invitation.invitee_email)
+      WHERE invitation.id = ${invitationId}
+        AND invitation.accepted_at IS NULL
+      FOR UPDATE
+    `,
+  });
+
+  const pendingInvitationForTokenRow = SqlSchema.findOneOption({
+    Request: InvitationTokenRequest,
+    Result: PendingInvitationRow,
+    execute: ({ redeemedAt, tokenHash }) => sql<PendingInvitationRow>`
+      SELECT
         id,
         workspace_id AS "workspaceId",
-        invitee_account_id AS "inviteeAccountId",
+        invitee_email AS "inviteeEmail",
         invited_by_account_id AS "invitedByAccountId",
         role,
-        invited_at AS "invitedAt"
+        invited_at AS "invitedAt",
+        token_expires_at AS "tokenExpiresAt"
       FROM workspace_invitations
-      WHERE id = ${invitationId}
-        AND invitee_account_id = ${actorAccountId}
+      WHERE token_hash = ${tokenHash}
+        AND token_expires_at > ${redeemedAt}
+        AND accepted_at IS NULL
+      LIMIT 1
+    `,
+  });
+
+  const lockPendingInvitationForTokenRow = SqlSchema.findOneOption({
+    Request: InvitationTokenRequest,
+    Result: PendingInvitationRow,
+    execute: ({ redeemedAt, tokenHash }) => sql<PendingInvitationRow>`
+      SELECT
+        id,
+        workspace_id AS "workspaceId",
+        invitee_email AS "inviteeEmail",
+        invited_by_account_id AS "invitedByAccountId",
+        role,
+        invited_at AS "invitedAt",
+        token_expires_at AS "tokenExpiresAt"
+      FROM workspace_invitations
+      WHERE token_hash = ${tokenHash}
+        AND token_expires_at > ${redeemedAt}
         AND accepted_at IS NULL
       FOR UPDATE
     `,
@@ -478,6 +541,18 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const lockAccountEmail = Effect.fn("PostgresWorkspaceAccess.lockAccountEmail")(
+    (inviteeEmail: EmailAddress) =>
+      sql`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(lower(${inviteeEmail}), 516903)
+        )
+      `.pipe(
+        Effect.asVoid,
+        Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.lockAccountEmail", cause)),
+      ),
+  );
+
   const endSelectedMembershipAndRevokeChannels = Effect.fn(
     "PostgresWorkspaceAccess.endSelectedMembershipAndRevokeChannels",
   )(
@@ -571,7 +646,6 @@ const make = Effect.gen(function* () {
             identity: undefined,
             membership: undefined,
             activeOwnerCount: 0,
-            invitee: undefined,
             inviteeMembership: undefined,
             pendingInvitation: undefined,
           };
@@ -590,39 +664,29 @@ const make = Effect.gen(function* () {
                 membership: undefined,
                 activeOwnerCount: 0,
               };
-        const inviteeRow = yield* userByEmailRow({
-          actorAccountId,
-          workspaceId,
-          inviteeEmail,
-        }).pipe(
+        const inviteeRow = yield* userByEmailRow({ inviteeEmail }).pipe(
           Effect.mapError((cause) =>
             persistenceFailure("WorkspaceAccess.serializeInviteMember.invitee", cause),
           ),
         );
-        if (inviteeRow._tag === "None") {
-          return {
-            ...actorFacts,
-            invitee: undefined,
-            inviteeMembership: undefined,
-            pendingInvitation: undefined,
-          };
-        }
-        const invitee = inviteeRow.value;
-        const relationshipRow = yield* identityMembershipFactsRow({
-          actorAccountId: invitee.id,
-          workspaceId,
-        }).pipe(
-          Effect.mapError((cause) =>
-            persistenceFailure("WorkspaceAccess.serializeInviteMember.relationship", cause),
-          ),
-        );
-        const relationship =
-          relationshipRow._tag === "Some"
-            ? factsFromRow(relationshipRow.value)
-            : { workspace: undefined, identity: undefined, membership: undefined };
+        const inviteeMembership =
+          inviteeRow._tag === "None"
+            ? undefined
+            : (yield* identityMembershipFactsRow({
+                actorAccountId: inviteeRow.value.id,
+                workspaceId,
+              }).pipe(
+                Effect.mapError((cause) =>
+                  persistenceFailure("WorkspaceAccess.serializeInviteMember.relationship", cause),
+                ),
+              )).pipe((relationshipRow) =>
+                relationshipRow._tag === "Some"
+                  ? factsFromRow(relationshipRow.value).membership
+                  : undefined,
+              );
         const pendingInvitationRow = yield* pendingInvitationForInviteeRow({
           workspaceId,
-          inviteeAccountId: invitee.id,
+          inviteeEmail,
         }).pipe(
           Effect.mapError((cause) =>
             persistenceFailure("WorkspaceAccess.serializeInviteMember.pending", cause),
@@ -631,8 +695,7 @@ const make = Effect.gen(function* () {
 
         return {
           ...actorFacts,
-          invitee,
-          inviteeMembership: relationship.membership,
+          inviteeMembership,
           pendingInvitation:
             pendingInvitationRow._tag === "Some"
               ? invitationFromRow(pendingInvitationRow.value)
@@ -706,12 +769,86 @@ const make = Effect.gen(function* () {
         ...relationship,
       };
     }),
-    serializeMemberAdministration: Effect.fn(
-      "PostgresWorkspaceAccess.serializeMemberAdministration",
+    serializeInvitationRedemption: Effect.fn(
+      "PostgresWorkspaceAccess.serializeInvitationRedemption",
+    )(function* (token: WorkspaceInvitationToken, proposedAccountId, redeemedAt) {
+      const tokenHash = hashOpaqueToken(token);
+      const invitationRow = yield* pendingInvitationForTokenRow({ redeemedAt, tokenHash }).pipe(
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.serializeInvitationRedemption.find", cause),
+        ),
+      );
+      if (invitationRow._tag === "None") {
+        return {
+          invitation: undefined,
+          account: undefined,
+          workspace: undefined,
+          identity: undefined,
+          membership: undefined,
+        };
+      }
+      const workspaceId = invitationRow.value.workspaceId;
+      const lockedWorkspace = yield* lockWorkspaceRow({ workspaceId }).pipe(
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.serializeInvitationRedemption.lockWorkspace", cause),
+        ),
+      );
+      if (lockedWorkspace._tag === "None") {
+        return {
+          invitation: undefined,
+          account: undefined,
+          workspace: undefined,
+          identity: undefined,
+          membership: undefined,
+        };
+      }
+      const lockedInvitation = yield* lockPendingInvitationForTokenRow({
+        redeemedAt,
+        tokenHash,
+      }).pipe(
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.serializeInvitationRedemption.lockInvitation", cause),
+        ),
+      );
+      if (lockedInvitation._tag === "None") {
+        return {
+          invitation: undefined,
+          account: undefined,
+          workspace: undefined,
+          identity: undefined,
+          membership: undefined,
+        };
+      }
+
+      const invitation = invitationFromRow(lockedInvitation.value);
+      yield* lockAccountEmail(invitation.inviteeEmail);
+      const accountRow = yield* userByEmailRow({ inviteeEmail: invitation.inviteeEmail }).pipe(
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.serializeInvitationRedemption.account", cause),
+        ),
+      );
+      const account = accountRow._tag === "Some" ? accountRow.value : undefined;
+      const relationshipRow = yield* identityMembershipFactsRow({
+        actorAccountId: account?.id ?? proposedAccountId,
+        workspaceId,
+      }).pipe(
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.serializeInvitationRedemption.relationship", cause),
+        ),
+      );
+      const relationship =
+        relationshipRow._tag === "Some"
+          ? factsFromRow(relationshipRow.value)
+          : { workspace: undefined, identity: undefined, membership: undefined };
+
+      return { invitation, account, ...relationship };
+    }),
+    serializeFullMemberAdministration: Effect.fn(
+      "PostgresWorkspaceAccess.serializeFullMemberAdministration",
     )(function* (actorAccountId, workspaceId, workspaceIdentityId) {
       const lockedWorkspace = yield* lockWorkspaceRow({ workspaceId }).pipe(
         Effect.mapError((cause) =>
-          persistenceFailure("WorkspaceAccess.serializeMemberAdministration.lock", cause),
+          persistenceFailure("WorkspaceAccess.serializeFullMemberAdministration.lock", cause),
         ),
       );
       if (lockedWorkspace._tag === "None") {
@@ -726,7 +863,7 @@ const make = Effect.gen(function* () {
       }
       const actorRow = yield* workspaceTransitionFactsRow({ actorAccountId, workspaceId }).pipe(
         Effect.mapError((cause) =>
-          persistenceFailure("WorkspaceAccess.serializeMemberAdministration.actor", cause),
+          persistenceFailure("WorkspaceAccess.serializeFullMemberAdministration.actor", cause),
         ),
       );
       const actorFacts =
@@ -744,7 +881,7 @@ const make = Effect.gen(function* () {
         workspaceIdentityId,
       }).pipe(
         Effect.mapError((cause) =>
-          persistenceFailure("WorkspaceAccess.serializeMemberAdministration.target", cause),
+          persistenceFailure("WorkspaceAccess.serializeFullMemberAdministration.target", cause),
         ),
       );
       const targetFacts =
@@ -864,34 +1001,77 @@ const make = Effect.gen(function* () {
         endedAt,
       ),
     ),
-    createInvitation: Effect.fn("PostgresWorkspaceAccess.createInvitation")((invitation) =>
+    createInvitation: Effect.fn("PostgresWorkspaceAccess.createInvitation")(function* (invitation) {
+      const token = makeOpaqueToken(
+        (value) => WorkspaceInvitationTokenValue.make(value),
+        "WorkspaceInvitationToken",
+      );
+      yield* sql`
+          INSERT INTO workspace_invitations (
+            id,
+            workspace_id,
+            invitee_email,
+            invited_by_account_id,
+            token_hash,
+            token_expires_at,
+            role,
+            invited_at
+          )
+          VALUES (
+            ${invitation.id},
+            ${invitation.workspaceId},
+            ${invitation.inviteeEmail},
+            ${invitation.invitedByAccountId},
+            ${hashOpaqueToken(token)},
+            ${invitation.tokenExpiresAt},
+            ${invitation.role},
+            ${invitation.invitedAt}
+          )
+        `.pipe(
+        Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.createInvitation", cause)),
+      );
+      return token;
+    }),
+    refreshInvitation: Effect.fn("PostgresWorkspaceAccess.refreshInvitation")(
+      function* (invitation) {
+        const token = makeOpaqueToken(
+          (value) => WorkspaceInvitationTokenValue.make(value),
+          "WorkspaceInvitationToken",
+        );
+        yield* sql`
+        UPDATE workspace_invitations
+        SET
+          invited_by_account_id = ${invitation.invitedByAccountId},
+          token_hash = ${hashOpaqueToken(token)},
+          token_expires_at = ${invitation.tokenExpiresAt},
+          role = ${invitation.role},
+          invited_at = ${invitation.invitedAt}
+        WHERE id = ${invitation.id}
+          AND accepted_at IS NULL
+      `.pipe(
+          Effect.mapError((cause) =>
+            persistenceFailure("WorkspaceAccess.refreshInvitation", cause),
+          ),
+        );
+        return token;
+      },
+    ),
+    createAccount: Effect.fn("PostgresWorkspaceAccess.createAccount")((account) =>
       sql`
-        INSERT INTO workspace_invitations (
-          id,
-          workspace_id,
-          invitee_account_id,
-          invited_by_account_id,
-          role,
-          invited_at
-        )
-        VALUES (
-          ${invitation.id},
-          ${invitation.workspaceId},
-          ${invitation.inviteeAccountId},
-          ${invitation.invitedByAccountId},
-          ${invitation.role},
-          ${invitation.invitedAt}
-        )
+        INSERT INTO users (id, email, display_name)
+        VALUES (${account.id}, ${account.email}, ${account.displayName})
       `.pipe(
         Effect.asVoid,
-        Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.createInvitation", cause)),
+        Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.createAccount", cause)),
       ),
     ),
     acceptInvitation: Effect.fn("PostgresWorkspaceAccess.acceptInvitation")(
-      (invitationId, acceptedAt) =>
+      (invitationId, acceptedByAccountId, acceptedAt) =>
         sql`
           UPDATE workspace_invitations
-          SET accepted_at = ${acceptedAt}
+          SET
+            accepted_by_account_id = ${acceptedByAccountId},
+            accepted_at = ${acceptedAt}
           WHERE id = ${invitationId}
             AND accepted_at IS NULL
         `.pipe(
@@ -912,13 +1092,14 @@ const make = Effect.gen(function* () {
           Effect.mapError((cause) => persistenceFailure("WorkspaceAccess.updateMemberRole", cause)),
         ),
     ),
-    endMemberAndRevokeChannels: Effect.fn("PostgresWorkspaceAccess.endMemberAndRevokeChannels")(
-      (workspaceId, workspaceIdentityId, endedAt) =>
-        endSelectedMembershipAndRevokeChannels(
-          workspaceId,
-          { kind: "identity", id: workspaceIdentityId },
-          endedAt,
-        ),
+    endFullMemberAndRevokeChannels: Effect.fn(
+      "PostgresWorkspaceAccess.endFullMemberAndRevokeChannels",
+    )((workspaceId, workspaceIdentityId, endedAt) =>
+      endSelectedMembershipAndRevokeChannels(
+        workspaceId,
+        { kind: "identity", id: workspaceIdentityId },
+        endedAt,
+      ),
     ),
     appendAudit: Effect.fn("PostgresWorkspaceAccess.appendAudit")(
       (event: WorkspaceAccessAuditEvent) =>
@@ -961,22 +1142,23 @@ const make = Effect.gen(function* () {
       ),
     ),
     listPendingInvitations: Effect.fn("PostgresWorkspaceAccess.listPendingInvitations")(
-      (actorAccountId) =>
-        listPendingInvitationRows({ actorAccountId }).pipe(
+      (actorAccountId, activeAt) =>
+        listPendingInvitationRows({ actorAccountId, activeAt }).pipe(
           Effect.map((rows) => rows.map(invitationViewFromRow)),
           Effect.mapError((cause) =>
             persistenceFailure("WorkspaceAccess.listPendingInvitations", cause),
           ),
         ),
     ),
-    listMembersForAdministrator: Effect.fn("PostgresWorkspaceAccess.listMembersForAdministrator")(
-      (actorAccountId, workspaceId) =>
-        listAdministratorMemberRows({ actorAccountId, workspaceId }).pipe(
-          Effect.map((rows) => (rows.length === 0 ? undefined : rows.map(fullMemberFromRow))),
-          Effect.mapError((cause) =>
-            persistenceFailure("WorkspaceAccess.listMembersForAdministrator", cause),
-          ),
+    listFullMembersForAdministrator: Effect.fn(
+      "PostgresWorkspaceAccess.listFullMembersForAdministrator",
+    )((actorAccountId, workspaceId) =>
+      listAdministratorMemberRows({ actorAccountId, workspaceId }).pipe(
+        Effect.map((rows) => (rows.length === 0 ? undefined : rows.map(fullMemberFromRow))),
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.listFullMembersForAdministrator", cause),
         ),
+      ),
     ),
     transact: (use) =>
       sql
@@ -995,5 +1177,8 @@ export const PostgresWorkspaceAccessPersistence: Layer.Layer<
   SqlClient.SqlClient
 > = Layer.effect(WorkspaceAccessPersistence, make);
 
-export const PostgresWorkspaceAccess: Layer.Layer<WorkspaceAccess, never, SqlClient.SqlClient> =
-  WorkspaceAccessLive.pipe(Layer.provide(PostgresWorkspaceAccessPersistence));
+export const PostgresWorkspaceAccess: Layer.Layer<
+  WorkspaceAccess,
+  never,
+  SqlClient.SqlClient | WorkspaceInvitationNotifier
+> = WorkspaceAccessLive.pipe(Layer.provide(PostgresWorkspaceAccessPersistence));

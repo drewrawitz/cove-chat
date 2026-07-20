@@ -1,5 +1,7 @@
 import {
+  DisplayName,
   EmailAddress,
+  User,
   UserId,
   Workspace,
   WorkspaceId,
@@ -9,6 +11,7 @@ import {
   WorkspaceMembership,
   WorkspaceName,
 } from "@cove/domain";
+import { WorkspaceInvitationToken } from "@cove/ports";
 import { Context, type Effect, Schema } from "effect";
 
 export const WorkspaceAccessView = Schema.Struct({
@@ -84,6 +87,15 @@ export interface AcceptWorkspaceInvitationCommand extends Schema.Schema.Type<
   typeof AcceptWorkspaceInvitationCommand
 > {}
 
+export const RedeemWorkspaceInvitationCommand = Schema.Struct({
+  token: WorkspaceInvitationToken,
+  displayName: DisplayName,
+  initialIdentityProfile: WorkspaceIdentityProfile,
+});
+export interface RedeemWorkspaceInvitationCommand extends Schema.Schema.Type<
+  typeof RedeemWorkspaceInvitationCommand
+> {}
+
 export const ChangeWorkspaceRoleCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
@@ -94,13 +106,13 @@ export interface ChangeWorkspaceRoleCommand extends Schema.Schema.Type<
   typeof ChangeWorkspaceRoleCommand
 > {}
 
-export const RemoveWorkspaceMemberCommand = Schema.Struct({
+export const RemoveFullMemberCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
   workspaceIdentityId: WorkspaceIdentity.fields.id,
 });
-export interface RemoveWorkspaceMemberCommand extends Schema.Schema.Type<
-  typeof RemoveWorkspaceMemberCommand
+export interface RemoveFullMemberCommand extends Schema.Schema.Type<
+  typeof RemoveFullMemberCommand
 > {}
 
 export const WorkspaceCreated = Schema.TaggedStruct("WorkspaceCreated", {
@@ -131,13 +143,13 @@ export const WorkspaceMembershipEnded = Schema.TaggedStruct("WorkspaceMembership
 });
 export type WorkspaceMembershipEnded = typeof WorkspaceMembershipEnded.Type;
 
-export const WorkspaceInvitationCreated = Schema.TaggedStruct("WorkspaceInvitationCreated", {
+export const WorkspaceInvitationIssued = Schema.TaggedStruct("WorkspaceInvitationIssued", {
   invitationId: WorkspaceInvitationId,
   workspaceId: WorkspaceId,
-  inviteeAccountId: UserId,
+  inviteeEmail: EmailAddress,
   occurredAt: Schema.DateFromString,
 });
-export type WorkspaceInvitationCreated = typeof WorkspaceInvitationCreated.Type;
+export type WorkspaceInvitationIssued = typeof WorkspaceInvitationIssued.Type;
 
 export const WorkspaceInvitationAccepted = Schema.TaggedStruct("WorkspaceInvitationAccepted", {
   invitationId: WorkspaceInvitationId,
@@ -146,6 +158,15 @@ export const WorkspaceInvitationAccepted = Schema.TaggedStruct("WorkspaceInvitat
   occurredAt: Schema.DateFromString,
 });
 export type WorkspaceInvitationAccepted = typeof WorkspaceInvitationAccepted.Type;
+
+export const WorkspaceInvitationRedeemed = Schema.TaggedStruct("WorkspaceInvitationRedeemed", {
+  account: User,
+  invitationId: WorkspaceInvitationId,
+  workspaceId: WorkspaceId,
+  workspaceIdentityId: WorkspaceIdentity.fields.id,
+  occurredAt: Schema.DateFromString,
+});
+export type WorkspaceInvitationRedeemed = typeof WorkspaceInvitationRedeemed.Type;
 
 export const WorkspaceRoleChanged = Schema.TaggedStruct("WorkspaceRoleChanged", {
   workspaceId: WorkspaceId,
@@ -164,12 +185,12 @@ export const WorkspaceRoleUnchanged = Schema.TaggedStruct("WorkspaceRoleUnchange
 });
 export type WorkspaceRoleUnchanged = typeof WorkspaceRoleUnchanged.Type;
 
-export const WorkspaceMemberRemoved = Schema.TaggedStruct("WorkspaceMemberRemoved", {
+export const FullMemberRemoved = Schema.TaggedStruct("FullMemberRemoved", {
   workspaceId: WorkspaceId,
   workspaceIdentityId: WorkspaceIdentity.fields.id,
   endedAt: Schema.DateFromString,
 });
-export type WorkspaceMemberRemoved = typeof WorkspaceMemberRemoved.Type;
+export type FullMemberRemoved = typeof FullMemberRemoved.Type;
 
 export class WorkspaceUnavailable extends Schema.TaggedErrorClass<WorkspaceUnavailable>()(
   "Application.WorkspaceUnavailable",
@@ -201,23 +222,18 @@ export class WorkspaceAdministrationForbidden extends Schema.TaggedErrorClass<Wo
   { workspaceId: WorkspaceId },
 ) {}
 
-export class WorkspaceInviteeUnavailable extends Schema.TaggedErrorClass<WorkspaceInviteeUnavailable>()(
-  "Application.WorkspaceInviteeUnavailable",
-  { workspaceId: WorkspaceId },
-) {}
-
-export class WorkspaceInvitationAlreadyPending extends Schema.TaggedErrorClass<WorkspaceInvitationAlreadyPending>()(
-  "Application.WorkspaceInvitationAlreadyPending",
-  { workspaceId: WorkspaceId },
-) {}
-
 export class WorkspaceInvitationUnavailable extends Schema.TaggedErrorClass<WorkspaceInvitationUnavailable>()(
   "Application.WorkspaceInvitationUnavailable",
   { invitationId: WorkspaceInvitationId },
 ) {}
 
-export class WorkspaceMemberUnavailable extends Schema.TaggedErrorClass<WorkspaceMemberUnavailable>()(
-  "Application.WorkspaceMemberUnavailable",
+export class WorkspaceInvitationRedemptionUnavailable extends Schema.TaggedErrorClass<WorkspaceInvitationRedemptionUnavailable>()(
+  "Application.WorkspaceInvitationRedemptionUnavailable",
+  {},
+) {}
+
+export class FullMemberUnavailable extends Schema.TaggedErrorClass<FullMemberUnavailable>()(
+  "Application.FullMemberUnavailable",
   {
     workspaceId: WorkspaceId,
     workspaceIdentityId: WorkspaceIdentity.fields.id,
@@ -239,8 +255,6 @@ export type InviteWorkspaceMemberFailure =
   | AlreadyWorkspaceMember
   | WorkspaceAccessFailure
   | WorkspaceAdministrationForbidden
-  | WorkspaceInvitationAlreadyPending
-  | WorkspaceInviteeUnavailable
   | WorkspaceUnavailable;
 export type AcceptWorkspaceInvitationFailure =
   | AlreadyWorkspaceMember
@@ -248,7 +262,11 @@ export type AcceptWorkspaceInvitationFailure =
   | InitialWorkspaceIdentityProfileRequired
   | WorkspaceAccessFailure
   | WorkspaceInvitationUnavailable;
-export type ListWorkspaceMembersFailure =
+export type RedeemWorkspaceInvitationFailure =
+  | AlreadyWorkspaceMember
+  | WorkspaceAccessFailure
+  | WorkspaceInvitationRedemptionUnavailable;
+export type ListFullMembersFailure =
   | WorkspaceAccessFailure
   | WorkspaceAdministrationForbidden
   | WorkspaceUnavailable;
@@ -256,9 +274,9 @@ export type ChangeWorkspaceRoleFailure =
   | LastWorkspaceOwner
   | WorkspaceAccessFailure
   | WorkspaceAdministrationForbidden
-  | WorkspaceMemberUnavailable
+  | FullMemberUnavailable
   | WorkspaceUnavailable;
-export type RemoveWorkspaceMemberFailure = ChangeWorkspaceRoleFailure;
+export type RemoveFullMemberFailure = ChangeWorkspaceRoleFailure;
 
 export interface WorkspaceAccessService {
   readonly listForActor: (
@@ -283,22 +301,25 @@ export interface WorkspaceAccessService {
   readonly listInvitationsForActor: (
     actorAccountId: UserId,
   ) => Effect.Effect<ReadonlyArray<WorkspaceInvitationView>, WorkspaceAccessFailure>;
-  readonly listMembersForActor: (
+  readonly listFullMembersForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
-  ) => Effect.Effect<ReadonlyArray<FullMemberView>, ListWorkspaceMembersFailure>;
+  ) => Effect.Effect<ReadonlyArray<FullMemberView>, ListFullMembersFailure>;
   readonly inviteMember: (
     command: InviteWorkspaceMemberCommand,
-  ) => Effect.Effect<WorkspaceInvitationCreated, InviteWorkspaceMemberFailure>;
+  ) => Effect.Effect<WorkspaceInvitationIssued, InviteWorkspaceMemberFailure>;
   readonly acceptInvitation: (
     command: AcceptWorkspaceInvitationCommand,
   ) => Effect.Effect<WorkspaceInvitationAccepted, AcceptWorkspaceInvitationFailure>;
+  readonly redeemInvitation: (
+    command: RedeemWorkspaceInvitationCommand,
+  ) => Effect.Effect<WorkspaceInvitationRedeemed, RedeemWorkspaceInvitationFailure>;
   readonly changeMemberRole: (
     command: ChangeWorkspaceRoleCommand,
   ) => Effect.Effect<WorkspaceRoleChanged | WorkspaceRoleUnchanged, ChangeWorkspaceRoleFailure>;
-  readonly removeMember: (
-    command: RemoveWorkspaceMemberCommand,
-  ) => Effect.Effect<WorkspaceMemberRemoved, RemoveWorkspaceMemberFailure>;
+  readonly removeFullMember: (
+    command: RemoveFullMemberCommand,
+  ) => Effect.Effect<FullMemberRemoved, RemoveFullMemberFailure>;
 }
 
 export class WorkspaceAccess extends Context.Service<WorkspaceAccess, WorkspaceAccessService>()(

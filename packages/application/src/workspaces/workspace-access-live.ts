@@ -1,11 +1,15 @@
 import {
+  User,
+  UserId,
+  Workspace,
   WorkspaceIdentity,
+  WorkspaceIdentityProfile,
   WorkspaceId,
   WorkspaceInvitationId,
   WorkspaceMembership,
-  type UserId,
   type WorkspaceRole,
 } from "@cove/domain";
+import { WorkspaceInvitationNotifier } from "@cove/ports";
 import { Clock, Effect, Layer, Schema } from "effect";
 import {
   AcceptWorkspaceInvitationCommand,
@@ -23,13 +27,15 @@ import {
   InitialWorkspaceIdentityProfileRequired,
   InviteWorkspaceMemberCommand,
   type InviteWorkspaceMemberCommand as InviteWorkspaceMemberCommandType,
-  type InviteWorkspaceMemberFailure,
   LastWorkspaceOwner,
   LeaveWorkspaceCommand,
   type LeaveWorkspaceCommand as LeaveWorkspaceCommandType,
-  RemoveWorkspaceMemberCommand,
-  type RemoveWorkspaceMemberCommand as RemoveWorkspaceMemberCommandType,
-  type RemoveWorkspaceMemberFailure,
+  RemoveFullMemberCommand,
+  type RemoveFullMemberCommand as RemoveFullMemberCommandType,
+  type RemoveFullMemberFailure,
+  RedeemWorkspaceInvitationCommand,
+  type RedeemWorkspaceInvitationCommand as RedeemWorkspaceInvitationCommandType,
+  type RedeemWorkspaceInvitationFailure,
   UpdateWorkspaceIdentityCommand,
   type UpdateWorkspaceIdentityCommand as UpdateWorkspaceIdentityCommandType,
   WorkspaceIdentityUpdated,
@@ -44,14 +50,14 @@ import {
   WorkspaceAdministrationForbidden,
   WorkspaceInvitationAccepted,
   type WorkspaceInvitationAccepted as WorkspaceInvitationAcceptedType,
-  WorkspaceInvitationAlreadyPending,
-  WorkspaceInvitationCreated,
-  type WorkspaceInvitationCreated as WorkspaceInvitationCreatedType,
+  WorkspaceInvitationIssued,
+  WorkspaceInvitationRedemptionUnavailable,
+  WorkspaceInvitationRedeemed,
+  type WorkspaceInvitationRedeemed as WorkspaceInvitationRedeemedType,
   WorkspaceInvitationUnavailable,
-  WorkspaceInviteeUnavailable,
-  WorkspaceMemberRemoved,
-  type WorkspaceMemberRemoved as WorkspaceMemberRemovedType,
-  WorkspaceMemberUnavailable,
+  FullMemberRemoved,
+  type FullMemberRemoved as FullMemberRemovedType,
+  FullMemberUnavailable,
   WorkspaceUnavailable,
   WorkspaceRoleChanged,
   type WorkspaceRoleChanged as WorkspaceRoleChangedType,
@@ -63,12 +69,32 @@ import {
   WorkspaceAccessPersistence,
   WorkspaceAccessPersistenceFailure,
   type WorkspaceAccessTransaction,
+  type WorkspaceInvitationRecord,
 } from "./workspace-access-persistence.ts";
 
 interface TransitionCommit<A> {
   readonly outcome: A;
   readonly auditEvent: WorkspaceAccessAuditEvent | undefined;
 }
+
+type InvitationClaimIdentity =
+  | {
+      readonly identity: undefined;
+      readonly initialIdentityProfile: WorkspaceIdentityProfile;
+    }
+  | {
+      readonly identity: WorkspaceIdentity;
+      readonly initialIdentityProfile?: never;
+    };
+
+type InvitationClaim = InvitationClaimIdentity & {
+  readonly accountId: UserId;
+  readonly invitation: WorkspaceInvitationRecord;
+  readonly occurredAt: Date;
+  readonly workspace: Workspace;
+};
+
+const WORKSPACE_INVITATION_TOKEN_LIFETIME_MILLIS = 7 * 24 * 60 * 60 * 1_000;
 
 type WorkspaceAccessAuditDetails<
   Event extends WorkspaceAccessAuditEvent = WorkspaceAccessAuditEvent,
@@ -91,7 +117,7 @@ function canChangeWorkspaceRole(
   return actorRole === "admin" && targetRole !== "owner" && nextRole !== "owner";
 }
 
-function canRemoveWorkspaceMember(actorRole: WorkspaceRole, targetRole: WorkspaceRole): boolean {
+function canRemoveFullMember(actorRole: WorkspaceRole, targetRole: WorkspaceRole): boolean {
   return actorRole === "owner" || (actorRole === "admin" && targetRole !== "owner");
 }
 
@@ -111,6 +137,7 @@ function makeAuditEvent(
 
 const make = Effect.gen(function* () {
   const persistence = yield* WorkspaceAccessPersistence;
+  const invitationNotifier = yield* WorkspaceInvitationNotifier;
 
   const readActiveAccess = Effect.fn("WorkspaceAccess.readActiveAccess")(
     (actorAccountId: UserId, workspaceId: WorkspaceId) =>
@@ -146,6 +173,46 @@ const make = Effect.gen(function* () {
           Effect.fail(internalFailure(operation)),
         ),
       );
+
+  const claimInvitation = Effect.fn("WorkspaceAccess.claimInvitation")(function* (
+    transaction: WorkspaceAccessTransaction,
+    claim: InvitationClaim,
+  ) {
+    let workspaceIdentityId: WorkspaceIdentity["id"];
+    if (claim.identity === undefined) {
+      workspaceIdentityId = WorkspaceIdentity.fields.id.make(globalThis.crypto.randomUUID());
+      yield* transaction.startFirstMembership(
+        WorkspaceAccessView.make({
+          workspace: claim.workspace,
+          identity: {
+            id: workspaceIdentityId,
+            workspaceId: claim.invitation.workspaceId,
+            accountId: claim.accountId,
+            ...claim.initialIdentityProfile,
+          },
+          membership: {
+            workspaceId: claim.invitation.workspaceId,
+            identityId: workspaceIdentityId,
+            role: "member",
+            startedAt: claim.occurredAt,
+          },
+        }),
+      );
+    } else {
+      workspaceIdentityId = claim.identity.id;
+      yield* transaction.reactivateMembership(
+        claim.identity,
+        WorkspaceMembership.make({
+          workspaceId: claim.invitation.workspaceId,
+          identityId: workspaceIdentityId,
+          role: "member",
+          startedAt: claim.occurredAt,
+        }),
+      );
+    }
+    yield* transaction.acceptInvitation(claim.invitation.id, claim.accountId, claim.occurredAt);
+    return workspaceIdentityId;
+  });
 
   const create = Effect.fn("WorkspaceAccess.create")(function* (
     unvalidatedCommand: CreateWorkspaceCommandType,
@@ -329,10 +396,10 @@ const make = Effect.gen(function* () {
       Effect.tapError((cause) => Effect.logError("WorkspaceAccess.inviteMember.validate", cause)),
       Effect.mapError(() => internalFailure("WorkspaceAccess.inviteMember.validate")),
     );
-    return yield* commitTransition<WorkspaceInvitationCreatedType, InviteWorkspaceMemberFailure>(
-      "WorkspaceAccess.inviteMember",
-      (transaction, occurredAt) =>
+    const committed = yield* persistence
+      .transact((transaction) =>
         Effect.gen(function* () {
+          const occurredAt = new Date(yield* Clock.currentTimeMillis);
           const facts = yield* transaction.serializeInviteMember(
             command.actorAccountId,
             command.workspaceId,
@@ -348,50 +415,65 @@ const make = Effect.gen(function* () {
               new WorkspaceAdministrationForbidden({ workspaceId: command.workspaceId }),
             );
           }
-          if (facts.invitee === undefined) {
-            return yield* Effect.fail(
-              new WorkspaceInviteeUnavailable({ workspaceId: command.workspaceId }),
-            );
-          }
           if (facts.inviteeMembership !== undefined) {
             return yield* Effect.fail(
               new AlreadyWorkspaceMemberError({ workspaceId: command.workspaceId }),
             );
           }
-          if (facts.pendingInvitation !== undefined) {
-            return yield* Effect.fail(
-              new WorkspaceInvitationAlreadyPending({ workspaceId: command.workspaceId }),
-            );
-          }
-
-          const invitationId = WorkspaceInvitationId.make(globalThis.crypto.randomUUID());
-          yield* transaction.createInvitation({
+          const invitationId =
+            facts.pendingInvitation?.id ??
+            WorkspaceInvitationId.make(globalThis.crypto.randomUUID());
+          const tokenExpiresAt = new Date(
+            occurredAt.getTime() + WORKSPACE_INVITATION_TOKEN_LIFETIME_MILLIS,
+          );
+          const invitation = {
             id: invitationId,
             workspaceId: command.workspaceId,
-            inviteeAccountId: facts.invitee.id,
+            inviteeEmail: command.inviteeEmail,
             invitedByAccountId: command.actorAccountId,
             role: "member",
             invitedAt: occurredAt,
-          });
-          const outcome = WorkspaceInvitationCreated.make({
+            tokenExpiresAt,
+          } as const;
+          const token = yield* facts.pendingInvitation === undefined
+            ? transaction.createInvitation(invitation)
+            : transaction.refreshInvitation(invitation);
+          const outcome = WorkspaceInvitationIssued.make({
             invitationId,
             workspaceId: command.workspaceId,
-            inviteeAccountId: facts.invitee.id,
+            inviteeEmail: command.inviteeEmail,
             occurredAt,
           });
-          return {
-            outcome,
-            auditEvent: makeAuditEvent(command.actorAccountId, occurredAt, {
+          yield* transaction.appendAudit(
+            makeAuditEvent(command.actorAccountId, occurredAt, {
               type: "workspace.member_invited",
               metadata: {
                 workspaceId: command.workspaceId,
                 invitationId,
-                inviteeAccountId: facts.invitee.id,
+                inviteeEmail: command.inviteeEmail,
               },
             }),
-          } satisfies TransitionCommit<WorkspaceInvitationCreatedType>;
+          );
+          return {
+            outcome,
+            notification: {
+              recipient: command.inviteeEmail,
+              workspaceName: facts.workspace.name,
+              token,
+              expiresAt: tokenExpiresAt,
+            },
+          };
         }),
-    );
+      )
+      .pipe(
+        Effect.catchTag("Application.WorkspaceAccessPersistenceFailure", () =>
+          Effect.fail(internalFailure("WorkspaceAccess.inviteMember")),
+        ),
+      );
+    yield* invitationNotifier
+      .sendInvitation(committed.notification)
+      .pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.inviteMember.notify")));
+    return committed.outcome;
   });
 
   const acceptInvitation = Effect.fn("WorkspaceAccess.acceptInvitation")(function* (
@@ -419,6 +501,11 @@ const make = Effect.gen(function* () {
             new WorkspaceInvitationUnavailable({ invitationId: command.invitationId }),
           );
         }
+        if (facts.invitation.tokenExpiresAt <= occurredAt) {
+          return yield* Effect.fail(
+            new WorkspaceInvitationUnavailable({ invitationId: command.invitationId }),
+          );
+        }
         if (facts.membership !== undefined) {
           return yield* Effect.fail(
             new AlreadyWorkspaceMemberError({ workspaceId: facts.invitation.workspaceId }),
@@ -434,24 +521,14 @@ const make = Effect.gen(function* () {
               }),
             );
           }
-          workspaceIdentityId = WorkspaceIdentity.fields.id.make(globalThis.crypto.randomUUID());
-          yield* transaction.startFirstMembership(
-            WorkspaceAccessView.make({
-              workspace: facts.workspace,
-              identity: {
-                id: workspaceIdentityId,
-                workspaceId: facts.invitation.workspaceId,
-                accountId: command.actorAccountId,
-                ...command.initialIdentityProfile,
-              },
-              membership: {
-                workspaceId: facts.invitation.workspaceId,
-                identityId: workspaceIdentityId,
-                role: "member",
-                startedAt: occurredAt,
-              },
-            }),
-          );
+          workspaceIdentityId = yield* claimInvitation(transaction, {
+            accountId: command.actorAccountId,
+            invitation: facts.invitation,
+            workspace: facts.workspace,
+            identity: undefined,
+            initialIdentityProfile: command.initialIdentityProfile,
+            occurredAt,
+          });
         } else {
           if (command.initialIdentityProfile !== undefined) {
             return yield* Effect.fail(
@@ -460,18 +537,14 @@ const make = Effect.gen(function* () {
               }),
             );
           }
-          workspaceIdentityId = facts.identity.id;
-          yield* transaction.reactivateMembership(
-            facts.identity,
-            WorkspaceMembership.make({
-              workspaceId: facts.invitation.workspaceId,
-              identityId: workspaceIdentityId,
-              role: "member",
-              startedAt: occurredAt,
-            }),
-          );
+          workspaceIdentityId = yield* claimInvitation(transaction, {
+            accountId: command.actorAccountId,
+            invitation: facts.invitation,
+            workspace: facts.workspace,
+            identity: facts.identity,
+            occurredAt,
+          });
         }
-        yield* transaction.acceptInvitation(command.invitationId, occurredAt);
 
         const outcome = WorkspaceInvitationAccepted.make({
           invitationId: command.invitationId,
@@ -494,6 +567,89 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const redeemInvitation = Effect.fn("WorkspaceAccess.redeemInvitation")(function* (
+    unvalidatedCommand: RedeemWorkspaceInvitationCommandType,
+  ) {
+    const command = yield* Schema.decodeUnknownEffect(RedeemWorkspaceInvitationCommand)(
+      unvalidatedCommand,
+    ).pipe(
+      Effect.tapError((cause) =>
+        Effect.logError("WorkspaceAccess.redeemInvitation.validate", cause),
+      ),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.redeemInvitation.validate")),
+    );
+    const proposedAccountId = UserId.make(globalThis.crypto.randomUUID());
+    return yield* commitTransition<
+      WorkspaceInvitationRedeemedType,
+      RedeemWorkspaceInvitationFailure
+    >("WorkspaceAccess.redeemInvitation", (transaction, occurredAt) =>
+      Effect.gen(function* () {
+        const facts = yield* transaction.serializeInvitationRedemption(
+          command.token,
+          proposedAccountId,
+          occurredAt,
+        );
+        if (facts.invitation === undefined || facts.workspace === undefined) {
+          return yield* Effect.fail(new WorkspaceInvitationRedemptionUnavailable());
+        }
+
+        const account =
+          facts.account ??
+          User.make({
+            id: proposedAccountId,
+            email: facts.invitation.inviteeEmail,
+            displayName: command.displayName,
+          });
+        if (facts.account === undefined) {
+          yield* transaction.createAccount(account);
+        }
+        if (facts.membership !== undefined) {
+          return yield* Effect.fail(
+            new AlreadyWorkspaceMemberError({ workspaceId: facts.invitation.workspaceId }),
+          );
+        }
+
+        const workspaceIdentityId = yield* claimInvitation(
+          transaction,
+          facts.identity === undefined
+            ? {
+                accountId: account.id,
+                invitation: facts.invitation,
+                workspace: facts.workspace,
+                identity: undefined,
+                initialIdentityProfile: command.initialIdentityProfile,
+                occurredAt,
+              }
+            : {
+                accountId: account.id,
+                invitation: facts.invitation,
+                workspace: facts.workspace,
+                identity: facts.identity,
+                occurredAt,
+              },
+        );
+
+        return {
+          outcome: WorkspaceInvitationRedeemed.make({
+            account,
+            invitationId: facts.invitation.id,
+            workspaceId: facts.invitation.workspaceId,
+            workspaceIdentityId,
+            occurredAt,
+          }),
+          auditEvent: makeAuditEvent(account.id, occurredAt, {
+            type: "workspace.invitation_accepted",
+            metadata: {
+              workspaceId: facts.invitation.workspaceId,
+              workspaceIdentityId,
+              invitationId: facts.invitation.id,
+            },
+          }),
+        } satisfies TransitionCommit<WorkspaceInvitationRedeemedType>;
+      }),
+    );
+  });
+
   const changeMemberRole = Effect.fn("WorkspaceAccess.changeMemberRole")(function* (
     unvalidatedCommand: ChangeWorkspaceRoleCommandType,
   ) {
@@ -510,7 +666,7 @@ const make = Effect.gen(function* () {
       ChangeWorkspaceRoleFailure
     >("WorkspaceAccess.changeMemberRole", (transaction, occurredAt) =>
       Effect.gen(function* () {
-        const facts = yield* transaction.serializeMemberAdministration(
+        const facts = yield* transaction.serializeFullMemberAdministration(
           command.actorAccountId,
           command.workspaceId,
           command.workspaceIdentityId,
@@ -524,7 +680,7 @@ const make = Effect.gen(function* () {
           facts.targetMembership.role === "guest"
         ) {
           return yield* Effect.fail(
-            new WorkspaceMemberUnavailable({
+            new FullMemberUnavailable({
               workspaceId: command.workspaceId,
               workspaceIdentityId: command.workspaceIdentityId,
             }),
@@ -584,20 +740,22 @@ const make = Effect.gen(function* () {
     );
   });
 
-  const removeMember = Effect.fn("WorkspaceAccess.removeMember")(function* (
-    unvalidatedCommand: RemoveWorkspaceMemberCommandType,
+  const removeFullMember = Effect.fn("WorkspaceAccess.removeFullMember")(function* (
+    unvalidatedCommand: RemoveFullMemberCommandType,
   ) {
-    const command = yield* Schema.decodeUnknownEffect(RemoveWorkspaceMemberCommand)(
+    const command = yield* Schema.decodeUnknownEffect(RemoveFullMemberCommand)(
       unvalidatedCommand,
     ).pipe(
-      Effect.tapError((cause) => Effect.logError("WorkspaceAccess.removeMember.validate", cause)),
-      Effect.mapError(() => internalFailure("WorkspaceAccess.removeMember.validate")),
+      Effect.tapError((cause) =>
+        Effect.logError("WorkspaceAccess.removeFullMember.validate", cause),
+      ),
+      Effect.mapError(() => internalFailure("WorkspaceAccess.removeFullMember.validate")),
     );
-    return yield* commitTransition<WorkspaceMemberRemovedType, RemoveWorkspaceMemberFailure>(
-      "WorkspaceAccess.removeMember",
+    return yield* commitTransition<FullMemberRemovedType, RemoveFullMemberFailure>(
+      "WorkspaceAccess.removeFullMember",
       (transaction, occurredAt) =>
         Effect.gen(function* () {
-          const facts = yield* transaction.serializeMemberAdministration(
+          const facts = yield* transaction.serializeFullMemberAdministration(
             command.actorAccountId,
             command.workspaceId,
             command.workspaceIdentityId,
@@ -613,13 +771,13 @@ const make = Effect.gen(function* () {
             facts.targetMembership.role === "guest"
           ) {
             return yield* Effect.fail(
-              new WorkspaceMemberUnavailable({
+              new FullMemberUnavailable({
                 workspaceId: command.workspaceId,
                 workspaceIdentityId: command.workspaceIdentityId,
               }),
             );
           }
-          if (!canRemoveWorkspaceMember(facts.membership.role, facts.targetMembership.role)) {
+          if (!canRemoveFullMember(facts.membership.role, facts.targetMembership.role)) {
             return yield* Effect.fail(
               new WorkspaceAdministrationForbidden({ workspaceId: command.workspaceId }),
             );
@@ -628,13 +786,13 @@ const make = Effect.gen(function* () {
             return yield* Effect.fail(new LastWorkspaceOwner({ workspaceId: command.workspaceId }));
           }
 
-          yield* transaction.endMemberAndRevokeChannels(
+          yield* transaction.endFullMemberAndRevokeChannels(
             command.workspaceId,
             command.workspaceIdentityId,
             occurredAt,
           );
           return {
-            outcome: WorkspaceMemberRemoved.make({
+            outcome: FullMemberRemoved.make({
               workspaceId: command.workspaceId,
               workspaceIdentityId: command.workspaceIdentityId,
               endedAt: occurredAt,
@@ -647,7 +805,7 @@ const make = Effect.gen(function* () {
                 reason: "removed_by_administrator",
               },
             }),
-          } satisfies TransitionCommit<WorkspaceMemberRemovedType>;
+          } satisfies TransitionCommit<FullMemberRemovedType>;
         }),
     );
   });
@@ -670,16 +828,18 @@ const make = Effect.gen(function* () {
       return access;
     }),
     listInvitationsForActor: Effect.fn("WorkspaceAccess.listInvitationsForActor")(
-      (actorAccountId) =>
-        persistence
-          .listPendingInvitations(actorAccountId)
+      function* (actorAccountId) {
+        const now = yield* Clock.currentTimeMillis;
+        return yield* persistence
+          .listPendingInvitations(actorAccountId, new Date(now))
           .pipe(
             Effect.catchTag("Application.WorkspaceAccessPersistenceFailure", () =>
               Effect.fail(internalFailure("WorkspaceAccess.listInvitationsForActor")),
             ),
-          ),
+          );
+      },
     ),
-    listMembersForActor: Effect.fn("WorkspaceAccess.listMembersForActor")(
+    listFullMembersForActor: Effect.fn("WorkspaceAccess.listFullMembersForActor")(
       function* (actorAccountId, workspaceId) {
         const access = yield* readActiveAccess(actorAccountId, workspaceId);
         if (access === undefined) {
@@ -689,10 +849,10 @@ const make = Effect.gen(function* () {
           return yield* Effect.fail(new WorkspaceAdministrationForbidden({ workspaceId }));
         }
         const members = yield* persistence
-          .listMembersForAdministrator(actorAccountId, workspaceId)
+          .listFullMembersForAdministrator(actorAccountId, workspaceId)
           .pipe(
             Effect.catchTag("Application.WorkspaceAccessPersistenceFailure", () =>
-              Effect.fail(internalFailure("WorkspaceAccess.listMembersForActor")),
+              Effect.fail(internalFailure("WorkspaceAccess.listFullMembersForActor")),
             ),
           );
         if (members === undefined) {
@@ -706,10 +866,14 @@ const make = Effect.gen(function* () {
     leave,
     inviteMember,
     acceptInvitation,
+    redeemInvitation,
     changeMemberRole,
-    removeMember,
+    removeFullMember,
   });
 });
 
-export const WorkspaceAccessLive: Layer.Layer<WorkspaceAccess, never, WorkspaceAccessPersistence> =
-  Layer.effect(WorkspaceAccess, make);
+export const WorkspaceAccessLive: Layer.Layer<
+  WorkspaceAccess,
+  never,
+  WorkspaceAccessPersistence | WorkspaceInvitationNotifier
+> = Layer.effect(WorkspaceAccess, make);

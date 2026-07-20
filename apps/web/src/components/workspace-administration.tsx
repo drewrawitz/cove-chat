@@ -7,8 +7,8 @@ import {
   invalidateWorkspacesListWorkspaces,
   useWorkspacesChangeWorkspaceRole,
   useWorkspacesInviteWorkspaceMember,
-  useWorkspacesListWorkspaceMembers,
-  useWorkspacesRemoveWorkspaceMember,
+  useWorkspacesListFullMembers,
+  useWorkspacesRemoveFullMember,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
 
@@ -18,7 +18,7 @@ interface WorkspaceAdministrationProps {
   readonly workspaceId: string;
 }
 
-interface MemberReference {
+interface FullMemberReference {
   readonly identity: {
     readonly id: string;
     readonly name: string;
@@ -33,10 +33,10 @@ export function WorkspaceAdministration({
   workspaceId,
 }: WorkspaceAdministrationProps): ReactElement {
   const queryClient = useQueryClient();
-  const members = useWorkspacesListWorkspaceMembers(workspaceId, { query: { retry: false } });
+  const members = useWorkspacesListFullMembers(workspaceId, { query: { retry: false } });
   const inviteMember = useWorkspacesInviteWorkspaceMember();
   const changeRole = useWorkspacesChangeWorkspaceRole();
-  const removeMember = useWorkspacesRemoveWorkspaceMember();
+  const removeFullMember = useWorkspacesRemoveFullMember();
   const [invitedEmail, setInvitedEmail] = useState<string>();
   const [administrationMessage, setAdministrationMessage] = useState<string>();
 
@@ -67,7 +67,7 @@ export function WorkspaceAdministration({
     ]);
   };
 
-  const saveRole = (event: FormEvent<HTMLFormElement>, member: MemberReference): void => {
+  const saveRole = (event: FormEvent<HTMLFormElement>, member: FullMemberReference): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const role = requiredFormValue(form, "role");
@@ -88,9 +88,9 @@ export function WorkspaceAdministration({
     );
   };
 
-  const remove = (member: MemberReference): void => {
+  const remove = (member: FullMemberReference): void => {
     setAdministrationMessage(undefined);
-    removeMember.mutate(
+    removeFullMember.mutate(
       { workspaceId, workspaceIdentityId: member.identity.id },
       {
         onSuccess: async () => {
@@ -105,13 +105,13 @@ export function WorkspaceAdministration({
     <section className="mt-10 border-t pt-6">
       <h2 className="font-heading text-xl font-semibold">Full Members</h2>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-        Invite Accounts as Members and deliberately assign Workspace Roles. Owners alone can appoint
-        another Owner.
+        Invite anyone by email as a Member and deliberately assign Workspace Roles. Owners alone can
+        appoint another Owner.
       </p>
 
       <form className="mt-6 flex flex-col gap-3 sm:flex-row" onSubmit={invite}>
         <label className="min-w-0 flex-1 text-sm font-medium">
-          Account email to invite
+          Email address to invite
           <input
             name="inviteeEmail"
             type="email"
@@ -190,7 +190,7 @@ export function WorkspaceAdministration({
                   <Button
                     type="button"
                     variant="destructive"
-                    disabled={!canManageMember || isCurrentIdentity || removeMember.isPending}
+                    disabled={!canManageMember || isCurrentIdentity || removeFullMember.isPending}
                     onClick={() => remove(member)}
                   >
                     Remove {member.identity.name}
@@ -206,9 +206,9 @@ export function WorkspaceAdministration({
           {administrationMessage}
         </p>
       )}
-      {changeRole.error === null && removeMember.error === null ? null : (
+      {changeRole.error === null && removeFullMember.error === null ? null : (
         <p className="mt-4 text-sm text-destructive" role="alert">
-          {administrationErrorMessage(changeRole.error ?? removeMember.error)}
+          {administrationErrorMessage(changeRole.error ?? removeFullMember.error)}
         </p>
       )}
     </section>
@@ -231,10 +231,6 @@ function invitationErrorMessage(error: unknown): string {
   switch (error.info.code) {
     case "ALREADY_WORKSPACE_MEMBER":
       return "That Account is already a Full Member of this Workspace.";
-    case "WORKSPACE_INVITATION_ALREADY_PENDING":
-      return "That Account already has a pending invitation.";
-    case "WORKSPACE_INVITEE_UNAVAILABLE":
-      return "Cove could not find an Account with that email address.";
     default:
       return "Cove could not send this invitation. Try again in a moment.";
   }

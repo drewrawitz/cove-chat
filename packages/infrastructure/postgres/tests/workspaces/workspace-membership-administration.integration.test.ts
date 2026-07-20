@@ -7,11 +7,17 @@ import {
   InitialWorkspaceIdentityProfileRequired,
   InviteWorkspaceMemberCommand,
   LastWorkspaceOwner,
-  RemoveWorkspaceMemberCommand,
+  RemoveFullMemberCommand,
+  RedeemWorkspaceInvitationCommand,
   WorkspaceAccess,
   WorkspaceAdministrationForbidden,
+  WorkspaceInvitationRedemptionUnavailable,
+  WorkspaceInvitationUnavailable,
+  getCurrentUser,
+  redeemWorkspaceInvitation,
 } from "@cove/application";
 import {
+  DisplayName,
   EmailAddress,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
@@ -19,12 +25,250 @@ import {
   makeWorkspaceId,
   makeWorkspaceIdentityId,
 } from "@cove/domain";
-import { Effect } from "effect";
+import { PersistenceError, SessionRepository, type WorkspaceInvitationToken } from "@cove/ports";
+import { Clock, Effect, Redacted, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { randomUUID } from "node:crypto";
-import { TestPostgres } from "../support/database.ts";
+import { TestPostgres, TestWorkspaceInvitationNotifier } from "../support/database.ts";
 
 layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administration", (it) => {
+  it.effect("creates an invited Account and Membership when an unknown email redeems", () =>
+    Effect.gen(function* () {
+      const suffix = randomUUID();
+      const ownerAccountId = yield* makeUserId(`unknown-invite-owner-${suffix}`);
+      const workspaceId = yield* makeWorkspaceId(`unknown-invite-workspace-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(
+        `unknown-invite-owner-identity-${suffix}`,
+      );
+      const inviteeEmail = EmailAddress.make(`unknown-invitee-${suffix}@example.test`);
+      const sql = yield* SqlClient.SqlClient;
+      const workspaces = yield* WorkspaceAccess;
+      const notifications = yield* TestWorkspaceInvitationNotifier;
+
+      yield* sql`
+        INSERT INTO users (id, email, display_name)
+        VALUES (${ownerAccountId}, ${`unknown-invite-owner-${suffix}@example.test`}, 'Workspace Owner')
+      `;
+      yield* sql`
+        INSERT INTO workspaces (id, name)
+        VALUES (${workspaceId}, 'Unknown Invitee Team')
+      `;
+      yield* sql`
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        VALUES (
+          ${ownerIdentityId},
+          ${workspaceId},
+          ${ownerAccountId},
+          'Workspace Owner',
+          '/avatars/owner.svg',
+          'owner'
+        )
+      `;
+
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerAccountId,
+          workspaceId,
+          inviteeEmail,
+        }),
+      );
+
+      expect(invitation).toMatchObject({
+        _tag: "WorkspaceInvitationIssued",
+        workspaceId,
+        inviteeEmail,
+      });
+      const notification = yield* notifications.take();
+      const redemptionCommand = RedeemWorkspaceInvitationCommand.make({
+        token: notification.token,
+        displayName: DisplayName.make("New Account"),
+        initialIdentityProfile: {
+          name: WorkspaceIdentityName.make("New Workspace Member"),
+          avatarUrl: WorkspaceAvatarUrl.make("/avatars/new-member.svg"),
+        },
+      });
+      const sessionRepository = yield* SessionRepository;
+      const sessionFailure = yield* redeemWorkspaceInvitation(redemptionCommand).pipe(
+        Effect.provideService(
+          SessionRepository,
+          SessionRepository.of({
+            ...sessionRepository,
+            create: Effect.fn("SessionRepository.Test.failCreate")(() =>
+              Effect.fail(
+                new PersistenceError({ operation: "SessionRepository.create", cause: "test" }),
+              ),
+            ),
+          }),
+        ),
+        Effect.flip,
+      );
+      const rolledBack = yield* sql<{
+        readonly accountCount: number;
+        readonly acceptedAt: Date | null;
+      }>`
+        SELECT
+          count(account.id)::integer AS "accountCount",
+          invitation.accepted_at AS "acceptedAt"
+        FROM workspace_invitations AS invitation
+        LEFT JOIN users AS account
+          ON lower(account.email) = lower(invitation.invitee_email)
+        WHERE invitation.id = ${invitation.invitationId}
+        GROUP BY invitation.accepted_at
+      `;
+      const concurrentAttempts = yield* Effect.all(
+        [
+          redeemWorkspaceInvitation(redemptionCommand).pipe(Effect.result),
+          redeemWorkspaceInvitation(redemptionCommand).pipe(Effect.result),
+        ],
+        { concurrency: 2 },
+      );
+      const successfulAttempts = concurrentAttempts.flatMap((attempt) =>
+        Result.isSuccess(attempt) ? [attempt.success] : [],
+      );
+      const authenticated = successfulAttempts[0];
+      if (authenticated === undefined) {
+        return yield* Effect.die("Expected one concurrent redemption to succeed");
+      }
+      const redeemed = authenticated.invitation;
+      const currentAccount = yield* getCurrentUser(authenticated.session.token);
+      const access = yield* workspaces.getForActor(redeemed.account.id, workspaceId);
+      const replayFailure = yield* workspaces
+        .redeemInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token: notification.token,
+            displayName: DisplayName.make("Duplicate Account"),
+            initialIdentityProfile: {
+              name: WorkspaceIdentityName.make("Duplicate Member"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/duplicate.svg"),
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+
+      expect(redeemed).toMatchObject({
+        _tag: "WorkspaceInvitationRedeemed",
+        invitationId: invitation.invitationId,
+        workspaceId,
+        account: { email: inviteeEmail, displayName: "New Account" },
+      });
+      expect(sessionFailure).toMatchObject({ _tag: "Ports.PersistenceError" });
+      expect(rolledBack).toEqual([{ accountCount: 0, acceptedAt: null }]);
+      expect(successfulAttempts).toHaveLength(1);
+      expect(currentAccount).toMatchObject({
+        id: redeemed.account.id,
+        email: inviteeEmail,
+      });
+      expect(access).toMatchObject({
+        identity: {
+          accountId: redeemed.account.id,
+          name: "New Workspace Member",
+          avatarUrl: "/avatars/new-member.svg",
+        },
+        membership: { role: "member" },
+      });
+      expect(replayFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+    }),
+  );
+
+  it.effect("recovers failed delivery and expiry by rotating the invitation token", () =>
+    Effect.gen(function* () {
+      const suffix = randomUUID();
+      const ownerAccountId = yield* makeUserId(`retry-invite-owner-${suffix}`);
+      const workspaceId = yield* makeWorkspaceId(`retry-invite-workspace-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(
+        `retry-invite-owner-identity-${suffix}`,
+      );
+      const inviteeEmail = EmailAddress.make(`retry-invitee-${suffix}@example.test`);
+      const sql = yield* SqlClient.SqlClient;
+      const workspaces = yield* WorkspaceAccess;
+      const notifications = yield* TestWorkspaceInvitationNotifier;
+
+      yield* sql`
+        INSERT INTO users (id, email, display_name)
+        VALUES (${ownerAccountId}, ${`retry-invite-owner-${suffix}@example.test`}, 'Workspace Owner')
+      `;
+      yield* sql`
+        INSERT INTO workspaces (id, name)
+        VALUES (${workspaceId}, 'Retry Invitation Team')
+      `;
+      yield* sql`
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        VALUES (
+          ${ownerIdentityId},
+          ${workspaceId},
+          ${ownerAccountId},
+          'Workspace Owner',
+          '/avatars/owner.svg',
+          'owner'
+        )
+      `;
+
+      const invite = () =>
+        workspaces.inviteMember(
+          InviteWorkspaceMemberCommand.make({
+            actorAccountId: ownerAccountId,
+            workspaceId,
+            inviteeEmail,
+          }),
+        );
+      const redeem = (token: WorkspaceInvitationToken) =>
+        workspaces.redeemInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token,
+            displayName: DisplayName.make("Retry Account"),
+            initialIdentityProfile: {
+              name: WorkspaceIdentityName.make("Retry Member"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/retry.svg"),
+            },
+          }),
+        );
+
+      yield* notifications.failNext();
+      const deliveryFailure = yield* invite().pipe(Effect.flip);
+      const failedNotification = yield* notifications.takeFailed();
+      const retriedInvitation = yield* invite();
+      const retriedNotification = yield* notifications.take();
+      const rotatedTokenFailure = yield* redeem(failedNotification.token).pipe(Effect.flip);
+
+      const now = yield* Clock.currentTimeMillis;
+      yield* sql`
+        UPDATE workspace_invitations
+        SET token_expires_at = ${new Date(now - 1)}
+        WHERE id = ${retriedInvitation.invitationId}
+      `;
+      const expiredTokenFailure = yield* redeem(retriedNotification.token).pipe(Effect.flip);
+      const renewedInvitation = yield* invite();
+      const renewedNotification = yield* notifications.take();
+      const redeemed = yield* redeem(renewedNotification.token);
+
+      expect(deliveryFailure).toMatchObject({ _tag: "Application.WorkspaceAccessFailure" });
+      expect(retriedInvitation.invitationId).toBe(renewedInvitation.invitationId);
+      expect(Redacted.value(failedNotification.token)).not.toBe(
+        Redacted.value(retriedNotification.token),
+      );
+      expect(Redacted.value(retriedNotification.token)).not.toBe(
+        Redacted.value(renewedNotification.token),
+      );
+      expect(rotatedTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+      expect(expiredTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+      expect(redeemed.account.email).toBe(inviteeEmail);
+    }),
+  );
+
   it.effect("creates a Member identity and Membership when an invited Account accepts", () =>
     Effect.gen(function* () {
       const suffix = randomUUID();
@@ -72,22 +316,51 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
           inviteeEmail,
         }),
       );
+      const now = yield* Clock.currentTimeMillis;
+      yield* sql`
+        UPDATE workspace_invitations
+        SET token_expires_at = ${new Date(now - 1)}
+        WHERE id = ${invitation.invitationId}
+      `;
+      const expiredPending = yield* workspaces.listInvitationsForActor(inviteeAccountId);
+      const expiredAcceptance = yield* workspaces
+        .acceptInvitation(
+          AcceptWorkspaceInvitationCommand.make({
+            actorAccountId: inviteeAccountId,
+            invitationId: invitation.invitationId,
+            initialIdentityProfile: {
+              name: WorkspaceIdentityName.make("Expired Member"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/expired.svg"),
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+      const renewedInvitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerAccountId,
+          workspaceId,
+          inviteeEmail,
+        }),
+      );
       const pending = yield* workspaces.listInvitationsForActor(inviteeAccountId);
 
+      expect(expiredPending).toEqual([]);
+      expect(expiredAcceptance).toBeInstanceOf(WorkspaceInvitationUnavailable);
+      expect(renewedInvitation.invitationId).toBe(invitation.invitationId);
       expect(pending).toEqual([
         {
-          id: invitation.invitationId,
+          id: renewedInvitation.invitationId,
           workspace: { id: workspaceId, name: "Invitation Team" },
           role: "member",
           requiresIdentityProfile: true,
-          invitedAt: invitation.occurredAt,
+          invitedAt: renewedInvitation.occurredAt,
         },
       ]);
 
       const accepted = yield* workspaces.acceptInvitation(
         AcceptWorkspaceInvitationCommand.make({
           actorAccountId: inviteeAccountId,
-          invitationId: invitation.invitationId,
+          invitationId: renewedInvitation.invitationId,
           initialIdentityProfile: {
             name: WorkspaceIdentityName.make("Invited Member"),
             avatarUrl: WorkspaceAvatarUrl.make("/avatars/invited.svg"),
@@ -95,7 +368,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         }),
       );
       const access = yield* workspaces.getForActor(inviteeAccountId, workspaceId);
-      const members = yield* workspaces.listMembersForActor(ownerAccountId, workspaceId);
+      const members = yield* workspaces.listFullMembersForActor(ownerAccountId, workspaceId);
       const auditEvents = yield* sql<{
         actorAccountId: string;
         eventType: string;
@@ -113,7 +386,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
 
       expect(accepted).toMatchObject({
         _tag: "WorkspaceInvitationAccepted",
-        invitationId: invitation.invitationId,
+        invitationId: renewedInvitation.invitationId,
         workspaceId,
         workspaceIdentityId: access.identity.id,
       });
@@ -138,7 +411,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
             metadata: {
               workspaceId,
               invitationId: invitation.invitationId,
-              inviteeAccountId,
+              inviteeEmail,
             },
           },
           {
@@ -376,7 +649,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         previousRole: "member",
         role: "admin",
       });
-      expect(invitedByAdmin._tag).toBe("WorkspaceInvitationCreated");
+      expect(invitedByAdmin._tag).toBe("WorkspaceInvitationIssued");
       expect(memberInvitationDenied).toBeInstanceOf(WorkspaceAdministrationForbidden);
       expect(ownerAppointmentDenied).toBeInstanceOf(WorkspaceAdministrationForbidden);
       expect(appointedByOwner).toMatchObject({
@@ -461,8 +734,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         )
         .pipe(Effect.flip);
       const removalFailure = yield* workspaces
-        .removeMember(
-          RemoveWorkspaceMemberCommand.make({
+        .removeFullMember(
+          RemoveFullMemberCommand.make({
             actorAccountId: ownerAccountId,
             workspaceId,
             workspaceIdentityId: ownerIdentityId,
@@ -510,8 +783,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         )
       `;
 
-      const removed = yield* workspaces.removeMember(
-        RemoveWorkspaceMemberCommand.make({
+      const removed = yield* workspaces.removeFullMember(
+        RemoveFullMemberCommand.make({
           actorAccountId: ownerAccountId,
           workspaceId,
           workspaceIdentityId: ownerIdentityId,
@@ -527,7 +800,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
           AND metadata ->> 'workspaceId' = ${workspaceId}
       `;
 
-      expect(removed._tag).toBe("WorkspaceMemberRemoved");
+      expect(removed._tag).toBe("FullMemberRemoved");
       expect(endedAccess._tag).toBe("Application.WorkspaceUnavailable");
       expect(
         (yield* workspaces.getForActor(replacementAccountId, workspaceId)).membership.role,

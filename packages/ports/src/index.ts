@@ -34,3 +34,11 @@ export { ChannelRepository, type ChannelRepositoryService } from "./channels/ind
 export { MembershipRepository, type MembershipRepositoryService } from "./memberships/index.ts";
 export { PersistenceError } from "./persistence-error.ts";
 export { TransactionManager, type TransactionManagerService } from "./transaction-manager.ts";
+export {
+  WorkspaceInvitationNotifier,
+  WorkspaceInvitationNotificationError,
+  WorkspaceInvitationToken,
+  WorkspaceInvitationTokenValue,
+  type WorkspaceInvitationNotification,
+  type WorkspaceInvitationNotifierService,
+} from "./workspaces/index.ts";

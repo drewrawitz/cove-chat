@@ -12,6 +12,7 @@ import {
   SessionRepository,
   TransactionManager,
   UserRepository,
+  WorkspaceInvitationNotifier,
 } from "@cove/ports";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -42,8 +43,8 @@ const AuthPortsTest = Layer.mergeAll(
       listInvitationsForActor: Effect.fn("WorkspaceAccess.Test.listInvitationsForActor")(() =>
         unmockedWorkspaceAccess("listInvitationsForActor"),
       ),
-      listMembersForActor: Effect.fn("WorkspaceAccess.Test.listMembersForActor")(() =>
-        unmockedWorkspaceAccess("listMembersForActor"),
+      listFullMembersForActor: Effect.fn("WorkspaceAccess.Test.listFullMembersForActor")(() =>
+        unmockedWorkspaceAccess("listFullMembersForActor"),
       ),
       inviteMember: Effect.fn("WorkspaceAccess.Test.inviteMember")(() =>
         unmockedWorkspaceAccess("inviteMember"),
@@ -51,11 +52,22 @@ const AuthPortsTest = Layer.mergeAll(
       acceptInvitation: Effect.fn("WorkspaceAccess.Test.acceptInvitation")(() =>
         unmockedWorkspaceAccess("acceptInvitation"),
       ),
+      redeemInvitation: Effect.fn("WorkspaceAccess.Test.redeemInvitation")(() =>
+        unmockedWorkspaceAccess("redeemInvitation"),
+      ),
       changeMemberRole: Effect.fn("WorkspaceAccess.Test.changeMemberRole")(() =>
         unmockedWorkspaceAccess("changeMemberRole"),
       ),
-      removeMember: Effect.fn("WorkspaceAccess.Test.removeMember")(() =>
-        unmockedWorkspaceAccess("removeMember"),
+      removeFullMember: Effect.fn("WorkspaceAccess.Test.removeFullMember")(() =>
+        unmockedWorkspaceAccess("removeFullMember"),
+      ),
+    }),
+  ),
+  Layer.succeed(
+    WorkspaceInvitationNotifier,
+    WorkspaceInvitationNotifier.of({
+      sendInvitation: Effect.fn("WorkspaceInvitationNotifier.Test.sendInvitation")(
+        () => Effect.void,
       ),
     }),
   ),

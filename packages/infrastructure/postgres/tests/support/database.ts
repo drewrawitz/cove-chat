@@ -4,7 +4,13 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { PgClient } from "@effect/sql-pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { Effect, Layer, Redacted } from "effect";
+import {
+  WorkspaceInvitationNotifier,
+  WorkspaceInvitationNotificationError,
+  type WorkspaceInvitationNotification,
+  type WorkspaceInvitationNotifierService,
+} from "@cove/ports";
+import { Context, Effect, Layer, Queue, Redacted, Ref } from "effect";
 import { PostgresRepositories } from "../../src/index.ts";
 
 const execFileAsync = promisify(execFile);
@@ -47,4 +53,50 @@ export const TestDatabase = Layer.unwrap(
   }),
 );
 
-export const TestPostgres = PostgresRepositories.pipe(Layer.provideMerge(TestDatabase));
+export interface TestWorkspaceInvitationNotifierService extends WorkspaceInvitationNotifierService {
+  readonly failNext: () => Effect.Effect<void>;
+  readonly takeFailed: () => Effect.Effect<WorkspaceInvitationNotification>;
+  readonly take: () => Effect.Effect<WorkspaceInvitationNotification>;
+}
+
+export class TestWorkspaceInvitationNotifier extends Context.Service<
+  TestWorkspaceInvitationNotifier,
+  TestWorkspaceInvitationNotifierService
+>()("@cove/infrastructure-postgres/test/TestWorkspaceInvitationNotifier") {}
+
+const TestWorkspaceInvitationNotifications = Layer.effectContext(
+  Effect.gen(function* () {
+    const notifications = yield* Queue.unbounded<WorkspaceInvitationNotification>();
+    const failedNotifications = yield* Queue.unbounded<WorkspaceInvitationNotification>();
+    const shouldFail = yield* Ref.make(false);
+    const notifier = TestWorkspaceInvitationNotifier.of({
+      sendInvitation: Effect.fn("TestWorkspaceInvitationNotifier.sendInvitation")(
+        function* (notification) {
+          if (yield* Ref.getAndSet(shouldFail, false)) {
+            yield* Queue.offer(failedNotifications, notification);
+            return yield* Effect.fail(
+              new WorkspaceInvitationNotificationError({ cause: "simulated delivery failure" }),
+            );
+          }
+          yield* Queue.offer(notifications, notification);
+        },
+      ),
+      failNext: Effect.fn("TestWorkspaceInvitationNotifier.failNext")(() =>
+        Ref.set(shouldFail, true),
+      ),
+      takeFailed: Effect.fn("TestWorkspaceInvitationNotifier.takeFailed")(() =>
+        Queue.take(failedNotifications),
+      ),
+      take: Effect.fn("TestWorkspaceInvitationNotifier.take")(() => Queue.take(notifications)),
+    });
+    return Context.empty().pipe(
+      Context.add(WorkspaceInvitationNotifier, notifier),
+      Context.add(TestWorkspaceInvitationNotifier, notifier),
+    );
+  }),
+);
+
+export const TestPostgres = PostgresRepositories.pipe(
+  Layer.provideMerge(TestDatabase),
+  Layer.provideMerge(TestWorkspaceInvitationNotifications),
+);

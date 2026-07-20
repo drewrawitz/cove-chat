@@ -23,7 +23,7 @@ model User {
   sessions            Session[]
   auditEvents         AuditEvent[]
   invitationsSent     WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
-  invitationsReceived WorkspaceInvitation[] @relation("WorkspaceInvitationInvitee")
+  invitationsAccepted WorkspaceInvitation[] @relation("WorkspaceInvitationAccepter")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
@@ -80,18 +80,23 @@ model Workspace {
 }
 
 model WorkspaceInvitation {
-  id                 String        @id
-  workspaceId        String        @map("workspace_id")
-  inviteeAccountId   String        @map("invitee_account_id")
-  invitedByAccountId String        @map("invited_by_account_id")
-  role               WorkspaceRole @default(MEMBER)
-  invitedAt          DateTime      @default(now()) @map("invited_at") @db.Timestamptz(6)
-  acceptedAt         DateTime?     @map("accepted_at") @db.Timestamptz(6)
-  workspace          Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  invitee            User          @relation("WorkspaceInvitationInvitee", fields: [inviteeAccountId], references: [id], onDelete: Restrict)
-  invitedBy          User          @relation("WorkspaceInvitationInviter", fields: [invitedByAccountId], references: [id], onDelete: Restrict)
+  id                  String        @id
+  workspaceId         String        @map("workspace_id")
+  inviteeEmail        String        @map("invitee_email")
+  invitedByAccountId  String        @map("invited_by_account_id")
+  acceptedByAccountId String?       @map("accepted_by_account_id")
+  tokenHash            String        @unique @map("token_hash")
+  tokenExpiresAt       DateTime      @map("token_expires_at") @db.Timestamptz(6)
+  role                WorkspaceRole @default(MEMBER)
+  invitedAt           DateTime      @default(now()) @map("invited_at") @db.Timestamptz(6)
+  acceptedAt          DateTime?     @map("accepted_at") @db.Timestamptz(6)
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy           User          @relation("WorkspaceInvitationInviter", fields: [invitedByAccountId], references: [id], onDelete: Restrict)
+  acceptedBy          User?         @relation("WorkspaceInvitationAccepter", fields: [acceptedByAccountId], references: [id], onDelete: Restrict)
 
-  @@index([inviteeAccountId, acceptedAt])
+  @@index([inviteeEmail, acceptedAt])
+  @@index([acceptedByAccountId])
+  @@index([tokenExpiresAt])
   @@index([workspaceId, acceptedAt])
   @@map("workspace_invitations")
 }

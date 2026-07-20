@@ -3,10 +3,11 @@ import { Effect, Schema } from "effect";
 import {
   WorkspaceInvitationAcceptedResponse,
   WorkspaceInvitationListResponse,
+  WorkspaceInvitationRedeemedResponse,
   WorkspaceRoleChangeResponse,
   WorkspaceCreatedResponse,
   WorkspaceIdentityUpdateResponse,
-  WorkspaceMemberListResponse,
+  FullMemberListResponse,
 } from "../../src/index.ts";
 
 const occurredAt = new Date("2026-07-18T14:30:00.000Z");
@@ -78,6 +79,24 @@ it.effect("encodes invitation and Workspace Role administration responses", () =
       }),
     ).toMatchObject({ outcome: "WorkspaceInvitationAccepted", invitationId: "invitation-1" });
     expect(
+      yield* Schema.encodeUnknownEffect(WorkspaceInvitationRedeemedResponse)({
+        outcome: "WorkspaceInvitationRedeemed",
+        account: {
+          id: "account-1",
+          email: "member@example.test",
+          displayName: "Invited Account",
+        },
+        invitationId: "invitation-1",
+        workspaceId: "workspace-1",
+        workspaceIdentityId: "identity-1",
+        occurredAt,
+      }),
+    ).toMatchObject({
+      outcome: "WorkspaceInvitationRedeemed",
+      account: { email: "member@example.test" },
+      invitationId: "invitation-1",
+    });
+    expect(
       yield* Schema.encodeUnknownEffect(WorkspaceRoleChangeResponse)({
         outcome: "WorkspaceRoleChanged",
         workspaceId: "workspace-1",
@@ -93,7 +112,7 @@ it.effect("encodes invitation and Workspace Role administration responses", () =
 it.effect("keeps guests out of the Full Member response", () =>
   Effect.gen(function* () {
     expect(
-      yield* Schema.decodeUnknownEffect(WorkspaceMemberListResponse)({
+      yield* Schema.decodeUnknownEffect(FullMemberListResponse)({
         members: [
           {
             identity: { id: "identity-1", name: "External Guest", avatarUrl: "/guest.svg" },

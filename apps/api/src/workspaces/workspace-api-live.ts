@@ -4,15 +4,19 @@ import {
   CreateWorkspaceCommand,
   InviteWorkspaceMemberCommand,
   LeaveWorkspaceCommand,
-  RemoveWorkspaceMemberCommand,
+  RemoveFullMemberCommand,
+  RedeemWorkspaceInvitationCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
+  redeemWorkspaceInvitation,
   makeEmailAddress,
+  makeWorkspaceInvitationToken,
   makeCsrfToken,
   makeSessionToken,
   validateCsrf,
 } from "@cove/application";
 import {
+  DisplayName,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
   WorkspaceIdentityProfile,
@@ -31,15 +35,17 @@ import {
 } from "@cove/protocol";
 import { Effect, Redacted } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { setAuthenticationCookies } from "../auth/index.ts";
 import {
   workspaceAccessResponse,
   workspaceCreatedResponse,
   workspaceIdentityUpdateResponse,
   workspaceInvitationAcceptedResponse,
-  workspaceInvitationCreatedResponse,
+  workspaceInvitationIssuedResponse,
   workspaceInvitationListResponse,
+  workspaceInvitationRedeemedResponse,
   workspaceListResponse,
-  workspaceMemberListResponse,
+  fullMemberListResponse,
   workspaceRoleChangeResponse,
 } from "./workspace-response.ts";
 
@@ -79,16 +85,23 @@ const inviteMemberErrorResponse = (error: unknown) => {
       return WorkspaceErrorResponses.alreadyMember;
     case "Application.WorkspaceAdministrationForbidden":
       return WorkspaceErrorResponses.administrationForbidden;
-    case "Application.WorkspaceInvitationAlreadyPending":
-      return WorkspaceErrorResponses.invitationAlreadyPending;
-    case "Application.WorkspaceInviteeUnavailable":
-      return WorkspaceErrorResponses.inviteeUnavailable;
     default:
       return workspaceUnavailableErrorResponse(error);
   }
 };
 
-const workspaceMembersErrorResponse = (error: unknown) =>
+const redeemInvitationErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.AlreadyWorkspaceMember":
+      return WorkspaceErrorResponses.alreadyMember;
+    case "Application.WorkspaceInvitationRedemptionUnavailable":
+      return WorkspaceErrorResponses.invitationUnavailable;
+    default:
+      return AuthErrorResponses.internalServerError;
+  }
+};
+
+const fullMemberListErrorResponse = (error: unknown) =>
   errorTag(error) === "Application.WorkspaceAdministrationForbidden"
     ? WorkspaceErrorResponses.administrationForbidden
     : workspaceUnavailableErrorResponse(error);
@@ -99,8 +112,8 @@ const memberAdministrationErrorResponse = (error: unknown) => {
       return WorkspaceErrorResponses.lastOwner;
     case "Application.WorkspaceAdministrationForbidden":
       return WorkspaceErrorResponses.administrationForbidden;
-    case "Application.WorkspaceMemberUnavailable":
-      return WorkspaceErrorResponses.memberUnavailable;
+    case "Application.FullMemberUnavailable":
+      return WorkspaceErrorResponses.fullMemberUnavailable;
     default:
       return workspaceUnavailableErrorResponse(error);
   }
@@ -247,7 +260,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
             }),
           )
           .pipe(Effect.mapError(inviteMemberErrorResponse));
-        return workspaceInvitationCreatedResponse(invitation);
+        return workspaceInvitationIssuedResponse(invitation);
       }),
     )
     .handle("acceptWorkspaceInvitation", ({ headers, params, payload }) =>
@@ -280,16 +293,36 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         return workspaceInvitationAcceptedResponse(accepted);
       }),
     )
-    .handle("listWorkspaceMembers", ({ params }) =>
+    .handle("redeemWorkspaceInvitation", ({ payload }) =>
+      Effect.gen(function* () {
+        const authenticated = yield* redeemWorkspaceInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token: makeWorkspaceInvitationToken(payload.token),
+            displayName: DisplayName.make(payload.displayName),
+            initialIdentityProfile: WorkspaceIdentityProfile.make({
+              name: WorkspaceIdentityName.make(payload.initialIdentityProfile.name),
+              avatarUrl: WorkspaceAvatarUrl.make(payload.initialIdentityProfile.avatarUrl),
+            }),
+          }),
+        ).pipe(Effect.mapError(redeemInvitationErrorResponse));
+        yield* setAuthenticationCookies(
+          authenticated.session.token,
+          authenticated.session.csrfToken,
+          authenticated.session.expiresAt,
+        );
+        return workspaceInvitationRedeemedResponse(authenticated.invitation);
+      }),
+    )
+    .handle("listFullMembers", ({ params }) =>
       Effect.gen(function* () {
         const actor = yield* AuthenticatedActor;
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
         const workspaceAccess = yield* WorkspaceAccess;
-        return workspaceMemberListResponse(
-          yield* workspaceAccess.listMembersForActor(actorId, workspaceId),
+        return fullMemberListResponse(
+          yield* workspaceAccess.listFullMembersForActor(actorId, workspaceId),
         );
-      }).pipe(Effect.mapError(workspaceMembersErrorResponse)),
+      }).pipe(Effect.mapError(fullMemberListErrorResponse)),
     )
     .handle("changeWorkspaceRole", ({ headers, params, payload }) =>
       Effect.gen(function* () {
@@ -302,7 +335,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           Effect.mapError(workspaceUnavailableErrorResponse),
         );
         const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId).pipe(
-          Effect.mapError(() => WorkspaceErrorResponses.memberUnavailable),
+          Effect.mapError(() => WorkspaceErrorResponses.fullMemberUnavailable),
         );
         const workspaceAccess = yield* WorkspaceAccess;
         const changed = yield* workspaceAccess
@@ -318,7 +351,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
         return workspaceRoleChangeResponse(changed);
       }),
     )
-    .handle("removeWorkspaceMember", ({ headers, params }) =>
+    .handle("removeFullMember", ({ headers, params }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const actor = yield* AuthenticatedActor;
@@ -329,12 +362,12 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           Effect.mapError(workspaceUnavailableErrorResponse),
         );
         const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId).pipe(
-          Effect.mapError(() => WorkspaceErrorResponses.memberUnavailable),
+          Effect.mapError(() => WorkspaceErrorResponses.fullMemberUnavailable),
         );
         const workspaceAccess = yield* WorkspaceAccess;
         yield* workspaceAccess
-          .removeMember(
-            RemoveWorkspaceMemberCommand.make({
+          .removeFullMember(
+            RemoveFullMemberCommand.make({
               actorAccountId: actorId,
               workspaceId,
               workspaceIdentityId,

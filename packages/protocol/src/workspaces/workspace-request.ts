@@ -36,6 +36,15 @@ export interface AcceptWorkspaceInvitationRequest extends Schema.Schema.Type<
   typeof AcceptWorkspaceInvitationRequest
 > {}
 
+export const RedeemWorkspaceInvitationRequest = Schema.Struct({
+  token: WorkspaceRequestValue,
+  displayName: WorkspaceRequestValue,
+  initialIdentityProfile: WorkspaceIdentityProfileRequest,
+}).annotate({ identifier: "RedeemWorkspaceInvitationRequest" });
+export interface RedeemWorkspaceInvitationRequest extends Schema.Schema.Type<
+  typeof RedeemWorkspaceInvitationRequest
+> {}
+
 export const ChangeWorkspaceRoleRequest = Schema.Struct({
   role: Schema.Literals(["owner", "admin", "member"]),
 }).annotate({ identifier: "ChangeWorkspaceRoleRequest" });

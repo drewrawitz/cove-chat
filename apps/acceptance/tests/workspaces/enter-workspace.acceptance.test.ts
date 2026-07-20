@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
 import { BrowserAcceptance, BrowserAcceptanceLive } from "../support/browser-acceptance.ts";
 
@@ -121,6 +122,7 @@ it.live(
     Effect.gen(function* () {
       const acceptance = yield* BrowserAcceptance;
       const page = acceptance.page;
+      const inviteeEmail = `new-member-${randomUUID()}@example.test`;
 
       const signIn = (email: string) =>
         Effect.gen(function* () {
@@ -135,29 +137,28 @@ it.live(
       yield* signIn("bob@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "Bob in Cove" }).waitFor());
-      yield* browserAction(() =>
-        page.getByLabel("Account email to invite").fill("carol@cove.local"),
-      );
+      yield* browserAction(() => page.getByLabel("Email address to invite").fill(inviteeEmail));
       yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
-      yield* browserAction(() => page.getByText("Invitation sent to carol@cove.local.").waitFor());
+      yield* browserAction(() => page.getByText(`Invitation sent to ${inviteeEmail}.`).waitFor());
 
+      const invitationLink = yield* acceptance.takeWorkspaceInvitationLink();
       yield* browserAction(() => page.context().clearCookies());
-      yield* signIn("carol@cove.local");
-      yield* browserAction(() => page.getByLabel("Your name for Cove Demo").fill("Carol in Cove"));
+      yield* browserAction(() => page.goto(invitationLink));
+      yield* browserAction(() => page.getByLabel("Your name").fill("New Member"));
       yield* browserAction(() =>
-        page.getByRole("button", { name: "Accept invitation to Cove Demo" }).click(),
+        page.getByRole("button", { name: "Create account and join workspace" }).click(),
       );
-      yield* browserAction(() => page.getByRole("heading", { name: "Carol in Cove" }).waitFor());
+      yield* browserAction(() => page.getByRole("heading", { name: "New Member" }).waitFor());
 
       yield* browserAction(() => page.context().clearCookies());
       yield* signIn("bob@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "Full Members" }).waitFor());
-      yield* browserAction(() => page.getByLabel("Role for Carol in Cove").selectOption("admin"));
+      yield* browserAction(() => page.getByLabel("Role for New Member").selectOption("admin"));
       yield* browserAction(() =>
-        page.getByRole("button", { name: "Save role for Carol in Cove" }).click(),
+        page.getByRole("button", { name: "Save role for New Member" }).click(),
       );
-      yield* browserAction(() => page.getByText("Carol in Cove is now Admin.").waitFor());
+      yield* browserAction(() => page.getByText("New Member is now Admin.").waitFor());
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,
 );

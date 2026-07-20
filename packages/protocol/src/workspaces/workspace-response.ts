@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { CurrentUserResponse } from "../auth/current-user-response.ts";
 
 export const WorkspaceRoleResponse = Schema.Literals(["owner", "admin", "member", "guest"]);
 const FullMemberRoleResponse = Schema.Literals(["owner", "admin", "member"]);
@@ -46,20 +47,16 @@ export interface WorkspaceAccessResponse extends Schema.Schema.Type<
   typeof WorkspaceAccessResponse
 > {}
 
-export const WorkspaceMemberResponse = Schema.Struct({
+export const FullMemberResponse = Schema.Struct({
   identity: WorkspaceIdentityResponse,
   membership: Schema.Struct({ role: FullMemberRoleResponse }),
-}).annotate({ identifier: "WorkspaceMemberResponse" });
-export interface WorkspaceMemberResponse extends Schema.Schema.Type<
-  typeof WorkspaceMemberResponse
-> {}
+}).annotate({ identifier: "FullMemberResponse" });
+export interface FullMemberResponse extends Schema.Schema.Type<typeof FullMemberResponse> {}
 
-export const WorkspaceMemberListResponse = Schema.Struct({
-  members: Schema.Array(WorkspaceMemberResponse),
-}).annotate({ identifier: "WorkspaceMemberListResponse" });
-export interface WorkspaceMemberListResponse extends Schema.Schema.Type<
-  typeof WorkspaceMemberListResponse
-> {}
+export const FullMemberListResponse = Schema.Struct({
+  members: Schema.Array(FullMemberResponse),
+}).annotate({ identifier: "FullMemberListResponse" });
+export interface FullMemberListResponse extends Schema.Schema.Type<typeof FullMemberListResponse> {}
 
 export const WorkspaceInvitationResponse = Schema.Struct({
   id: Schema.String,
@@ -104,15 +101,15 @@ export interface WorkspaceIdentityUpdateResponse extends Schema.Schema.Type<
   typeof WorkspaceIdentityUpdateResponse
 > {}
 
-export const WorkspaceInvitationCreatedResponse = Schema.Struct({
-  outcome: Schema.Literals(["WorkspaceInvitationCreated"]),
+export const WorkspaceInvitationIssuedResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceInvitationIssued"]),
   invitationId: Schema.String,
   workspaceId: Schema.String,
-  inviteeAccountId: Schema.String,
+  inviteeEmail: Schema.String,
   occurredAt: Schema.DateFromString,
-}).annotate({ identifier: "WorkspaceInvitationCreatedResponse" });
-export interface WorkspaceInvitationCreatedResponse extends Schema.Schema.Type<
-  typeof WorkspaceInvitationCreatedResponse
+}).annotate({ identifier: "WorkspaceInvitationIssuedResponse" });
+export interface WorkspaceInvitationIssuedResponse extends Schema.Schema.Type<
+  typeof WorkspaceInvitationIssuedResponse
 > {}
 
 export const WorkspaceInvitationAcceptedResponse = Schema.Struct({
@@ -122,6 +119,16 @@ export const WorkspaceInvitationAcceptedResponse = Schema.Struct({
 }).annotate({ identifier: "WorkspaceInvitationAcceptedResponse" });
 export interface WorkspaceInvitationAcceptedResponse extends Schema.Schema.Type<
   typeof WorkspaceInvitationAcceptedResponse
+> {}
+
+export const WorkspaceInvitationRedeemedResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceInvitationRedeemed"]),
+  account: CurrentUserResponse,
+  invitationId: Schema.String,
+  ...workspaceMutationResponseFields,
+}).annotate({ identifier: "WorkspaceInvitationRedeemedResponse" });
+export interface WorkspaceInvitationRedeemedResponse extends Schema.Schema.Type<
+  typeof WorkspaceInvitationRedeemedResponse
 > {}
 
 export const WorkspaceRoleChangeResponse = Schema.Struct({

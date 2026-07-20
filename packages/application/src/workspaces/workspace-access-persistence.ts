@@ -1,7 +1,7 @@
 import type {
   EmailAddress,
-  UserId,
   User,
+  UserId,
   Workspace,
   WorkspaceId,
   WorkspaceIdentity,
@@ -10,6 +10,7 @@ import type {
   WorkspaceMembership,
   WorkspaceRole,
 } from "@cove/domain";
+import type { WorkspaceInvitationToken } from "@cove/ports";
 import { Context, type Effect, Schema } from "effect";
 import type {
   FullMemberView,
@@ -38,14 +39,14 @@ export interface WorkspaceTransitionFacts extends IdentityMembershipFacts {
 export interface WorkspaceInvitationRecord {
   readonly id: WorkspaceInvitationId;
   readonly workspaceId: WorkspaceId;
-  readonly inviteeAccountId: UserId;
+  readonly inviteeEmail: EmailAddress;
   readonly invitedByAccountId: UserId;
   readonly role: "member";
   readonly invitedAt: Date;
+  readonly tokenExpiresAt: Date;
 }
 
 export interface InviteWorkspaceMemberFacts extends WorkspaceTransitionFacts {
-  readonly invitee: User | undefined;
   readonly inviteeMembership: WorkspaceMembership | undefined;
   readonly pendingInvitation: WorkspaceInvitationRecord | undefined;
 }
@@ -54,7 +55,11 @@ export interface InvitationAcceptanceFacts extends IdentityMembershipFacts {
   readonly invitation: WorkspaceInvitationRecord | undefined;
 }
 
-export interface MemberAdministrationFacts extends WorkspaceTransitionFacts {
+export interface InvitationRedemptionFacts extends InvitationAcceptanceFacts {
+  readonly account: User | undefined;
+}
+
+export interface FullMemberAdministrationFacts extends WorkspaceTransitionFacts {
   readonly targetIdentity: WorkspaceIdentity | undefined;
   readonly targetMembership: WorkspaceMembership | undefined;
 }
@@ -104,7 +109,7 @@ export type WorkspaceAccessAuditEvent =
       readonly metadata: {
         readonly workspaceId: WorkspaceId;
         readonly invitationId: WorkspaceInvitationId;
-        readonly inviteeAccountId: UserId;
+        readonly inviteeEmail: EmailAddress;
       };
     }
   | {
@@ -147,11 +152,16 @@ export interface WorkspaceAccessTransaction {
     actorAccountId: UserId,
     invitationId: WorkspaceInvitationId,
   ) => Effect.Effect<InvitationAcceptanceFacts, WorkspaceAccessPersistenceFailure>;
-  readonly serializeMemberAdministration: (
+  readonly serializeInvitationRedemption: (
+    token: WorkspaceInvitationToken,
+    proposedAccountId: UserId,
+    redeemedAt: Date,
+  ) => Effect.Effect<InvitationRedemptionFacts, WorkspaceAccessPersistenceFailure>;
+  readonly serializeFullMemberAdministration: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
     workspaceIdentityId: WorkspaceIdentity["id"],
-  ) => Effect.Effect<MemberAdministrationFacts, WorkspaceAccessPersistenceFailure>;
+  ) => Effect.Effect<FullMemberAdministrationFacts, WorkspaceAccessPersistenceFailure>;
   readonly createWorkspaceWithOwner: (
     access: WorkspaceAccessView,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
@@ -174,9 +184,14 @@ export interface WorkspaceAccessTransaction {
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly createInvitation: (
     invitation: WorkspaceInvitationRecord,
-  ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
+  ) => Effect.Effect<WorkspaceInvitationToken, WorkspaceAccessPersistenceFailure>;
+  readonly refreshInvitation: (
+    invitation: WorkspaceInvitationRecord,
+  ) => Effect.Effect<WorkspaceInvitationToken, WorkspaceAccessPersistenceFailure>;
+  readonly createAccount: (account: User) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly acceptInvitation: (
     invitationId: WorkspaceInvitationId,
+    acceptedByAccountId: UserId,
     acceptedAt: Date,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly updateMemberRole: (
@@ -184,7 +199,7 @@ export interface WorkspaceAccessTransaction {
     workspaceIdentityId: WorkspaceIdentity["id"],
     role: WorkspaceRole,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
-  readonly endMemberAndRevokeChannels: (
+  readonly endFullMemberAndRevokeChannels: (
     workspaceId: WorkspaceId,
     workspaceIdentityId: WorkspaceIdentity["id"],
     endedAt: Date,
@@ -204,8 +219,9 @@ export interface WorkspaceAccessPersistenceService {
   ) => Effect.Effect<ReadonlyArray<WorkspaceAccessView>, WorkspaceAccessPersistenceFailure>;
   readonly listPendingInvitations: (
     actorAccountId: UserId,
+    activeAt: Date,
   ) => Effect.Effect<ReadonlyArray<WorkspaceInvitationView>, WorkspaceAccessPersistenceFailure>;
-  readonly listMembersForAdministrator: (
+  readonly listFullMembersForAdministrator: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<FullMemberView> | undefined, WorkspaceAccessPersistenceFailure>;

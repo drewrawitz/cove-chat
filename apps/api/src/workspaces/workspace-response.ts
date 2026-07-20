@@ -5,7 +5,8 @@ import type {
   WorkspaceCreated,
   WorkspaceIdentityUpdated,
   WorkspaceInvitationAccepted,
-  WorkspaceInvitationCreated,
+  WorkspaceInvitationIssued,
+  WorkspaceInvitationRedeemed,
   WorkspaceInvitationView,
   WorkspaceRoleChanged,
   WorkspaceRoleUnchanged,
@@ -16,12 +17,13 @@ import {
   WorkspaceIdentityResponse,
   WorkspaceIdentityUpdateResponse,
   WorkspaceInvitationAcceptedResponse,
-  WorkspaceInvitationCreatedResponse,
+  WorkspaceInvitationIssuedResponse,
   WorkspaceInvitationListResponse,
+  WorkspaceInvitationRedeemedResponse,
   WorkspaceInvitationResponse,
   WorkspaceListResponse,
-  WorkspaceMemberListResponse,
-  WorkspaceMemberResponse,
+  FullMemberListResponse,
+  FullMemberResponse,
   WorkspaceRoleChangeResponse,
   WorkspaceSummaryResponse,
 } from "@cove/protocol";
@@ -102,12 +104,12 @@ export function workspaceInvitationListResponse(
   });
 }
 
-export function workspaceMemberListResponse(
+export function fullMemberListResponse(
   members: ReadonlyArray<FullMemberView>,
-): WorkspaceMemberListResponse {
-  return WorkspaceMemberListResponse.make({
+): FullMemberListResponse {
+  return FullMemberListResponse.make({
     members: members.map((member) =>
-      WorkspaceMemberResponse.make({
+      FullMemberResponse.make({
         identity: workspaceIdentityResponse(member.identity),
         membership: { role: member.membership.role },
       }),
@@ -115,14 +117,14 @@ export function workspaceMemberListResponse(
   });
 }
 
-export function workspaceInvitationCreatedResponse(
-  outcome: WorkspaceInvitationCreated,
-): WorkspaceInvitationCreatedResponse {
-  return WorkspaceInvitationCreatedResponse.make({
+export function workspaceInvitationIssuedResponse(
+  outcome: WorkspaceInvitationIssued,
+): WorkspaceInvitationIssuedResponse {
+  return WorkspaceInvitationIssuedResponse.make({
     outcome: outcome._tag,
     invitationId: outcome.invitationId,
     workspaceId: outcome.workspaceId,
-    inviteeAccountId: outcome.inviteeAccountId,
+    inviteeEmail: outcome.inviteeEmail,
     occurredAt: outcome.occurredAt,
   });
 }
@@ -132,6 +134,23 @@ export function workspaceInvitationAcceptedResponse(
 ): WorkspaceInvitationAcceptedResponse {
   return WorkspaceInvitationAcceptedResponse.make({
     outcome: outcome._tag,
+    invitationId: outcome.invitationId,
+    workspaceId: outcome.workspaceId,
+    workspaceIdentityId: outcome.workspaceIdentityId,
+    occurredAt: outcome.occurredAt,
+  });
+}
+
+export function workspaceInvitationRedeemedResponse(
+  outcome: WorkspaceInvitationRedeemed,
+): WorkspaceInvitationRedeemedResponse {
+  return WorkspaceInvitationRedeemedResponse.make({
+    outcome: outcome._tag,
+    account: {
+      id: outcome.account.id,
+      email: outcome.account.email,
+      displayName: outcome.account.displayName,
+    },
     invitationId: outcome.invitationId,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,

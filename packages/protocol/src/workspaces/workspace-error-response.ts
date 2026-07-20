@@ -16,24 +16,14 @@ const administrationForbiddenDefinition = {
   message: "The account cannot administer this Workspace Membership.",
 } as const;
 
-const inviteeUnavailableDefinition = {
-  code: "WORKSPACE_INVITEE_UNAVAILABLE",
-  message: "No Account is available for this invitation.",
-} as const;
-
-const invitationPendingDefinition = {
-  code: "WORKSPACE_INVITATION_ALREADY_PENDING",
-  message: "A pending invitation already exists for this Account.",
-} as const;
-
 const invitationUnavailableDefinition = {
   code: "WORKSPACE_INVITATION_UNAVAILABLE",
   message: "The Workspace invitation is unavailable.",
 } as const;
 
-const memberUnavailableDefinition = {
-  code: "WORKSPACE_MEMBER_UNAVAILABLE",
-  message: "The Workspace Member is unavailable.",
+const fullMemberUnavailableDefinition = {
+  code: "FULL_MEMBER_UNAVAILABLE",
+  message: "The Full Member is unavailable.",
 } as const;
 
 const alreadyMemberDefinition = {
@@ -99,20 +89,6 @@ export const WorkspaceAdministrationForbiddenResponse = Schema.Struct({
   .annotate({ identifier: "WorkspaceAdministrationForbiddenResponse" })
   .pipe(HttpApiSchema.status("Forbidden"));
 
-export const WorkspaceInviteeUnavailableResponse = Schema.Struct({
-  code: Schema.Literals([inviteeUnavailableDefinition.code]),
-  message: Schema.Literals([inviteeUnavailableDefinition.message]),
-})
-  .annotate({ identifier: "WorkspaceInviteeUnavailableResponse" })
-  .pipe(HttpApiSchema.status("NotFound"));
-
-export const WorkspaceInvitationAlreadyPendingResponse = Schema.Struct({
-  code: Schema.Literals([invitationPendingDefinition.code]),
-  message: Schema.Literals([invitationPendingDefinition.message]),
-})
-  .annotate({ identifier: "WorkspaceInvitationAlreadyPendingResponse" })
-  .pipe(HttpApiSchema.status("Conflict"));
-
 export const WorkspaceInvitationUnavailableResponse = Schema.Struct({
   code: Schema.Literals([invitationUnavailableDefinition.code]),
   message: Schema.Literals([invitationUnavailableDefinition.message]),
@@ -120,11 +96,11 @@ export const WorkspaceInvitationUnavailableResponse = Schema.Struct({
   .annotate({ identifier: "WorkspaceInvitationUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
-export const WorkspaceMemberUnavailableResponse = Schema.Struct({
-  code: Schema.Literals([memberUnavailableDefinition.code]),
-  message: Schema.Literals([memberUnavailableDefinition.message]),
+export const FullMemberUnavailableResponse = Schema.Struct({
+  code: Schema.Literals([fullMemberUnavailableDefinition.code]),
+  message: Schema.Literals([fullMemberUnavailableDefinition.message]),
 })
-  .annotate({ identifier: "WorkspaceMemberUnavailableResponse" })
+  .annotate({ identifier: "FullMemberUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
 export const WorkspaceErrorResponses = {
@@ -138,14 +114,10 @@ export const WorkspaceErrorResponses = {
   initialProfileRequired: InitialWorkspaceIdentityProfileRequiredResponse.make(
     initialProfileRequiredDefinition,
   ),
-  invitationAlreadyPending: WorkspaceInvitationAlreadyPendingResponse.make(
-    invitationPendingDefinition,
-  ),
   invitationUnavailable: WorkspaceInvitationUnavailableResponse.make(
     invitationUnavailableDefinition,
   ),
-  inviteeUnavailable: WorkspaceInviteeUnavailableResponse.make(inviteeUnavailableDefinition),
   lastOwner: LastWorkspaceOwnerResponse.make(lastOwnerDefinition),
   unavailable: WorkspaceUnavailableResponse.make(unavailableDefinition),
-  memberUnavailable: WorkspaceMemberUnavailableResponse.make(memberUnavailableDefinition),
+  fullMemberUnavailable: FullMemberUnavailableResponse.make(fullMemberUnavailableDefinition),
 } as const;

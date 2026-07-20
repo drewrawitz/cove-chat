@@ -2,6 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import { HealthOkResponse, HealthUnavailableResponse } from "@cove/protocol";
+import { WorkspaceInvitationNotifier } from "@cove/ports";
 import { Effect, Layer } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/unstable/http";
 import { DatabaseReadiness, PostgresDatabaseReadiness } from "../../src/health/index.ts";
@@ -9,6 +10,16 @@ import { makeHttpApiTestLayer } from "../support/http-api-test-layer.ts";
 
 const AvailableServices = Layer.mergeAll(PostgresDatabaseReadiness, PostgresRepositories).pipe(
   Layer.provide(TestDatabase),
+  Layer.provide(
+    Layer.succeed(
+      WorkspaceInvitationNotifier,
+      WorkspaceInvitationNotifier.of({
+        sendInvitation: Effect.fn("WorkspaceInvitationNotifier.Test.sendInvitation")(
+          () => Effect.void,
+        ),
+      }),
+    ),
+  ),
 );
 const AvailableApi = makeHttpApiTestLayer({ exposeAppApiDocs: false }, AvailableServices);
 

@@ -12,3 +12,8 @@ Its public effects require no environment; the implementation owns identity/memb
 owner protection, and audit classification in one atomic transaction. Postgres reaches the private,
 transaction-oriented persistence seam only through the exact
 `@cove/application/workspaces/internal` export.
+
+Invitation redemption composes that transition with provider-neutral session issuance inside one
+outer transaction. Invitation notification follows the committed state transition; repeating the
+invite rotates its credential, making a failed delivery safely retryable without storing plaintext
+tokens.

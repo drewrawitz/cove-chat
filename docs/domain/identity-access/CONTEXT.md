@@ -17,7 +17,7 @@ The time-bounded relationship that grants a Workspace Identity access to a Works
 _Avoid_: Workspace identity
 
 **Workspace Invitation**:
-A pending, Account-targeted offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity.
+An expiring, email-addressed offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Redeeming the invitation proves control of the invited email address and creates an Account when none exists. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity. Inviting the same address again replaces the prior credential and renews the offer.
 _Avoid_: Workspace membership, share link
 
 **Workspace Role**:
