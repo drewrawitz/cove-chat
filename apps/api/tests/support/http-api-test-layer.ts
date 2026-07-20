@@ -1,6 +1,10 @@
 import { NodeHttpServer } from "@effect/platform-node";
-import { makeCsrfToken, makeMagicLinkToken, makeSessionToken } from "@cove/application";
-import { WorkspaceId, WorkspaceIdentityId } from "@cove/domain";
+import {
+  WorkspaceAccess,
+  makeCsrfToken,
+  makeMagicLinkToken,
+  makeSessionToken,
+} from "@cove/application";
 import {
   AuditEventWriter,
   AuthenticationNotifier,
@@ -8,12 +12,13 @@ import {
   SessionRepository,
   TransactionManager,
   UserRepository,
-  WorkspaceAccessRepository,
-  WorkspaceIdentifierGenerator,
 } from "@cove/ports";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeHttpRoutes } from "../../src/http-live.ts";
+
+const unmockedWorkspaceAccess = (operation: string) =>
+  Effect.die(new Error(`WorkspaceAccess.${operation} not mocked for this test`));
 
 const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
@@ -22,23 +27,19 @@ const AuthPortsTest = Layer.mergeAll(
       sendMagicLink: Effect.fn("AuthenticationNotifier.Test.sendMagicLink")(() => Effect.void),
     }),
   ),
-  Layer.mock(WorkspaceAccessRepository, {
-    listForAccount: Effect.fn("WorkspaceAccessRepository.Test.listForAccount")(() =>
-      Effect.succeed([]),
-    ),
-    findForAccount: Effect.fn("WorkspaceAccessRepository.Test.findForAccount")(() =>
-      Effect.succeed(Option.none()),
-    ),
-  }),
   Layer.succeed(
-    WorkspaceIdentifierGenerator,
-    WorkspaceIdentifierGenerator.of({
-      nextWorkspaceId: Effect.fn("WorkspaceIdentifierGenerator.Test.nextWorkspaceId")(() =>
-        Effect.succeed(WorkspaceId.make("workspace-id")),
+    WorkspaceAccess,
+    WorkspaceAccess.of({
+      listForActor: Effect.fn("WorkspaceAccess.Test.listForActor")(() => Effect.succeed([])),
+      getForActor: Effect.fn("WorkspaceAccess.Test.getForActor")(() =>
+        unmockedWorkspaceAccess("getForActor"),
       ),
-      nextWorkspaceIdentityId: Effect.fn(
-        "WorkspaceIdentifierGenerator.Test.nextWorkspaceIdentityId",
-      )(() => Effect.succeed(WorkspaceIdentityId.make("workspace-identity-id"))),
+      create: Effect.fn("WorkspaceAccess.Test.create")(() => unmockedWorkspaceAccess("create")),
+      join: Effect.fn("WorkspaceAccess.Test.join")(() => unmockedWorkspaceAccess("join")),
+      updateMyIdentity: Effect.fn("WorkspaceAccess.Test.updateMyIdentity")(() =>
+        unmockedWorkspaceAccess("updateMyIdentity"),
+      ),
+      leave: Effect.fn("WorkspaceAccess.Test.leave")(() => unmockedWorkspaceAccess("leave")),
     }),
   ),
   Layer.succeed(

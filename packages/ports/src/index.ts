@@ -28,18 +28,9 @@ export {
   AuditEventWriter,
   AuthenticationSignInAuditEvent,
   AuthenticationSignInAuditMetadata,
-  WorkspaceMembershipEndedAuditEvent,
-  WorkspaceMembershipEndedAuditMetadata,
   type AuditEventWriterService,
 } from "./audit-event-writer.ts";
 export { ChannelRepository, type ChannelRepositoryService } from "./channels/index.ts";
 export { MembershipRepository, type MembershipRepositoryService } from "./memberships/index.ts";
 export { PersistenceError } from "./persistence-error.ts";
 export { TransactionManager, type TransactionManagerService } from "./transaction-manager.ts";
-export {
-  WorkspaceAccessRepository,
-  WorkspaceIdentifierGenerator,
-  type EndWorkspaceMembershipResult,
-  type WorkspaceAccessRepositoryService,
-  type WorkspaceIdentifierGeneratorService,
-} from "./workspaces/index.ts";

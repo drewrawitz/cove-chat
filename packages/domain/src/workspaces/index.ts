@@ -1,10 +1,10 @@
 export {
   Workspace,
-  WorkspaceAccess,
   WorkspaceAvatarUrl,
   WorkspaceIdentity,
   WorkspaceIdentityProfile,
   WorkspaceIdentityName,
+  WorkspaceMembership,
   WorkspaceName,
   WorkspaceRole,
 } from "./workspace.ts";

@@ -1,6 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { CreateWorkspaceRequest, UpdateWorkspaceIdentityRequest } from "../../src/index.ts";
+import {
+  CreateWorkspaceRequest,
+  JoinWorkspaceRequest,
+  UpdateWorkspaceIdentityRequest,
+} from "../../src/index.ts";
 
 it.effect("decodes workspace creation at the HTTP boundary", () =>
   Effect.gen(function* () {
@@ -33,6 +37,25 @@ it.effect("decodes workspace identity updates at the HTTP boundary", () =>
       name: "Alice Design",
       avatarUrl: "/avatars/default.svg",
     });
+  }),
+);
+
+it.effect("defaults omitted workspace identity avatars at the HTTP boundary", () =>
+  Effect.gen(function* () {
+    const created = yield* Schema.decodeUnknownEffect(CreateWorkspaceRequest)({
+      name: "Product Studio",
+      identity: { name: "Alice Product" },
+    });
+    const updated = yield* Schema.decodeUnknownEffect(UpdateWorkspaceIdentityRequest)({
+      name: "Alice Design",
+    });
+    const joined = yield* Schema.decodeUnknownEffect(JoinWorkspaceRequest)({
+      initialIdentityProfile: { name: "Alice Joining" },
+    });
+
+    expect(created.identity.avatarUrl).toBe("/avatars/default.svg");
+    expect(updated.avatarUrl).toBe("/avatars/default.svg");
+    expect(joined.initialIdentityProfile?.avatarUrl).toBe("/avatars/default.svg");
   }),
 );
 
@@ -71,5 +94,23 @@ it.effect("rejects invalid workspace identity update values", () =>
         Effect.catch(() => Effect.succeed(true)),
       ),
     ).toBe(true);
+  }),
+);
+
+it.effect("decodes join negotiation at the HTTP boundary", () =>
+  Effect.gen(function* () {
+    expect(
+      yield* Schema.decodeUnknownEffect(JoinWorkspaceRequest)({
+        initialIdentityProfile: {
+          name: "Alice Joining",
+          avatarUrl: "/avatars/joining.svg",
+        },
+      }),
+    ).toEqual({
+      initialIdentityProfile: {
+        name: "Alice Joining",
+        avatarUrl: "/avatars/joining.svg",
+      },
+    });
   }),
 );

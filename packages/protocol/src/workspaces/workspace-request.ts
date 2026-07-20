@@ -1,10 +1,16 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 const WorkspaceRequestValue = Schema.Trimmed.check(Schema.isNonEmpty());
 
-export const UpdateWorkspaceIdentityRequest = Schema.Struct({
+const WorkspaceIdentityProfileRequest = Schema.Struct({
   name: WorkspaceRequestValue,
-  avatarUrl: WorkspaceRequestValue,
+  avatarUrl: WorkspaceRequestValue.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("/avatars/default.svg")),
+  ),
+});
+
+export const UpdateWorkspaceIdentityRequest = Schema.Struct({
+  ...WorkspaceIdentityProfileRequest.fields,
 }).annotate({ identifier: "UpdateWorkspaceIdentityRequest" });
 export interface UpdateWorkspaceIdentityRequest extends Schema.Schema.Type<
   typeof UpdateWorkspaceIdentityRequest
@@ -12,6 +18,11 @@ export interface UpdateWorkspaceIdentityRequest extends Schema.Schema.Type<
 
 export const CreateWorkspaceRequest = Schema.Struct({
   name: WorkspaceRequestValue,
-  identity: UpdateWorkspaceIdentityRequest,
+  identity: WorkspaceIdentityProfileRequest,
 }).annotate({ identifier: "CreateWorkspaceRequest" });
 export interface CreateWorkspaceRequest extends Schema.Schema.Type<typeof CreateWorkspaceRequest> {}
+
+export const JoinWorkspaceRequest = Schema.Struct({
+  initialIdentityProfile: Schema.optionalKey(WorkspaceIdentityProfileRequest),
+}).annotate({ identifier: "JoinWorkspaceRequest" });
+export interface JoinWorkspaceRequest extends Schema.Schema.Type<typeof JoinWorkspaceRequest> {}

@@ -1,22 +1,25 @@
-export { CreateWorkspaceInput, createWorkspace } from "./create-workspace.ts";
 export {
-  EndWorkspaceMembershipInput,
+  AlreadyWorkspaceMember,
+  CreateWorkspaceCommand,
+  ExistingWorkspaceIdentityProfileNotAccepted,
+  FirstMembershipStarted,
+  IdentityProfileUnchanged,
+  InitialWorkspaceIdentityProfileRequired,
+  JoinWorkspaceCommand,
   LastWorkspaceOwner,
-  endWorkspaceMembership,
-} from "./end-workspace-membership.ts";
-export {
-  GetWorkspaceAccessInput,
+  LeaveWorkspaceCommand,
+  UpdateWorkspaceIdentityCommand,
+  WorkspaceAccess,
+  WorkspaceAccessFailure,
+  WorkspaceAccessView,
+  WorkspaceCreated,
+  WorkspaceIdentityUpdated,
+  WorkspaceMembershipEnded,
+  WorkspaceMembershipReactivated,
   WorkspaceUnavailable,
-  getWorkspaceAccess,
-} from "./get-workspace-access.ts";
-export { listWorkspaceAccess } from "./list-workspace-access.ts";
-export {
-  JoinWorkspaceInput,
-  WorkspaceIdentityDefaultsUnavailable,
-  getWorkspaceIdentityDefaults,
-  joinWorkspace,
-} from "./join-workspace.ts";
-export {
-  UpdateWorkspaceIdentityInput,
-  updateWorkspaceIdentity,
-} from "./update-workspace-identity.ts";
+  type CreateWorkspaceFailure,
+  type JoinWorkspaceFailure,
+  type LeaveWorkspaceFailure,
+  type UpdateWorkspaceIdentityFailure,
+  type WorkspaceAccessService,
+} from "./workspace-access.ts";

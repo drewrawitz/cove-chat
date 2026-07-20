@@ -53,7 +53,6 @@ function Home() {
     const name = requiredFormValue(form, "workspaceName");
     const identityName = requiredFormValue(form, "identityName");
     const avatarUrl = requiredFormValue(form, "avatarUrl");
-
     createWorkspace.mutate(
       {
         data: {
@@ -66,7 +65,7 @@ function Home() {
           await invalidateWorkspacesListWorkspaces(queryClient);
           await navigate({
             to: "/workspaces/$workspaceId",
-            params: { workspaceId: created.workspace.id },
+            params: { workspaceId: created.workspaceId },
           });
         },
       },
@@ -106,7 +105,7 @@ function Home() {
                 <span>
                   <span className="block font-heading text-lg font-semibold">{workspace.name}</span>
                   <span className="mt-1 block text-sm text-muted-foreground capitalize">
-                    {workspace.role}
+                    {workspace.membership.role}
                   </span>
                 </span>
                 <span className="text-sm font-medium text-primary">Enter {workspace.name}</span>

@@ -38,17 +38,42 @@ const stopProcess = Effect.fn("BrowserAcceptance.stopProcess")((child: ChildProc
   Effect.promise(
     () =>
       new Promise<void>((resolve) => {
-        if (child.exitCode !== null || child.signalCode !== null) {
-          resolve();
+        const killProcessTree = async (signal: NodeJS.Signals): Promise<void> => {
+          if (child.pid === undefined) return;
+
+          try {
+            if (process.platform === "win32") {
+              await execFileAsync("taskkill", [
+                "/PID",
+                String(child.pid),
+                "/T",
+                ...(signal === "SIGKILL" ? ["/F"] : []),
+              ]);
+            } else {
+              process.kill(-child.pid, signal);
+            }
+          } catch {
+            // The process group has already exited.
+          }
+        };
+
+        const streamsClosed =
+          (child.stdout === null || child.stdout.closed) &&
+          (child.stderr === null || child.stderr.closed);
+        if ((child.exitCode !== null || child.signalCode !== null) && streamsClosed) {
+          void killProcessTree("SIGTERM").then(resolve);
           return;
         }
 
-        const forceStop = setTimeout(() => child.kill("SIGKILL"), 5_000);
-        child.once("exit", () => {
+        let treeTermination = Promise.resolve();
+        const forceStop = setTimeout(() => {
+          treeTermination = killProcessTree("SIGKILL");
+        }, 5_000);
+        child.once("close", () => {
           clearTimeout(forceStop);
-          resolve();
+          void treeTermination.then(resolve);
         });
-        child.kill("SIGTERM");
+        treeTermination = killProcessTree("SIGTERM");
       }),
   ),
 );
@@ -64,6 +89,7 @@ const startProcess = Effect.fn("BrowserAcceptance.startProcess")(
       Effect.sync(() => {
         const child = spawn(command, args, {
           cwd: options.cwd,
+          detached: process.platform !== "win32",
           env: options.env,
           stdio: ["ignore", "pipe", "pipe"],
         });
@@ -126,7 +152,7 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
   (url: string, processOutput: ReadonlyArray<string>) =>
     Effect.tryPromise({
       try: async () => {
-        const response = await fetch(url);
+        const response = await fetch(url, { signal: AbortSignal.timeout(1_000) });
         if (!response.ok) throw new Error(`${url} returned ${response.status}.`);
       },
       catch: (cause) => new Error(`Waiting for ${url} failed.`, { cause }),

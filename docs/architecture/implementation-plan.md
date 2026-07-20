@@ -216,6 +216,7 @@ The dependency graph is below. `A → B` means package A may depend on package B
 ports           → domain
 application     → domain + ports
 infrastructure  → domain + ports
+infrastructure-postgres → application/workspaces/internal (exact restricted subpath only)
 sync            → db schema output
 apps/api        → application + infrastructure + protocol + sync
 apps/web        → protocol + sync + ui
@@ -230,7 +231,11 @@ Interpret the graph through these concrete rules:
 - `protocol` owns serialized transport contracts and explicit mappings; domain models are not treated as wire formats.
 - `db` is tooling-only: it owns the Prisma schema and committed SQL migrations, but exports no runtime domain model.
 - `sync` owns the generated Zero schema and named query definitions. It is a sync/transport concern, not the domain model.
-- Infrastructure packages implement ports and may depend on domain/application data contracts as needed.
+- Infrastructure packages implement ports and depend on domain contracts. The Postgres Workspace
+  Access adapter has one explicit exception: it imports the exact restricted
+  `@cove/application/workspaces/internal` subpath owned by the deep Workspace Access module. That
+  subpath is not re-exported from the application root, and no wildcard application-internal
+  dependency is allowed.
 - `apps/api` is the composition root. It selects Effect Layers and connects transports to application use cases.
 - `apps/web` consumes `protocol`, `sync`, and `ui`, not backend infrastructure or application internals.
 - No application use case imports HTTP, WebSocket, Postgres, filesystem, S3, or Node APIs.
@@ -281,7 +286,8 @@ Contains complete use cases such as:
 - `ListChannelMessages` for non-Zero API/export consumers when needed.
 - `MarkChannelRead`.
 
-Application services perform authorization, orchestrate ports, preserve idempotency, and return typed success or error values. They do not choose HTTP statuses or WebSocket frame formats.
+Application services perform authorization, orchestrate ports, enforce domain invariants, and return
+typed success or error values. They do not choose HTTP statuses or WebSocket frame formats.
 
 ### `protocol`
 
@@ -460,7 +466,7 @@ Replies receive channel sequence numbers because they affect activity, mentions,
 
 ### Idempotency and ordering
 
-Each durable client mutation includes a stable `command_id`. Retries reuse the same ID.
+Each durable messaging mutation includes a stable `command_id`. Retries reuse the same ID.
 
 Each committed channel event includes:
 
@@ -727,7 +733,11 @@ Fast tests for:
 
 ### Application tests
 
-Use deterministic in-memory port Layers to test complete use cases, including retries, duplicate command IDs, denied access, and audit-event generation.
+Use deterministic in-memory port Layers where the dependency is genuinely remote or external.
+Deep modules backed by local-substitutable infrastructure are tested through their application
+interface with the local substitute. Workspace Access therefore uses local Postgres lifecycle
+tests rather than an in-memory repository adapter, including denied access, audit behavior, and
+concurrency invariants.
 
 ### Infrastructure integration tests
 

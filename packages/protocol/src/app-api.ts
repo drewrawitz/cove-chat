@@ -8,6 +8,9 @@ import {
   UnauthorizedResponse,
 } from "./auth/index.ts";
 import {
+  AlreadyWorkspaceMemberResponse,
+  ExistingWorkspaceIdentityProfileNotAcceptedResponse,
+  InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
   WorkspaceApiGroup,
   WorkspaceUnavailableResponse,
@@ -18,6 +21,9 @@ export const CoveAppErrorResponse = Schema.Union([
   InternalServerErrorResponse,
   InvalidMagicLinkResponse,
   UnauthorizedResponse,
+  AlreadyWorkspaceMemberResponse,
+  ExistingWorkspaceIdentityProfileNotAcceptedResponse,
+  InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
   WorkspaceUnavailableResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });

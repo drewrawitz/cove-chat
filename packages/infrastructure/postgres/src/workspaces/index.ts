@@ -1,1 +1,1 @@
-export { PostgresWorkspaceAccessRepository } from "./workspace-access-repository.ts";
+export { PostgresWorkspaceAccess } from "./workspace-access-persistence.ts";

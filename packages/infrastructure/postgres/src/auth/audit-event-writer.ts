@@ -36,7 +36,6 @@ const make = Effect.gen(function* () {
     append: Effect.fn("PostgresAuditEventWriter.append")((event) =>
       AuditEvent.match(event, {
         "authentication.sign_in": appendEvent,
-        "workspace.membership_ended": appendEvent,
       }),
     ),
   });

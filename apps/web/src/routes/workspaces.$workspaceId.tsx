@@ -40,17 +40,21 @@ function WorkspaceHome() {
   const saveIdentity = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = requiredFormValue(form, "identityName");
+    const avatarUrl = requiredFormValue(form, "avatarUrl");
     updateIdentity.mutate(
       {
         workspaceId,
         data: {
-          name: requiredFormValue(form, "identityName"),
-          avatarUrl: requiredFormValue(form, "avatarUrl"),
+          name,
+          avatarUrl,
         },
       },
       {
-        onSuccess: async (updated) => {
-          queryClient.setQueryData(getWorkspacesGetWorkspaceQueryKey(workspaceId), updated);
+        onSuccess: async () => {
+          await queryClient.invalidateQueries({
+            queryKey: getWorkspacesGetWorkspaceQueryKey(workspaceId),
+          });
           await invalidateWorkspacesListWorkspaces(queryClient);
         },
       },
@@ -102,12 +106,12 @@ function WorkspaceHome() {
                       to="/workspaces/$workspaceId"
                       params={{ workspaceId: item.id }}
                       aria-current={item.id === workspaceId ? "page" : undefined}
-                      aria-label={`${item.name} ${roleLabel(item.role)}`}
-                      className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-primary/10"
+                      aria-label={`${item.name} ${roleLabel(item.membership.role)}`}
+                      className="block rounded-xl px-3 py-2.5 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 outline-hidden aria-[current=page]:bg-primary/10"
                     >
                       <span className="block truncate text-sm font-semibold">{item.name}</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
-                        {roleLabel(item.role)}
+                        {roleLabel(item.membership.role)}
                       </span>
                     </Link>
                   </li>
@@ -133,7 +137,7 @@ function WorkspaceHome() {
                   {workspace.data.identity.name}
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground capitalize">
-                  {workspace.data.role} · Workspace Identity
+                  {workspace.data.membership.role} · Workspace Identity
                 </p>
               </div>
             </div>

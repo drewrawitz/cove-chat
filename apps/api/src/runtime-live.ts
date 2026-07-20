@@ -4,7 +4,6 @@ import { Effect, Layer } from "effect";
 import { ApiConfiguration, ApiConfigurationLive } from "./api-configuration.ts";
 import { PostgresDatabaseReadiness } from "./health/index.ts";
 import { HttpLive, NodeServerLive } from "./http-live.ts";
-import { WorkspaceIdentifierGeneratorLive } from "./workspaces/index.ts";
 
 const PostgresHealthLive = PostgresDatabaseReadiness.pipe(Layer.provide(PostgresClientLive));
 
@@ -21,7 +20,6 @@ const InfrastructureLive = Layer.mergeAll(
   PostgresHealthLive,
   PostgresAuthLive,
   EmailLive,
-  WorkspaceIdentifierGeneratorLive,
 ).pipe(Layer.provideMerge(ApiConfigurationLive));
 
 export const ApiLive = HttpLive.pipe(Layer.provide(InfrastructureLive));

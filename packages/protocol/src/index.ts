@@ -26,13 +26,21 @@ export {
 } from "./auth/index.ts";
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
 export {
+  AlreadyWorkspaceMemberResponse,
   CreateWorkspaceRequest,
+  ExistingWorkspaceIdentityProfileNotAcceptedResponse,
+  InitialWorkspaceIdentityProfileRequiredResponse,
+  JoinWorkspaceRequest,
+  LastWorkspaceOwnerResponse,
   WorkspaceAccessResponse,
   WorkspaceApiGroup,
+  WorkspaceCreatedResponse,
   WorkspaceErrorResponses,
   WorkspaceIdentityResponse,
-  LastWorkspaceOwnerResponse,
+  WorkspaceIdentityUpdateResponse,
+  WorkspaceJoinedResponse,
   WorkspaceListResponse,
+  WorkspaceMembershipResponse,
   WorkspaceRoleResponse,
   WorkspaceSummaryResponse,
   WorkspaceUnavailableResponse,

@@ -27,11 +27,11 @@ export { DisplayName, EmailAddress, User } from "./users/index.ts";
 
 export {
   Workspace,
-  WorkspaceAccess,
   WorkspaceAvatarUrl,
   WorkspaceIdentity,
   WorkspaceIdentityProfile,
   WorkspaceIdentityName,
+  WorkspaceMembership,
   WorkspaceName,
   WorkspaceRole,
 } from "./workspaces/index.ts";
