@@ -38,12 +38,17 @@ const stopProcess = Effect.fn("BrowserAcceptance.stopProcess")((child: ChildProc
   Effect.promise(
     () =>
       new Promise<void>((resolve) => {
-        const killProcessTree = (signal: NodeJS.Signals) => {
+        const killProcessTree = async (signal: NodeJS.Signals): Promise<void> => {
           if (child.pid === undefined) return;
 
           try {
             if (process.platform === "win32") {
-              child.kill(signal);
+              await execFileAsync("taskkill", [
+                "/PID",
+                String(child.pid),
+                "/T",
+                ...(signal === "SIGKILL" ? ["/F"] : []),
+              ]);
             } else {
               process.kill(-child.pid, signal);
             }
@@ -56,17 +61,19 @@ const stopProcess = Effect.fn("BrowserAcceptance.stopProcess")((child: ChildProc
           (child.stdout === null || child.stdout.closed) &&
           (child.stderr === null || child.stderr.closed);
         if ((child.exitCode !== null || child.signalCode !== null) && streamsClosed) {
-          killProcessTree("SIGTERM");
-          resolve();
+          void killProcessTree("SIGTERM").then(resolve);
           return;
         }
 
-        const forceStop = setTimeout(() => killProcessTree("SIGKILL"), 5_000);
+        let treeTermination = Promise.resolve();
+        const forceStop = setTimeout(() => {
+          treeTermination = killProcessTree("SIGKILL");
+        }, 5_000);
         child.once("close", () => {
           clearTimeout(forceStop);
-          resolve();
+          void treeTermination.then(resolve);
         });
-        killProcessTree("SIGTERM");
+        treeTermination = killProcessTree("SIGTERM");
       }),
   ),
 );

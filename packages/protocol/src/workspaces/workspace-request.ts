@@ -1,10 +1,12 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 const WorkspaceRequestValue = Schema.Trimmed.check(Schema.isNonEmpty());
 
 const WorkspaceIdentityProfileRequest = Schema.Struct({
   name: WorkspaceRequestValue,
-  avatarUrl: WorkspaceRequestValue,
+  avatarUrl: WorkspaceRequestValue.pipe(
+    Schema.withDecodingDefaultKey(Effect.succeed("/avatars/default.svg")),
+  ),
 });
 
 export const UpdateWorkspaceIdentityRequest = Schema.Struct({

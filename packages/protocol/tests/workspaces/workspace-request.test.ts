@@ -40,6 +40,25 @@ it.effect("decodes workspace identity updates at the HTTP boundary", () =>
   }),
 );
 
+it.effect("defaults omitted workspace identity avatars at the HTTP boundary", () =>
+  Effect.gen(function* () {
+    const created = yield* Schema.decodeUnknownEffect(CreateWorkspaceRequest)({
+      name: "Product Studio",
+      identity: { name: "Alice Product" },
+    });
+    const updated = yield* Schema.decodeUnknownEffect(UpdateWorkspaceIdentityRequest)({
+      name: "Alice Design",
+    });
+    const joined = yield* Schema.decodeUnknownEffect(JoinWorkspaceRequest)({
+      initialIdentityProfile: { name: "Alice Joining" },
+    });
+
+    expect(created.identity.avatarUrl).toBe("/avatars/default.svg");
+    expect(updated.avatarUrl).toBe("/avatars/default.svg");
+    expect(joined.initialIdentityProfile?.avatarUrl).toBe("/avatars/default.svg");
+  }),
+);
+
 it.effect("rejects invalid workspace creation values", () =>
   Effect.gen(function* () {
     const invalidRequests: ReadonlyArray<unknown> = [
