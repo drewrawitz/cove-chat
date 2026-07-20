@@ -4,6 +4,7 @@ import {
   WorkspaceInvitationId,
   WorkspaceMembership,
   type UserId,
+  type WorkspaceRole,
 } from "@cove/domain";
 import { Clock, Effect, Layer, Schema } from "effect";
 import {
@@ -73,19 +74,40 @@ type WorkspaceAccessAuditDetails<
   Event extends WorkspaceAccessAuditEvent = WorkspaceAccessAuditEvent,
 > = Event extends WorkspaceAccessAuditEvent ? Pick<Event, "metadata" | "type"> : never;
 
-const internalFailure = (operation: string) => new WorkspaceAccessFailure({ operation });
+function internalFailure(operation: string): WorkspaceAccessFailure {
+  return new WorkspaceAccessFailure({ operation });
+}
 
-const makeAuditEvent = (
+function isWorkspaceAdministrator(role: WorkspaceRole): role is "admin" | "owner" {
+  return role === "owner" || role === "admin";
+}
+
+function canChangeWorkspaceRole(
+  actorRole: WorkspaceRole,
+  targetRole: WorkspaceRole,
+  nextRole: WorkspaceRole,
+): boolean {
+  if (actorRole === "owner") return true;
+  return actorRole === "admin" && targetRole !== "owner" && nextRole !== "owner";
+}
+
+function canRemoveWorkspaceMember(actorRole: WorkspaceRole, targetRole: WorkspaceRole): boolean {
+  return actorRole === "owner" || (actorRole === "admin" && targetRole !== "owner");
+}
+
+function makeAuditEvent(
   actorAccountId: UserId,
   occurredAt: Date,
   details: WorkspaceAccessAuditDetails,
-): WorkspaceAccessAuditEvent => ({
-  id: globalThis.crypto.randomUUID(),
-  version: 1,
-  actorAccountId,
-  occurredAt,
-  ...details,
-});
+): WorkspaceAccessAuditEvent {
+  return {
+    id: globalThis.crypto.randomUUID(),
+    version: 1,
+    actorAccountId,
+    occurredAt,
+    ...details,
+  };
+}
 
 const make = Effect.gen(function* () {
   const persistence = yield* WorkspaceAccessPersistence;
@@ -321,7 +343,7 @@ const make = Effect.gen(function* () {
               new WorkspaceUnavailable({ workspaceId: command.workspaceId }),
             );
           }
-          if (facts.membership.role !== "owner" && facts.membership.role !== "admin") {
+          if (!isWorkspaceAdministrator(facts.membership.role)) {
             return yield* Effect.fail(
               new WorkspaceAdministrationForbidden({ workspaceId: command.workspaceId }),
             );
@@ -508,12 +530,9 @@ const make = Effect.gen(function* () {
             }),
           );
         }
-        const actorMayChangeRole =
-          facts.membership.role === "owner" ||
-          (facts.membership.role === "admin" &&
-            facts.targetMembership.role !== "owner" &&
-            command.role !== "owner");
-        if (!actorMayChangeRole) {
+        if (
+          !canChangeWorkspaceRole(facts.membership.role, facts.targetMembership.role, command.role)
+        ) {
           return yield* Effect.fail(
             new WorkspaceAdministrationForbidden({ workspaceId: command.workspaceId }),
           );
@@ -600,10 +619,7 @@ const make = Effect.gen(function* () {
               }),
             );
           }
-          const actorMayRemove =
-            facts.membership.role === "owner" ||
-            (facts.membership.role === "admin" && facts.targetMembership.role !== "owner");
-          if (!actorMayRemove) {
+          if (!canRemoveWorkspaceMember(facts.membership.role, facts.targetMembership.role)) {
             return yield* Effect.fail(
               new WorkspaceAdministrationForbidden({ workspaceId: command.workspaceId }),
             );
@@ -669,7 +685,7 @@ const make = Effect.gen(function* () {
         if (access === undefined) {
           return yield* Effect.fail(new WorkspaceUnavailable({ workspaceId }));
         }
-        if (access.membership.role !== "owner" && access.membership.role !== "admin") {
+        if (!isWorkspaceAdministrator(access.membership.role)) {
           return yield* Effect.fail(new WorkspaceAdministrationForbidden({ workspaceId }));
         }
         const members = yield* persistence

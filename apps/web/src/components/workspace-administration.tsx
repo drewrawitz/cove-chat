@@ -1,6 +1,6 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type ReactElement, useState } from "react";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
@@ -12,15 +12,26 @@ import {
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
 
+interface WorkspaceAdministrationProps {
+  readonly actorIsOwner: boolean;
+  readonly currentIdentityId: string;
+  readonly workspaceId: string;
+}
+
+interface MemberReference {
+  readonly identity: {
+    readonly id: string;
+    readonly name: string;
+  };
+}
+
+type FullMemberRole = "admin" | "member" | "owner";
+
 export function WorkspaceAdministration({
   actorIsOwner,
   currentIdentityId,
   workspaceId,
-}: {
-  readonly actorIsOwner: boolean;
-  readonly currentIdentityId: string;
-  readonly workspaceId: string;
-}) {
+}: WorkspaceAdministrationProps): ReactElement {
   const queryClient = useQueryClient();
   const members = useWorkspacesListWorkspaceMembers(workspaceId, { query: { retry: false } });
   const inviteMember = useWorkspacesInviteWorkspaceMember();
@@ -29,7 +40,7 @@ export function WorkspaceAdministration({
   const [invitedEmail, setInvitedEmail] = useState<string>();
   const [administrationMessage, setAdministrationMessage] = useState<string>();
 
-  const invite = (event: FormEvent<HTMLFormElement>) => {
+  const invite = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -46,7 +57,7 @@ export function WorkspaceAdministration({
     );
   };
 
-  const refreshMemberships = async () => {
+  const refreshMemberships = async (): Promise<void> => {
     await Promise.all([
       members.refetch(),
       queryClient.invalidateQueries({
@@ -56,14 +67,11 @@ export function WorkspaceAdministration({
     ]);
   };
 
-  const saveRole = (
-    event: FormEvent<HTMLFormElement>,
-    member: { readonly identity: { readonly id: string; readonly name: string } },
-  ) => {
+  const saveRole = (event: FormEvent<HTMLFormElement>, member: MemberReference): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const role = requiredFormValue(form, "role");
-    if (role !== "admin" && role !== "member" && role !== "owner") return;
+    if (!isFullMemberRole(role)) return;
     setAdministrationMessage(undefined);
     changeRole.mutate(
       {
@@ -80,9 +88,7 @@ export function WorkspaceAdministration({
     );
   };
 
-  const remove = (member: {
-    readonly identity: { readonly id: string; readonly name: string };
-  }) => {
+  const remove = (member: MemberReference): void => {
     setAdministrationMessage(undefined);
     removeMember.mutate(
       { workspaceId, workspaceIdentityId: member.identity.id },
@@ -209,7 +215,11 @@ export function WorkspaceAdministration({
   );
 }
 
-function roleLabel(role: string): string {
+function isFullMemberRole(role: string): role is FullMemberRole {
+  return role === "owner" || role === "admin" || role === "member";
+}
+
+function roleLabel(role: FullMemberRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 

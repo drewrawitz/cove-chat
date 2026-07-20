@@ -13,6 +13,7 @@ import type {
 import {
   WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
+  WorkspaceIdentityResponse,
   WorkspaceIdentityUpdateResponse,
   WorkspaceInvitationAcceptedResponse,
   WorkspaceInvitationCreatedResponse,
@@ -25,60 +26,70 @@ import {
   WorkspaceSummaryResponse,
 } from "@cove/protocol";
 
-export const workspaceAccessResponse = (access: WorkspaceAccessView): WorkspaceAccessResponse =>
-  WorkspaceAccessResponse.make({
+interface WorkspaceIdentityView {
+  readonly id: string;
+  readonly name: string;
+  readonly avatarUrl: string;
+}
+
+function workspaceIdentityResponse(identity: WorkspaceIdentityView): WorkspaceIdentityResponse {
+  return WorkspaceIdentityResponse.make({
+    id: identity.id,
+    name: identity.name,
+    avatarUrl: identity.avatarUrl,
+  });
+}
+
+export function workspaceAccessResponse(access: WorkspaceAccessView): WorkspaceAccessResponse {
+  return WorkspaceAccessResponse.make({
     workspace: {
       id: access.workspace.id,
       name: access.workspace.name,
     },
-    identity: {
-      id: access.identity.id,
-      name: access.identity.name,
-      avatarUrl: access.identity.avatarUrl,
-    },
+    identity: workspaceIdentityResponse(access.identity),
     membership: { role: access.membership.role },
   });
+}
 
-export const workspaceListResponse = (
+export function workspaceListResponse(
   workspaces: ReadonlyArray<WorkspaceAccessView>,
-): WorkspaceListResponse =>
-  WorkspaceListResponse.make({
+): WorkspaceListResponse {
+  return WorkspaceListResponse.make({
     workspaces: workspaces.map((access) =>
       WorkspaceSummaryResponse.make({
         id: access.workspace.id,
         name: access.workspace.name,
-        identity: {
-          id: access.identity.id,
-          name: access.identity.name,
-          avatarUrl: access.identity.avatarUrl,
-        },
+        identity: workspaceIdentityResponse(access.identity),
         membership: { role: access.membership.role },
       }),
     ),
   });
+}
 
-export const workspaceCreatedResponse = (outcome: WorkspaceCreated): WorkspaceCreatedResponse =>
-  WorkspaceCreatedResponse.make({
+export function workspaceCreatedResponse(outcome: WorkspaceCreated): WorkspaceCreatedResponse {
+  return WorkspaceCreatedResponse.make({
     outcome: outcome._tag,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,
     occurredAt: outcome.occurredAt,
   });
+}
 
-export const workspaceIdentityUpdateResponse = (
+export function workspaceIdentityUpdateResponse(
   outcome: IdentityProfileUnchanged | WorkspaceIdentityUpdated,
-): WorkspaceIdentityUpdateResponse =>
-  WorkspaceIdentityUpdateResponse.make({
+): WorkspaceIdentityUpdateResponse {
+  return WorkspaceIdentityUpdateResponse.make({
     outcome: outcome._tag,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,
     occurredAt: outcome.occurredAt,
   });
+}
 
-export const workspaceInvitationListResponse = (
+export function workspaceInvitationListResponse(
   invitations: ReadonlyArray<WorkspaceInvitationView>,
-): WorkspaceInvitationListResponse =>
-  WorkspaceInvitationListResponse.make({
+): WorkspaceInvitationListResponse {
+  return WorkspaceInvitationListResponse.make({
     invitations: invitations.map((invitation) =>
       WorkspaceInvitationResponse.make({
         id: invitation.id,
@@ -89,49 +100,49 @@ export const workspaceInvitationListResponse = (
       }),
     ),
   });
+}
 
-export const workspaceMemberListResponse = (
+export function workspaceMemberListResponse(
   members: ReadonlyArray<FullMemberView>,
-): WorkspaceMemberListResponse =>
-  WorkspaceMemberListResponse.make({
+): WorkspaceMemberListResponse {
+  return WorkspaceMemberListResponse.make({
     members: members.map((member) =>
       WorkspaceMemberResponse.make({
-        identity: {
-          id: member.identity.id,
-          name: member.identity.name,
-          avatarUrl: member.identity.avatarUrl,
-        },
+        identity: workspaceIdentityResponse(member.identity),
         membership: { role: member.membership.role },
       }),
     ),
   });
+}
 
-export const workspaceInvitationCreatedResponse = (
+export function workspaceInvitationCreatedResponse(
   outcome: WorkspaceInvitationCreated,
-): WorkspaceInvitationCreatedResponse =>
-  WorkspaceInvitationCreatedResponse.make({
+): WorkspaceInvitationCreatedResponse {
+  return WorkspaceInvitationCreatedResponse.make({
     outcome: outcome._tag,
     invitationId: outcome.invitationId,
     workspaceId: outcome.workspaceId,
     inviteeAccountId: outcome.inviteeAccountId,
     occurredAt: outcome.occurredAt,
   });
+}
 
-export const workspaceInvitationAcceptedResponse = (
+export function workspaceInvitationAcceptedResponse(
   outcome: WorkspaceInvitationAccepted,
-): WorkspaceInvitationAcceptedResponse =>
-  WorkspaceInvitationAcceptedResponse.make({
+): WorkspaceInvitationAcceptedResponse {
+  return WorkspaceInvitationAcceptedResponse.make({
     outcome: outcome._tag,
     invitationId: outcome.invitationId,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,
     occurredAt: outcome.occurredAt,
   });
+}
 
-export const workspaceRoleChangeResponse = (
+export function workspaceRoleChangeResponse(
   outcome: WorkspaceRoleChanged | WorkspaceRoleUnchanged,
-): WorkspaceRoleChangeResponse =>
-  WorkspaceRoleChangeResponse.make({
+): WorkspaceRoleChangeResponse {
+  return WorkspaceRoleChangeResponse.make({
     outcome: outcome._tag,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,
@@ -139,3 +150,4 @@ export const workspaceRoleChangeResponse = (
     role: outcome.role,
     occurredAt: outcome.occurredAt,
   });
+}

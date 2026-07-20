@@ -1,7 +1,7 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactElement } from "react";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
@@ -17,7 +17,7 @@ import { requiredFormValue } from "../form-data.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
 
-function WorkspaceHome() {
+function WorkspaceHome(): ReactElement {
   const { workspaceId } = Route.useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -41,7 +41,7 @@ function WorkspaceHome() {
     );
   }
 
-  const saveIdentity = (event: FormEvent<HTMLFormElement>) => {
+  const saveIdentity = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = requiredFormValue(form, "identityName");
@@ -65,7 +65,7 @@ function WorkspaceHome() {
     );
   };
 
-  const leave = () => {
+  const leave = (): void => {
     endMembership.mutate(
       { workspaceId },
       {

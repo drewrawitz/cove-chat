@@ -2,7 +2,7 @@ import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactElement } from "react";
 import {
   invalidateWorkspacesListWorkspaces,
   useAuthMe,
@@ -19,6 +19,11 @@ interface HomeSearch {
   readonly left?: string;
 }
 
+interface WorkspaceInvitationSummary {
+  readonly id: string;
+  readonly requiresIdentityProfile: boolean;
+}
+
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch => ({
     left: typeof search.left === "string" ? search.left : undefined,
@@ -26,7 +31,7 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-function Home() {
+function Home(): ReactElement {
   const { left } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -57,7 +62,7 @@ function Home() {
     avatarUrl: "/avatars/default.svg",
   };
 
-  const create = (event: FormEvent<HTMLFormElement>) => {
+  const create = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = requiredFormValue(form, "workspaceName");
@@ -84,12 +89,8 @@ function Home() {
 
   const accept = (
     event: FormEvent<HTMLFormElement>,
-    invitation: {
-      readonly id: string;
-      readonly requiresIdentityProfile: boolean;
-      readonly workspace: { readonly id: string };
-    },
-  ) => {
+    invitation: WorkspaceInvitationSummary,
+  ): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const data = invitation.requiresIdentityProfile
