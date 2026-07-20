@@ -349,7 +349,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         expect(leaveResponse.status).toBe(409);
         expect(yield* leaveResponse.json).toEqual({
           code: "LAST_WORKSPACE_OWNER",
-          message: "The final workspace owner cannot leave.",
+          message: "The final workspace owner cannot leave, be removed, or be demoted.",
         });
 
         const workspaceResponse = yield* HttpClient.get(AppRoutes.workspace, {

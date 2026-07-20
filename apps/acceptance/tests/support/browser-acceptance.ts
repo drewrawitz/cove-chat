@@ -247,9 +247,12 @@ export const BrowserAcceptanceLive = Layer.effect(
     const takeMagicLink = Effect.fn("BrowserAcceptance.takeMagicLink")(() =>
       Effect.try({
         try: () => {
-          const link = apiOutput
-            .join("")
-            .match(/http:\/\/localhost:\d+\/auth\/verify\?token=[A-Za-z0-9_-]+/)?.[0];
+          const links = [
+            ...apiOutput
+              .join("")
+              .matchAll(/http:\/\/localhost:\d+\/auth\/verify\?token=[A-Za-z0-9_-]+/g),
+          ];
+          const link = links.at(-1)?.[0];
           if (link === undefined) throw new Error("No development magic link has been delivered.");
           return link;
         },

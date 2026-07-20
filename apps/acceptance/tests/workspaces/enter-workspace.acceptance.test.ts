@@ -114,3 +114,50 @@ it.live(
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,
 );
+
+it.live(
+  "invites a Full Member, accepts the invitation, and lets an Owner appoint an Admin",
+  () =>
+    Effect.gen(function* () {
+      const acceptance = yield* BrowserAcceptance;
+      const page = acceptance.page;
+
+      const signIn = (email: string) =>
+        Effect.gen(function* () {
+          yield* browserAction(() => page.goto(acceptance.webUrl));
+          yield* browserAction(() => page.getByLabel("Email address").fill(email));
+          yield* browserAction(() => page.getByRole("button", { name: "Send magic link" }).click());
+          const magicLink = yield* acceptance.takeMagicLink();
+          yield* browserAction(() => page.goto(magicLink));
+          yield* waitForWorkspaceChooser(page);
+        });
+
+      yield* signIn("bob@cove.local");
+      yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "Bob in Cove" }).waitFor());
+      yield* browserAction(() =>
+        page.getByLabel("Account email to invite").fill("carol@cove.local"),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
+      yield* browserAction(() => page.getByText("Invitation sent to carol@cove.local.").waitFor());
+
+      yield* browserAction(() => page.context().clearCookies());
+      yield* signIn("carol@cove.local");
+      yield* browserAction(() => page.getByLabel("Your name for Cove Demo").fill("Carol in Cove"));
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Accept invitation to Cove Demo" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("heading", { name: "Carol in Cove" }).waitFor());
+
+      yield* browserAction(() => page.context().clearCookies());
+      yield* signIn("bob@cove.local");
+      yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "Full Members" }).waitFor());
+      yield* browserAction(() => page.getByLabel("Role for Carol in Cove").selectOption("admin"));
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Save role for Carol in Cove" }).click(),
+      );
+      yield* browserAction(() => page.getByText("Carol in Cove is now Admin.").waitFor());
+    }).pipe(Effect.provide(BrowserAcceptanceLive)),
+  120_000,
+);

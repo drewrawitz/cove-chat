@@ -35,11 +35,28 @@ const AuthPortsTest = Layer.mergeAll(
         unmockedWorkspaceAccess("getForActor"),
       ),
       create: Effect.fn("WorkspaceAccess.Test.create")(() => unmockedWorkspaceAccess("create")),
-      join: Effect.fn("WorkspaceAccess.Test.join")(() => unmockedWorkspaceAccess("join")),
       updateMyIdentity: Effect.fn("WorkspaceAccess.Test.updateMyIdentity")(() =>
         unmockedWorkspaceAccess("updateMyIdentity"),
       ),
       leave: Effect.fn("WorkspaceAccess.Test.leave")(() => unmockedWorkspaceAccess("leave")),
+      listInvitationsForActor: Effect.fn("WorkspaceAccess.Test.listInvitationsForActor")(() =>
+        unmockedWorkspaceAccess("listInvitationsForActor"),
+      ),
+      listMembersForActor: Effect.fn("WorkspaceAccess.Test.listMembersForActor")(() =>
+        unmockedWorkspaceAccess("listMembersForActor"),
+      ),
+      inviteMember: Effect.fn("WorkspaceAccess.Test.inviteMember")(() =>
+        unmockedWorkspaceAccess("inviteMember"),
+      ),
+      acceptInvitation: Effect.fn("WorkspaceAccess.Test.acceptInvitation")(() =>
+        unmockedWorkspaceAccess("acceptInvitation"),
+      ),
+      changeMemberRole: Effect.fn("WorkspaceAccess.Test.changeMemberRole")(() =>
+        unmockedWorkspaceAccess("changeMemberRole"),
+      ),
+      removeMember: Effect.fn("WorkspaceAccess.Test.removeMember")(() =>
+        unmockedWorkspaceAccess("removeMember"),
+      ),
     }),
   ),
   Layer.succeed(

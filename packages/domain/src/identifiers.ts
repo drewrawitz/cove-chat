@@ -8,6 +8,9 @@ export type WorkspaceId = typeof WorkspaceId.Type;
 export const WorkspaceIdentityId = Identifier.pipe(Schema.brand("WorkspaceIdentityId"));
 export type WorkspaceIdentityId = typeof WorkspaceIdentityId.Type;
 
+export const WorkspaceInvitationId = Identifier.pipe(Schema.brand("WorkspaceInvitationId"));
+export type WorkspaceInvitationId = typeof WorkspaceInvitationId.Type;
+
 export const UserId = Identifier.pipe(Schema.brand("UserId"));
 export type UserId = typeof UserId.Type;
 
@@ -17,7 +20,13 @@ export type ChannelId = typeof ChannelId.Type;
 export class InvalidIdentifier extends Schema.TaggedErrorClass<InvalidIdentifier>()(
   "Domain.InvalidIdentifier",
   {
-    identifier: Schema.Literals(["workspace", "workspace-identity", "user", "channel"]),
+    identifier: Schema.Literals([
+      "workspace",
+      "workspace-identity",
+      "workspace-invitation",
+      "user",
+      "channel",
+    ]),
     reason: Schema.Literals(["empty", "not-trimmed"]),
   },
 ) {}
@@ -41,6 +50,12 @@ export function makeWorkspaceId(value: string) {
 export function makeWorkspaceIdentityId(value: string) {
   return WorkspaceIdentityId.makeEffect(value).pipe(
     Effect.mapError(() => invalidIdentifier("workspace-identity", value)),
+  );
+}
+
+export function makeWorkspaceInvitationId(value: string) {
+  return WorkspaceInvitationId.makeEffect(value).pipe(
+    Effect.mapError(() => invalidIdentifier("workspace-invitation", value)),
   );
 }
 

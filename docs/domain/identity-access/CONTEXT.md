@@ -16,6 +16,10 @@ _Avoid_: Global profile, active membership
 The time-bounded relationship that grants a Workspace Identity access to a Workspace and assigns its current Workspace Role. Ending it removes access and every Channel Membership established under it while preserving the Workspace Identity and its history; a later Workspace Membership does not restore those Channel Memberships.
 _Avoid_: Workspace identity
 
+**Workspace Invitation**:
+A pending, Account-targeted offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity.
+_Avoid_: Workspace membership, share link
+
 **Workspace Role**:
 The authority assigned to a workspace membership: owner, admin, member, or guest. The same account can hold a different role in each workspace.
 _Avoid_: Account role, global role

@@ -1,8 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
+  AcceptWorkspaceInvitationRequest,
+  ChangeWorkspaceRoleRequest,
   CreateWorkspaceRequest,
-  JoinWorkspaceRequest,
+  InviteWorkspaceMemberRequest,
   UpdateWorkspaceIdentityRequest,
 } from "../../src/index.ts";
 
@@ -49,13 +51,9 @@ it.effect("defaults omitted workspace identity avatars at the HTTP boundary", ()
     const updated = yield* Schema.decodeUnknownEffect(UpdateWorkspaceIdentityRequest)({
       name: "Alice Design",
     });
-    const joined = yield* Schema.decodeUnknownEffect(JoinWorkspaceRequest)({
-      initialIdentityProfile: { name: "Alice Joining" },
-    });
 
     expect(created.identity.avatarUrl).toBe("/avatars/default.svg");
     expect(updated.avatarUrl).toBe("/avatars/default.svg");
-    expect(joined.initialIdentityProfile?.avatarUrl).toBe("/avatars/default.svg");
   }),
 );
 
@@ -97,20 +95,31 @@ it.effect("rejects invalid workspace identity update values", () =>
   }),
 );
 
-it.effect("decodes join negotiation at the HTTP boundary", () =>
+it.effect("decodes invitation acceptance and role administration requests", () =>
   Effect.gen(function* () {
     expect(
-      yield* Schema.decodeUnknownEffect(JoinWorkspaceRequest)({
-        initialIdentityProfile: {
-          name: "Alice Joining",
-          avatarUrl: "/avatars/joining.svg",
-        },
+      yield* Schema.decodeUnknownEffect(InviteWorkspaceMemberRequest)({
+        email: "member@example.test",
+      }),
+    ).toEqual({ email: "member@example.test" });
+    expect(
+      yield* Schema.decodeUnknownEffect(AcceptWorkspaceInvitationRequest)({
+        initialIdentityProfile: { name: "Invited Member" },
       }),
     ).toEqual({
       initialIdentityProfile: {
-        name: "Alice Joining",
-        avatarUrl: "/avatars/joining.svg",
+        name: "Invited Member",
+        avatarUrl: "/avatars/default.svg",
       },
     });
+    expect(
+      yield* Schema.decodeUnknownEffect(ChangeWorkspaceRoleRequest)({ role: "owner" }),
+    ).toEqual({ role: "owner" });
+    expect(
+      yield* Schema.decodeUnknownEffect(ChangeWorkspaceRoleRequest)({ role: "guest" }).pipe(
+        Effect.as(false),
+        Effect.catch(() => Effect.succeed(true)),
+      ),
+    ).toBe(true);
   }),
 );

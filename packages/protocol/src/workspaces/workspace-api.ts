@@ -11,23 +11,43 @@ import {
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
+  WorkspaceAdministrationForbiddenResponse,
+  WorkspaceInvitationAlreadyPendingResponse,
+  WorkspaceInvitationUnavailableResponse,
+  WorkspaceInviteeUnavailableResponse,
+  WorkspaceMemberUnavailableResponse,
   WorkspaceUnavailableResponse,
 } from "./workspace-error-response.ts";
 import {
   WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
   WorkspaceIdentityUpdateResponse,
-  WorkspaceJoinedResponse,
+  WorkspaceInvitationAcceptedResponse,
+  WorkspaceInvitationCreatedResponse,
+  WorkspaceInvitationListResponse,
   WorkspaceListResponse,
+  WorkspaceMemberListResponse,
+  WorkspaceRoleChangeResponse,
 } from "./workspace-response.ts";
 import {
+  AcceptWorkspaceInvitationRequest,
+  ChangeWorkspaceRoleRequest,
   CreateWorkspaceRequest,
-  JoinWorkspaceRequest,
+  InviteWorkspaceMemberRequest,
   UpdateWorkspaceIdentityRequest,
 } from "./workspace-request.ts";
 
 const WorkspaceParams = {
   workspaceId: Schema.NonEmptyString,
+};
+
+const WorkspaceMemberParams = {
+  ...WorkspaceParams,
+  workspaceIdentityId: Schema.NonEmptyString,
+};
+
+const WorkspaceInvitationParams = {
+  invitationId: Schema.NonEmptyString,
 };
 
 const ListWorkspacesEndpoint = HttpApiEndpoint.get("listWorkspaces", "/api/app/v1/workspaces", {
@@ -83,19 +103,98 @@ const UpdateWorkspaceIdentityEndpoint = HttpApiEndpoint.patch(
   },
 ).middleware(SessionAuth);
 
-const JoinWorkspaceEndpoint = HttpApiEndpoint.post(
-  "joinWorkspace",
-  "/api/app/v1/workspaces/:workspaceId/membership",
+const ListWorkspaceInvitationsEndpoint = HttpApiEndpoint.get(
+  "listWorkspaceInvitations",
+  "/api/app/v1/workspace-invitations",
+  {
+    success: WorkspaceInvitationListResponse,
+    error: InternalServerErrorResponse,
+  },
+).middleware(SessionAuth);
+
+const InviteWorkspaceMemberEndpoint = HttpApiEndpoint.post(
+  "inviteWorkspaceMember",
+  "/api/app/v1/workspaces/:workspaceId/invitations",
   {
     params: WorkspaceParams,
-    payload: JoinWorkspaceRequest,
+    payload: InviteWorkspaceMemberRequest,
     headers: CsrfHeaders,
-    success: WorkspaceJoinedResponse,
+    success: WorkspaceInvitationCreatedResponse,
+    error: [
+      CsrfValidationFailedResponse,
+      AlreadyWorkspaceMemberResponse,
+      WorkspaceAdministrationForbiddenResponse,
+      WorkspaceInvitationAlreadyPendingResponse,
+      WorkspaceInviteeUnavailableResponse,
+      WorkspaceUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
+const AcceptWorkspaceInvitationEndpoint = HttpApiEndpoint.post(
+  "acceptWorkspaceInvitation",
+  "/api/app/v1/workspace-invitations/:invitationId/accept",
+  {
+    params: WorkspaceInvitationParams,
+    payload: AcceptWorkspaceInvitationRequest,
+    headers: CsrfHeaders,
+    success: WorkspaceInvitationAcceptedResponse,
     error: [
       CsrfValidationFailedResponse,
       AlreadyWorkspaceMemberResponse,
       ExistingWorkspaceIdentityProfileNotAcceptedResponse,
       InitialWorkspaceIdentityProfileRequiredResponse,
+      WorkspaceInvitationUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
+const ListWorkspaceMembersEndpoint = HttpApiEndpoint.get(
+  "listWorkspaceMembers",
+  "/api/app/v1/workspaces/:workspaceId/members",
+  {
+    params: WorkspaceParams,
+    success: WorkspaceMemberListResponse,
+    error: [
+      WorkspaceAdministrationForbiddenResponse,
+      WorkspaceUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
+const ChangeWorkspaceRoleEndpoint = HttpApiEndpoint.patch(
+  "changeWorkspaceRole",
+  "/api/app/v1/workspaces/:workspaceId/members/:workspaceIdentityId/role",
+  {
+    params: WorkspaceMemberParams,
+    payload: ChangeWorkspaceRoleRequest,
+    headers: CsrfHeaders,
+    success: WorkspaceRoleChangeResponse,
+    error: [
+      CsrfValidationFailedResponse,
+      LastWorkspaceOwnerResponse,
+      WorkspaceAdministrationForbiddenResponse,
+      WorkspaceMemberUnavailableResponse,
+      WorkspaceUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
+const RemoveWorkspaceMemberEndpoint = HttpApiEndpoint.delete(
+  "removeWorkspaceMember",
+  "/api/app/v1/workspaces/:workspaceId/members/:workspaceIdentityId",
+  {
+    params: WorkspaceMemberParams,
+    headers: CsrfHeaders,
+    error: [
+      CsrfValidationFailedResponse,
+      LastWorkspaceOwnerResponse,
+      WorkspaceAdministrationForbiddenResponse,
+      WorkspaceMemberUnavailableResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,
     ],
@@ -108,5 +207,10 @@ export const WorkspaceApiGroup = HttpApiGroup.make("workspaces").add(
   GetWorkspaceEndpoint,
   UpdateWorkspaceIdentityEndpoint,
   EndMembershipEndpoint,
-  JoinWorkspaceEndpoint,
+  ListWorkspaceInvitationsEndpoint,
+  InviteWorkspaceMemberEndpoint,
+  AcceptWorkspaceInvitationEndpoint,
+  ListWorkspaceMembersEndpoint,
+  ChangeWorkspaceRoleEndpoint,
+  RemoveWorkspaceMemberEndpoint,
 );

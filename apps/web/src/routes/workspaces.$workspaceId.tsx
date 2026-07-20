@@ -11,6 +11,8 @@ import {
   useWorkspacesListWorkspaces,
   useWorkspacesUpdateWorkspaceIdentity,
 } from "../api/generated/cove-app.ts";
+import { PageMessage } from "../components/page-message.tsx";
+import { WorkspaceAdministration } from "../components/workspace-administration.tsx";
 import { requiredFormValue } from "../form-data.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
@@ -21,19 +23,21 @@ function WorkspaceHome() {
   const queryClient = useQueryClient();
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const workspaces = useWorkspacesListWorkspaces({ query: { retry: false } });
+  const canAdminister =
+    workspace.data?.membership.role === "owner" || workspace.data?.membership.role === "admin";
   const endMembership = useWorkspacesEndMembership();
   const updateIdentity = useWorkspacesUpdateWorkspaceIdentity();
 
   if (workspace.isPending) {
-    return <WorkspaceMessage message="Entering workspace…" />;
+    return <PageMessage message="Entering workspace…" />;
   }
   if (workspace.isError) {
     return (
-      <WorkspaceMessage message="This workspace is not available to your account.">
+      <PageMessage message="This workspace is not available to your account.">
         <Link className="mt-4 inline-block text-sm font-medium text-primary hover:underline" to="/">
           Return to workspaces
         </Link>
-      </WorkspaceMessage>
+      </PageMessage>
     );
   }
 
@@ -197,6 +201,14 @@ function WorkspaceHome() {
               </div>
             </form>
 
+            {canAdminister ? (
+              <WorkspaceAdministration
+                actorIsOwner={workspace.data.membership.role === "owner"}
+                currentIdentityId={workspace.data.identity.id}
+                workspaceId={workspaceId}
+              />
+            ) : null}
+
             <div className="mt-10 border-t pt-6">
               <h2 className="font-heading text-base font-semibold">Membership</h2>
               <p className="mt-2 text-sm text-muted-foreground">
@@ -243,23 +255,4 @@ function leaveErrorMessage(error: unknown): string {
     default:
       return "We couldn't leave the workspace. Try again in a moment.";
   }
-}
-
-function WorkspaceMessage({
-  children,
-  message,
-}: {
-  readonly children?: React.ReactNode;
-  readonly message: string;
-}) {
-  return (
-    <main className="flex min-h-svh items-center justify-center bg-muted/30 p-5 text-center">
-      <div>
-        <p className="text-muted-foreground" role="status">
-          {message}
-        </p>
-        {children}
-      </div>
-    </main>
-  );
 }
