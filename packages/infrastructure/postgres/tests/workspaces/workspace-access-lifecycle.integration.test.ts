@@ -1,11 +1,15 @@
 import { expect, layer } from "@effect/vitest";
 import {
   AcceptWorkspaceInvitationCommand,
+  ChangeWorkspaceRoleCommand,
   CreateWorkspaceCommand,
   GetChannelForActorInput,
   InviteWorkspaceMemberCommand,
   LastWorkspaceOwner,
   LeaveWorkspaceCommand,
+  RemoveFullMemberCommand,
+  ResendWorkspaceInvitationCommand,
+  RevokeWorkspaceInvitationCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
   WorkspaceAccessFailure,
@@ -225,17 +229,204 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           invitationId: invitation.invitationId,
         }),
       );
+      const access = yield* workspaces.getForActor(accountId, workspaceId);
+      const lifecycleAudits = yield* sql<{
+        eventType: string;
+        metadata: unknown;
+      }>`
+        SELECT event_type AS "eventType", metadata
+        FROM audit_events
+        WHERE metadata ->> 'workspaceId' = ${workspaceId}
+          AND metadata ->> 'workspaceIdentityId' = ${identityId}
+      `;
 
       expect(ended.workspaceIdentityId).toBe(identityId);
       expect(unavailable).toBeInstanceOf(WorkspaceUnavailable);
       expect(reactivated._tag).toBe("WorkspaceInvitationAccepted");
-      expect(yield* workspaces.getForActor(accountId, workspaceId)).toMatchObject({
+      expect(access).toMatchObject({
         identity: {
           id: identityId,
           name: "Alice Persistent",
           avatarUrl: "/avatars/persistent.svg",
         },
       });
+      expect(access.membership.startedAt).toEqual(reactivated.occurredAt);
+      expect(lifecycleAudits).toEqual(
+        expect.arrayContaining([
+          {
+            eventType: "workspace.membership_ended",
+            metadata: {
+              workspaceId,
+              workspaceIdentityId: identityId,
+              reason: "voluntary_departure",
+            },
+          },
+          {
+            eventType: "workspace.invitation_accepted",
+            metadata: {
+              workspaceId,
+              workspaceIdentityId: identityId,
+              invitationId: invitation.invitationId,
+            },
+          },
+        ]),
+      );
+      expect(lifecycleAudits).toHaveLength(2);
+    }),
+  );
+
+  it.effect("revokes every membership-gated boundary as soon as Membership ends", () =>
+    Effect.gen(function* () {
+      const suffix = randomUUID();
+      const ownerAccountId = yield* makeUserId(`boundary-owner-${suffix}`);
+      const adminAccountId = yield* makeUserId(`boundary-admin-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(`boundary-owner-identity-${suffix}`);
+      const adminIdentityId = yield* makeWorkspaceIdentityId(`boundary-admin-identity-${suffix}`);
+      const workspaceId = yield* makeWorkspaceId(`boundary-workspace-${suffix}`);
+      const channelId = yield* makeChannelId(`boundary-channel-${suffix}`);
+      const sql = yield* SqlClient.SqlClient;
+      const workspaces = yield* WorkspaceAccess;
+
+      yield* sql`
+        INSERT INTO users (id, email, display_name)
+        VALUES
+          (${ownerAccountId}, ${`${ownerAccountId}@example.test`}, 'Boundary Owner'),
+          (${adminAccountId}, ${`${adminAccountId}@example.test`}, 'Boundary Admin')
+      `;
+      yield* sql`
+        INSERT INTO workspaces (id, name)
+        VALUES (${workspaceId}, 'Boundary Team')
+      `;
+      yield* sql`
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        VALUES
+          (${ownerIdentityId}, ${workspaceId}, ${ownerAccountId}, 'Boundary Owner', '/avatars/owner.svg', 'owner'),
+          (${adminIdentityId}, ${workspaceId}, ${adminAccountId}, 'Boundary Admin', '/avatars/admin.svg', 'admin')
+      `;
+      yield* sql`
+        INSERT INTO channels (id, workspace_id, name, visibility)
+        VALUES (${channelId}, ${workspaceId}, 'boundary', 'private')
+      `;
+      yield* sql`
+        INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
+        VALUES (${workspaceId}, ${channelId}, ${adminIdentityId})
+      `;
+
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: adminAccountId,
+          workspaceId,
+          inviteeEmail: EmailAddress.make(`boundary-invitee-${suffix}@example.test`),
+        }),
+      );
+      yield* workspaces.leave(
+        LeaveWorkspaceCommand.make({
+          actorAccountId: adminAccountId,
+          workspaceId,
+        }),
+      );
+
+      const getFailure = yield* workspaces
+        .getForActor(adminAccountId, workspaceId)
+        .pipe(Effect.flip);
+      const updateFailure = yield* workspaces
+        .updateMyIdentity(
+          UpdateWorkspaceIdentityCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            profile: {
+              name: WorkspaceIdentityName.make("Boundary Admin Updated"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/admin-updated.svg"),
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+      const leaveFailure = yield* workspaces
+        .leave(LeaveWorkspaceCommand.make({ actorAccountId: adminAccountId, workspaceId }))
+        .pipe(Effect.flip);
+      const invitationListFailure = yield* workspaces
+        .listPendingInvitationsForAdministrator(adminAccountId, workspaceId)
+        .pipe(Effect.flip);
+      const memberListFailure = yield* workspaces
+        .listFullMembersForActor(adminAccountId, workspaceId)
+        .pipe(Effect.flip);
+      const inviteFailure = yield* workspaces
+        .inviteMember(
+          InviteWorkspaceMemberCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            inviteeEmail: EmailAddress.make(`boundary-second-invitee-${suffix}@example.test`),
+          }),
+        )
+        .pipe(Effect.flip);
+      const resendFailure = yield* workspaces
+        .resendInvitation(
+          ResendWorkspaceInvitationCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            invitationId: invitation.invitationId,
+          }),
+        )
+        .pipe(Effect.flip);
+      const revokeFailure = yield* workspaces
+        .revokeInvitation(
+          RevokeWorkspaceInvitationCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            invitationId: invitation.invitationId,
+          }),
+        )
+        .pipe(Effect.flip);
+      const roleFailure = yield* workspaces
+        .changeMemberRole(
+          ChangeWorkspaceRoleCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            workspaceIdentityId: ownerIdentityId,
+            role: "member",
+          }),
+        )
+        .pipe(Effect.flip);
+      const removeFailure = yield* workspaces
+        .removeFullMember(
+          RemoveFullMemberCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            workspaceIdentityId: ownerIdentityId,
+          }),
+        )
+        .pipe(Effect.flip);
+      const channelFailure = yield* getChannelForActor(
+        GetChannelForActorInput.make({
+          actorId: adminAccountId,
+          workspaceId,
+          channelId,
+        }),
+      ).pipe(Effect.flip);
+
+      expect(yield* workspaces.listForActor(adminAccountId)).toEqual([]);
+      for (const failure of [
+        getFailure,
+        updateFailure,
+        leaveFailure,
+        invitationListFailure,
+        memberListFailure,
+        inviteFailure,
+        resendFailure,
+        revokeFailure,
+        roleFailure,
+        removeFailure,
+      ]) {
+        expect(failure).toBeInstanceOf(WorkspaceUnavailable);
+      }
+      expect(channelFailure._tag).toBe("Application.ChannelUnavailable");
     }),
   );
 
