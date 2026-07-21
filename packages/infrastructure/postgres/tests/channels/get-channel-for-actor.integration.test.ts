@@ -1,5 +1,13 @@
 import { expect, layer } from "@effect/vitest";
-import { Channel, makeChannelId, makeChannelName, makeUserId, makeWorkspaceId } from "@cove/domain";
+import {
+  Channel,
+  makeChannelId,
+  makeChannelName,
+  makeChannelPurpose,
+  makeUserId,
+  makeWorkspaceId,
+  makeWorkspaceIdentityId,
+} from "@cove/domain";
 import { ChannelRepository, PersistenceError } from "@cove/ports";
 import { ChannelUnavailable, GetChannelForActorInput, getChannelForActor } from "@cove/application";
 import { Effect } from "effect";
@@ -20,6 +28,9 @@ const makeFixtures = Effect.gen(function* () {
   const invalidChannelId = yield* makeChannelId(`invalid-${suffix}`);
   const publicChannelName = yield* makeChannelName("general");
   const privateChannelName = yield* makeChannelName("leadership");
+  const channelPurpose = yield* makeChannelPurpose("A test channel purpose.");
+  const stewardIdentityId = yield* makeWorkspaceIdentityId(`steward-${suffix}`);
+  const otherStewardIdentityId = yield* makeWorkspaceIdentityId(`other-steward-${suffix}`);
 
   return {
     workspaceId,
@@ -27,17 +38,23 @@ const makeFixtures = Effect.gen(function* () {
     privateMemberId,
     workspaceMemberId,
     outsiderId,
+    stewardIdentityId,
+    otherStewardIdentityId,
     publicChannel: Channel.make({
       id: publicChannelId,
       workspaceId,
       name: publicChannelName,
+      purpose: channelPurpose,
       visibility: "public",
+      stewardIdentityId,
     }),
     privateChannel: Channel.make({
       id: privateChannelId,
       workspaceId,
       name: privateChannelName,
+      purpose: channelPurpose,
       visibility: "private",
+      stewardIdentityId,
     }),
     otherChannelId,
     invalidChannelId,
@@ -66,20 +83,21 @@ const seedFixtures = Effect.fn("PostgresIntegrationTest.seedFixtures")(function*
   yield* sql`
     INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url)
     VALUES
-      (${`identity-${fixtures.privateMemberId}`}, ${fixtures.workspaceId}, ${fixtures.privateMemberId}, 'Private Member', '/avatars/default.svg'),
-      (${`identity-${fixtures.workspaceMemberId}`}, ${fixtures.workspaceId}, ${fixtures.workspaceMemberId}, 'Workspace Member', '/avatars/default.svg')
+      (${fixtures.stewardIdentityId}, ${fixtures.workspaceId}, ${fixtures.privateMemberId}, 'Private Member', '/avatars/default.svg'),
+      (${`identity-${fixtures.workspaceMemberId}`}, ${fixtures.workspaceId}, ${fixtures.workspaceMemberId}, 'Workspace Member', '/avatars/default.svg'),
+      (${fixtures.otherStewardIdentityId}, ${fixtures.otherWorkspaceId}, ${fixtures.workspaceMemberId}, 'Other Steward', '/avatars/default.svg')
   `;
   yield* sql`
-    INSERT INTO channels (id, workspace_id, name, visibility)
+    INSERT INTO channels (id, workspace_id, name, purpose, visibility, steward_identity_id)
     VALUES
-      (${fixtures.publicChannel.id}, ${fixtures.workspaceId}, ${fixtures.publicChannel.name}, 'public'),
-      (${fixtures.privateChannel.id}, ${fixtures.workspaceId}, ${fixtures.privateChannel.name}, 'private'),
-      (${fixtures.otherChannelId}, ${fixtures.otherWorkspaceId}, 'other-team', 'public'),
-      (${fixtures.invalidChannelId}, ${fixtures.workspaceId}, '', 'public')
+      (${fixtures.publicChannel.id}, ${fixtures.workspaceId}, ${fixtures.publicChannel.name}, ${fixtures.publicChannel.purpose}, 'public', ${fixtures.stewardIdentityId}),
+      (${fixtures.privateChannel.id}, ${fixtures.workspaceId}, ${fixtures.privateChannel.name}, ${fixtures.privateChannel.purpose}, 'private', ${fixtures.stewardIdentityId}),
+      (${fixtures.otherChannelId}, ${fixtures.otherWorkspaceId}, 'other-team', 'A test channel purpose.', 'public', ${fixtures.otherStewardIdentityId}),
+      (${fixtures.invalidChannelId}, ${fixtures.workspaceId}, '', 'A test channel purpose.', 'public', ${fixtures.stewardIdentityId})
   `;
   yield* sql`
     INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
-    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${`identity-${fixtures.privateMemberId}`})
+    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${fixtures.stewardIdentityId})
   `;
 });
 

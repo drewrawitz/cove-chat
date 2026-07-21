@@ -13,6 +13,7 @@ import {
 } from "../api/generated/cove-app.ts";
 import { PageMessage } from "../components/page-message.tsx";
 import { WorkspaceAdministration } from "../components/workspace-administration.tsx";
+import { WorkspaceChannels } from "../components/workspace-channels.tsx";
 import { requiredFormValue, roleLabel } from "../form-data.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
@@ -152,6 +153,8 @@ function WorkspaceHome(): ReactElement {
             <p className="mt-2 max-w-xl text-muted-foreground">
               This name and avatar belong to this workspace. Your account only handles sign-in.
             </p>
+
+            <WorkspaceChannels workspaceId={workspaceId} />
 
             <form
               key={workspaceId}

@@ -113,6 +113,7 @@ model WorkspaceIdentity {
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account             User                @relation(fields: [accountId], references: [id], onDelete: Restrict)
   channelMemberships  ChannelMembership[]
+  stewardedChannels   Channel[]           @relation("ChannelSteward")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -123,16 +124,20 @@ model WorkspaceIdentity {
 }
 
 model Channel {
-  id          String
-  workspaceId String              @map("workspace_id")
-  name        String
-  visibility  ChannelVisibility   @default(PUBLIC)
-  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  memberships ChannelMembership[]
-  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                String
+  workspaceId       String              @map("workspace_id")
+  name              String
+  purpose           String              @default("Purpose not recorded.")
+  visibility        ChannelVisibility   @default(PUBLIC)
+  stewardIdentityId String              @map("steward_identity_id")
+  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  steward           WorkspaceIdentity   @relation("ChannelSteward", fields: [workspaceId, stewardIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  memberships       ChannelMembership[]
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
   @@index([workspaceId, visibility])
+  @@index([workspaceId, stewardIdentityId])
   @@map("channels")
 }
 

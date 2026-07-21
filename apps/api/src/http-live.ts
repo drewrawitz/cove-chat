@@ -6,11 +6,12 @@ import { HttpApiBuilder, HttpApiScalar } from "effect/unstable/httpapi";
 import { createServer } from "node:http";
 import { ApiConfiguration } from "./api-configuration.ts";
 import { AuthApiLive, SessionAuthLive } from "./auth/index.ts";
+import { ChannelApiLive } from "./channels/index.ts";
 import { HealthApiLive } from "./health/index.ts";
 import { WorkspaceApiLive } from "./workspaces/index.ts";
 
 const AppApiRoutes = HttpApiBuilder.layer(CoveAppApi).pipe(
-  Layer.provide(Layer.mergeAll(AuthApiLive, WorkspaceApiLive)),
+  Layer.provide(Layer.mergeAll(AuthApiLive, WorkspaceApiLive, ChannelApiLive)),
   Layer.provide(SessionAuthLive),
 );
 

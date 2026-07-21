@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as WorkspaceInvitationsRedeemRouteImport } from './routes/workspace-invitations.redeem'
 import { Route as AuthVerifyRouteImport } from './routes/auth.verify'
+import { Route as WorkspacesWorkspaceIdChannelsChannelIdRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -35,25 +36,34 @@ const AuthVerifyRoute = AuthVerifyRouteImport.update({
   path: '/auth/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspacesWorkspaceIdChannelsChannelIdRoute =
+  WorkspacesWorkspaceIdChannelsChannelIdRouteImport.update({
+    id: '/channels/$channelId',
+    path: '/channels/$channelId',
+    getParentRoute: () => WorkspacesWorkspaceIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
-  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
-  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
-  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRoute
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -62,25 +72,28 @@ export interface FileRouteTypes {
     | '/auth/verify'
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/channels/$channelId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth/verify'
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/channels/$channelId'
   id:
     | '__root__'
     | '/'
     | '/auth/verify'
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/channels/$channelId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthVerifyRoute: typeof AuthVerifyRoute
   WorkspaceInvitationsRedeemRoute: typeof WorkspaceInvitationsRedeemRoute
-  WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRoute
+  WorkspacesWorkspaceIdRoute: typeof WorkspacesWorkspaceIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -113,14 +126,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspaces/$workspaceId/channels/$channelId': {
+      id: '/workspaces/$workspaceId/channels/$channelId'
+      path: '/channels/$channelId'
+      fullPath: '/workspaces/$workspaceId/channels/$channelId'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdRoute
+    }
   }
 }
+
+interface WorkspacesWorkspaceIdRouteChildren {
+  WorkspacesWorkspaceIdChannelsChannelIdRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+}
+
+const WorkspacesWorkspaceIdRouteChildren: WorkspacesWorkspaceIdRouteChildren = {
+  WorkspacesWorkspaceIdChannelsChannelIdRoute:
+    WorkspacesWorkspaceIdChannelsChannelIdRoute,
+}
+
+const WorkspacesWorkspaceIdRouteWithChildren =
+  WorkspacesWorkspaceIdRoute._addFileChildren(
+    WorkspacesWorkspaceIdRouteChildren,
+  )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthVerifyRoute: AuthVerifyRoute,
   WorkspaceInvitationsRedeemRoute: WorkspaceInvitationsRedeemRoute,
-  WorkspacesWorkspaceIdRoute: WorkspacesWorkspaceIdRoute,
+  WorkspacesWorkspaceIdRoute: WorkspacesWorkspaceIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

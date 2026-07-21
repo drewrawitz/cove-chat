@@ -650,16 +650,56 @@ const make = Effect.gen(function* () {
       endedAt: Date,
     ) =>
       sql`
-        WITH ended_membership AS (
-          UPDATE workspace_identities
-          SET membership_ended_at = ${endedAt}
+        WITH selected_membership AS (
+          SELECT workspace_id, id
+          FROM workspace_identities
           WHERE workspace_id = ${workspaceId}
             AND membership_ended_at IS NULL
             AND (
               (${selector.kind} = 'account' AND account_id = ${selector.id})
               OR (${selector.kind} = 'identity' AND id = ${selector.id})
             )
-          RETURNING workspace_id, id
+          FOR UPDATE
+        ),
+        replacement_steward AS (
+          SELECT
+            selected_membership.workspace_id,
+            selected_membership.id AS departing_identity_id,
+            (
+              SELECT replacement.id
+              FROM workspace_identities AS replacement
+              WHERE replacement.workspace_id = selected_membership.workspace_id
+                AND replacement.id <> selected_membership.id
+                AND replacement.membership_ended_at IS NULL
+                AND replacement.role IN ('owner', 'admin', 'member')
+              ORDER BY
+                CASE replacement.role
+                  WHEN 'owner' THEN 0
+                  WHEN 'admin' THEN 1
+                  ELSE 2
+                END,
+                replacement.membership_started_at,
+                replacement.id
+              LIMIT 1
+            ) AS replacement_identity_id
+          FROM selected_membership
+        ),
+        reassigned_channels AS (
+          UPDATE channels AS channel
+          SET steward_identity_id = replacement_steward.replacement_identity_id
+          FROM replacement_steward
+          WHERE channel.workspace_id = replacement_steward.workspace_id
+            AND channel.steward_identity_id = replacement_steward.departing_identity_id
+            AND replacement_steward.replacement_identity_id IS NOT NULL
+          RETURNING channel.workspace_id
+        ),
+        ended_membership AS (
+          UPDATE workspace_identities AS identity
+          SET membership_ended_at = ${endedAt}
+          FROM selected_membership
+          WHERE identity.workspace_id = selected_membership.workspace_id
+            AND identity.id = selected_membership.id
+          RETURNING identity.workspace_id, identity.id
         )
         DELETE FROM channel_memberships AS channel_membership
         USING ended_membership

@@ -1,5 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
+  ChannelAccess,
   WorkspaceAccess,
   makeCsrfToken,
   makeMagicLinkToken,
@@ -20,8 +21,30 @@ import { makeHttpRoutes } from "../../src/http-live.ts";
 
 const unmockedWorkspaceAccess = (operation: string) =>
   Effect.die(new Error(`WorkspaceAccess.${operation} not mocked for this test`));
+const unmockedChannelAccess = (operation: string) =>
+  Effect.die(new Error(`ChannelAccess.${operation} not mocked for this test`));
 
 const AuthPortsTest = Layer.mergeAll(
+  Layer.succeed(
+    ChannelAccess,
+    ChannelAccess.of({
+      listPublicForActor: Effect.fn("ChannelAccess.Test.listPublicForActor")(() =>
+        Effect.succeed([]),
+      ),
+      listStewardsForActor: Effect.fn("ChannelAccess.Test.listStewardsForActor")(() =>
+        Effect.succeed([]),
+      ),
+      getPublicForActor: Effect.fn("ChannelAccess.Test.getPublicForActor")(() =>
+        unmockedChannelAccess("getPublicForActor"),
+      ),
+      createPublic: Effect.fn("ChannelAccess.Test.createPublic")(() =>
+        unmockedChannelAccess("createPublic"),
+      ),
+      joinPublic: Effect.fn("ChannelAccess.Test.joinPublic")(() =>
+        unmockedChannelAccess("joinPublic"),
+      ),
+    }),
+  ),
   Layer.succeed(
     AuthenticationNotifier,
     AuthenticationNotifier.of({

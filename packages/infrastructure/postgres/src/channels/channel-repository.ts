@@ -21,7 +21,9 @@ const make = Effect.gen(function* () {
         id,
         workspace_id AS "workspaceId",
         name,
-        visibility
+        purpose,
+        visibility,
+        steward_identity_id AS "stewardIdentityId"
       FROM channels
       WHERE workspace_id = ${workspaceId}
         AND id = ${channelId}
