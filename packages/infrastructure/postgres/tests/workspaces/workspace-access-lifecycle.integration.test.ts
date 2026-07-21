@@ -1,20 +1,20 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  AlreadyWorkspaceMember,
+  AcceptWorkspaceInvitationCommand,
   CreateWorkspaceCommand,
-  ExistingWorkspaceIdentityProfileNotAccepted,
   GetChannelForActorInput,
-  InitialWorkspaceIdentityProfileRequired,
-  JoinWorkspaceCommand,
+  InviteWorkspaceMemberCommand,
   LastWorkspaceOwner,
   LeaveWorkspaceCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
   WorkspaceAccessFailure,
+  WorkspaceInvitationUnavailable,
   WorkspaceUnavailable,
   getChannelForActor,
 } from "@cove/application";
 import {
+  EmailAddress,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
   WorkspaceName,
@@ -78,41 +78,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           },
         },
       ]);
-    }),
-  );
-
-  it.effect("starts a first membership from the supplied identity profile", () =>
-    Effect.gen(function* () {
-      const suffix = randomUUID();
-      const accountId = yield* makeUserId(`workspace-join-account-${suffix}`);
-      const workspaceId = yield* makeWorkspaceId(`workspace-join-${suffix}`);
-      const sql = yield* SqlClient.SqlClient;
-      const workspaces = yield* WorkspaceAccess;
-
-      yield* sql`
-        INSERT INTO users (id, email, display_name)
-        VALUES (${accountId}, ${`${accountId}@example.test`}, 'Workspace Joiner')
-      `;
-      yield* sql`
-        INSERT INTO workspaces (id, name)
-        VALUES (${workspaceId}, 'Design Guild')
-      `;
-
-      const joined = yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: accountId,
-          workspaceId,
-          initialIdentityProfile: {
-            name: WorkspaceIdentityName.make("Alice Design"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/alice.svg"),
-          },
-        }),
-      );
-      const access = yield* workspaces.getForActor(accountId, workspaceId);
-
-      expect(joined._tag).toBe("FirstMembershipStarted");
-      expect(access.membership.role).toBe("member");
-      expect(access.identity.id).toBe(joined.workspaceIdentityId);
     }),
   );
 
@@ -247,16 +212,23 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         }),
       );
       const unavailable = yield* workspaces.getForActor(accountId, workspaceId).pipe(Effect.flip);
-      const reactivated = yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: accountId,
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerId,
           workspaceId,
+          inviteeEmail: EmailAddress.make(`${accountId}@example.test`),
+        }),
+      );
+      const reactivated = yield* workspaces.acceptInvitation(
+        AcceptWorkspaceInvitationCommand.make({
+          actorAccountId: accountId,
+          invitationId: invitation.invitationId,
         }),
       );
 
       expect(ended.workspaceIdentityId).toBe(identityId);
       expect(unavailable).toBeInstanceOf(WorkspaceUnavailable);
-      expect(reactivated._tag).toBe("WorkspaceMembershipReactivated");
+      expect(reactivated._tag).toBe("WorkspaceInvitationAccepted");
       expect(yield* workspaces.getForActor(accountId, workspaceId)).toMatchObject({
         identity: {
           id: identityId,
@@ -267,18 +239,14 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
     }),
   );
 
-  it.effect("negotiates first membership and reactivation without sticky failures", () =>
+  it.effect("serializes concurrent acceptance of one Workspace invitation", () =>
     Effect.gen(function* () {
       const suffix = randomUUID();
-      const firstAccountId = yield* makeUserId(`join-negotiation-first-${suffix}`);
-      const returningAccountId = yield* makeUserId(`join-negotiation-returning-${suffix}`);
-      const activeAccountId = yield* makeUserId(`join-negotiation-active-${suffix}`);
-      const workspaceId = yield* makeWorkspaceId(`join-negotiation-${suffix}`);
-      const returningIdentityId = yield* makeWorkspaceIdentityId(
-        `join-negotiation-returning-identity-${suffix}`,
-      );
-      const activeIdentityId = yield* makeWorkspaceIdentityId(
-        `join-negotiation-active-identity-${suffix}`,
+      const accountId = yield* makeUserId(`concurrent-join-account-${suffix}`);
+      const ownerId = yield* makeUserId(`concurrent-join-owner-${suffix}`);
+      const workspaceId = yield* makeWorkspaceId(`concurrent-join-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(
+        `concurrent-join-owner-identity-${suffix}`,
       );
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
@@ -286,13 +254,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       yield* sql`
         INSERT INTO users (id, email, display_name)
         VALUES
-          (${firstAccountId}, ${`${firstAccountId}@example.test`}, 'First Joiner'),
-          (${returningAccountId}, ${`${returningAccountId}@example.test`}, 'Returning Joiner'),
-          (${activeAccountId}, ${`${activeAccountId}@example.test`}, 'Active Joiner')
+          (${accountId}, ${`${accountId}@example.test`}, 'Concurrent Joiner'),
+          (${ownerId}, ${`${ownerId}@example.test`}, 'Concurrent Owner')
       `;
       yield* sql`
         INSERT INTO workspaces (id, name)
-        VALUES (${workspaceId}, 'Join Negotiation Team')
+        VALUES (${workspaceId}, 'Concurrent Join Team')
       `;
       yield* sql`
         INSERT INTO workspace_identities (
@@ -301,115 +268,32 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           account_id,
           name,
           avatar_url,
-          role,
-          membership_ended_at
+          role
         )
-        VALUES
-          (
-            ${returningIdentityId},
-            ${workspaceId},
-            ${returningAccountId},
-            'Returning Profile',
-            '/avatars/returning.svg',
-            'member',
-            '2026-07-17T12:00:00Z'
-          ),
-          (
-            ${activeIdentityId},
-            ${workspaceId},
-            ${activeAccountId},
-            'Active Profile',
-            '/avatars/active.svg',
-            'member',
-            NULL
-          )
+        VALUES (
+          ${ownerIdentityId},
+          ${workspaceId},
+          ${ownerId},
+          'Concurrent Owner',
+          '/avatars/owner.svg',
+          'owner'
+        )
       `;
-
-      const missingProfile = yield* workspaces
-        .join(
-          JoinWorkspaceCommand.make({
-            actorAccountId: firstAccountId,
-            workspaceId,
-          }),
-        )
-        .pipe(Effect.flip);
-      const firstStarted = yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: firstAccountId,
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerId,
           workspaceId,
-          initialIdentityProfile: {
-            name: WorkspaceIdentityName.make("First Profile"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/first.svg"),
-          },
+          inviteeEmail: EmailAddress.make(`${accountId}@example.test`),
         }),
       );
-
-      const suppliedExistingProfile = yield* workspaces
-        .join(
-          JoinWorkspaceCommand.make({
-            actorAccountId: returningAccountId,
-            workspaceId,
-            initialIdentityProfile: {
-              name: WorkspaceIdentityName.make("Replacement Profile"),
-              avatarUrl: WorkspaceAvatarUrl.make("/avatars/replacement.svg"),
-            },
-          }),
-        )
-        .pipe(Effect.flip);
-      yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: returningAccountId,
-          workspaceId,
-        }),
-      );
-
-      const alreadyActive = yield* workspaces
-        .join(
-          JoinWorkspaceCommand.make({
-            actorAccountId: activeAccountId,
-            workspaceId,
-          }),
-        )
-        .pipe(Effect.flip);
-
-      expect(missingProfile).toBeInstanceOf(InitialWorkspaceIdentityProfileRequired);
-      expect(firstStarted._tag).toBe("FirstMembershipStarted");
-      expect(suppliedExistingProfile).toBeInstanceOf(ExistingWorkspaceIdentityProfileNotAccepted);
-      expect(yield* workspaces.getForActor(returningAccountId, workspaceId)).toMatchObject({
-        identity: {
-          id: returningIdentityId,
-          name: "Returning Profile",
-          avatarUrl: "/avatars/returning.svg",
-        },
-      });
-      expect(alreadyActive).toBeInstanceOf(AlreadyWorkspaceMember);
-    }),
-  );
-
-  it.effect("serializes concurrent joins for one account and workspace", () =>
-    Effect.gen(function* () {
-      const suffix = randomUUID();
-      const accountId = yield* makeUserId(`concurrent-join-account-${suffix}`);
-      const workspaceId = yield* makeWorkspaceId(`concurrent-join-${suffix}`);
-      const sql = yield* SqlClient.SqlClient;
-      const workspaces = yield* WorkspaceAccess;
-
-      yield* sql`
-        INSERT INTO users (id, email, display_name)
-        VALUES (${accountId}, ${`${accountId}@example.test`}, 'Concurrent Joiner')
-      `;
-      yield* sql`
-        INSERT INTO workspaces (id, name)
-        VALUES (${workspaceId}, 'Concurrent Join Team')
-      `;
 
       const results = yield* Effect.all(
         [
           workspaces
-            .join(
-              JoinWorkspaceCommand.make({
+            .acceptInvitation(
+              AcceptWorkspaceInvitationCommand.make({
                 actorAccountId: accountId,
-                workspaceId,
+                invitationId: invitation.invitationId,
                 initialIdentityProfile: {
                   name: WorkspaceIdentityName.make("Concurrent A"),
                   avatarUrl: WorkspaceAvatarUrl.make("/avatars/a.svg"),
@@ -418,10 +302,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
             )
             .pipe(Effect.result),
           workspaces
-            .join(
-              JoinWorkspaceCommand.make({
+            .acceptInvitation(
+              AcceptWorkspaceInvitationCommand.make({
                 actorAccountId: accountId,
-                workspaceId,
+                invitationId: invitation.invitationId,
                 initialIdentityProfile: {
                   name: WorkspaceIdentityName.make("Concurrent B"),
                   avatarUrl: WorkspaceAvatarUrl.make("/avatars/b.svg"),
@@ -437,7 +321,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
 
       expect(successes).toHaveLength(1);
       expect(failures).toHaveLength(1);
-      expect(failures[0]?.failure).toBeInstanceOf(AlreadyWorkspaceMember);
+      expect(failures[0]?.failure).toBeInstanceOf(WorkspaceInvitationUnavailable);
     }),
   );
 
@@ -722,8 +606,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
     Effect.gen(function* () {
       const suffix = randomUUID();
       const accountId = yield* makeUserId(`inactive-profile-account-${suffix}`);
+      const ownerId = yield* makeUserId(`inactive-profile-owner-${suffix}`);
       const workspaceId = yield* makeWorkspaceId(`inactive-profile-${suffix}`);
       const identityId = yield* makeWorkspaceIdentityId(`inactive-profile-identity-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(
+        `inactive-profile-owner-identity-${suffix}`,
+      );
       const sql = yield* SqlClient.SqlClient;
       const workspaces = yield* WorkspaceAccess;
       const updateCommand = UpdateWorkspaceIdentityCommand.make({
@@ -737,7 +625,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
 
       yield* sql`
         INSERT INTO users (id, email, display_name)
-        VALUES (${accountId}, ${`${accountId}@example.test`}, 'Inactive Editor')
+        VALUES
+          (${accountId}, ${`${accountId}@example.test`}, 'Inactive Editor'),
+          (${ownerId}, ${`${ownerId}@example.test`}, 'Inactive Profile Owner')
       `;
       yield* sql`
         INSERT INTO workspaces (id, name)
@@ -753,22 +643,39 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           role,
           membership_ended_at
         )
-        VALUES (
-          ${identityId},
-          ${workspaceId},
-          ${accountId},
-          'Inactive Profile',
-          '/avatars/inactive.svg',
-          'member',
-          '2026-07-17T12:00:00Z'
-        )
+        VALUES
+          (
+            ${identityId},
+            ${workspaceId},
+            ${accountId},
+            'Inactive Profile',
+            '/avatars/inactive.svg',
+            'member',
+            '2026-07-17T12:00:00Z'
+          ),
+          (
+            ${ownerIdentityId},
+            ${workspaceId},
+            ${ownerId},
+            'Inactive Profile Owner',
+            '/avatars/owner.svg',
+            'owner',
+            NULL
+          )
       `;
 
       const inactiveFailure = yield* workspaces.updateMyIdentity(updateCommand).pipe(Effect.flip);
-      yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: accountId,
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerId,
           workspaceId,
+          inviteeEmail: EmailAddress.make(`${accountId}@example.test`),
+        }),
+      );
+      yield* workspaces.acceptInvitation(
+        AcceptWorkspaceInvitationCommand.make({
+          actorAccountId: accountId,
+          invitationId: invitation.invitationId,
         }),
       );
       const activeNoOp = yield* workspaces.updateMyIdentity(updateCommand);
@@ -835,10 +742,17 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           workspaceId,
         }),
       );
-      yield* workspaces.join(
-        JoinWorkspaceCommand.make({
-          actorAccountId: accountId,
+      const invitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerId,
           workspaceId,
+          inviteeEmail: EmailAddress.make(`${accountId}@example.test`),
+        }),
+      );
+      yield* workspaces.acceptInvitation(
+        AcceptWorkspaceInvitationCommand.make({
+          actorAccountId: accountId,
+          invitationId: invitation.invitationId,
         }),
       );
 

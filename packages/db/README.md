@@ -9,10 +9,11 @@ Copy `.env.example` to `.env`, then run the package scripts through Vite+ to val
 create reviewed migrations, apply local migrations, deploy committed migrations, or inspect
 migration status.
 
-Run `vp run @cove/db#seed` from the repository root to upsert the two passwordless demo users:
+Run `vp run @cove/db#seed` from the repository root to upsert the three passwordless demo users:
 
 - `alice@cove.local` (`demo-alice`)
 - `bob@cove.local` (`demo-bob`)
+- `carol@cove.local` (`demo-carol`)
 
 Sign-in is by one-time magic link; the seed contains no passwords or reusable login credentials.
 

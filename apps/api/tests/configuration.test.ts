@@ -2,20 +2,20 @@ import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
 import { ApiConfiguration, ApiConfigurationLive } from "../src/api-configuration.ts";
 
-it.effect("decodes API runtime configuration once with local server defaults", () =>
+it.effect("uses the browser-facing web origin for public links", () =>
   Effect.gen(function* () {
     const configuration = yield* ApiConfiguration;
 
     expect(configuration.host).toBe("0.0.0.0");
     expect(configuration.port).toBe(3001);
-    expect(configuration.publicAppUrl.href).toBe("http://localhost:3000/");
+    expect(configuration.publicWebOrigin.href).toBe("http://localhost:3000/");
     expect(configuration.exposeAppApiDocs).toBe(false);
   }).pipe(
     Effect.provide(ApiConfigurationLive),
     Effect.provide(
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          PUBLIC_APP_URL: "http://localhost:3000",
+          PUBLIC_WEB_ORIGIN: "http://localhost:3000",
         }),
       ),
     ),
@@ -33,7 +33,7 @@ it.effect("enables app API documentation explicitly", () =>
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
           EXPOSE_APP_API_DOCS: "true",
-          PUBLIC_APP_URL: "http://localhost:3000",
+          PUBLIC_WEB_ORIGIN: "http://localhost:3000",
         }),
       ),
     ),
@@ -42,7 +42,7 @@ it.effect("enables app API documentation explicitly", () =>
 
 it.effect("rejects values that are not credential-free HTTP origins", () =>
   Effect.gen(function* () {
-    for (const publicAppUrl of [
+    for (const publicWebOrigin of [
       "mailto:hello@cove.test",
       "https://user:password@app.cove.test",
       "https://app.cove.test/deployment",
@@ -52,7 +52,7 @@ it.effect("rejects values that are not credential-free HTTP origins", () =>
         Effect.provide(
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
-              PUBLIC_APP_URL: publicAppUrl,
+              PUBLIC_WEB_ORIGIN: publicWebOrigin,
             }),
           ),
         ),

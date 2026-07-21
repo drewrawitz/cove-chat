@@ -17,7 +17,7 @@ it.effect("publishes only the deliberate public HTTP contract", () =>
   }),
 );
 
-it.effect("keeps first-party authentication in the app HTTP contract", () =>
+it.effect("keeps first-party operations in the app HTTP contract", () =>
   Effect.sync(() => {
     const document = makeCoveAppOpenApi();
 
@@ -30,9 +30,18 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
       "/api/app/v1/auth/login/verify",
       "/api/app/v1/auth/logout",
       "/api/app/v1/me",
+      "/api/app/v1/workspace-invitations",
+      "/api/app/v1/workspace-invitations/redeem",
+      "/api/app/v1/workspace-invitations/{invitationId}/accept",
       "/api/app/v1/workspaces",
       "/api/app/v1/workspaces/{workspaceId}",
       "/api/app/v1/workspaces/{workspaceId}/identity",
+      "/api/app/v1/workspaces/{workspaceId}/invitations",
+      "/api/app/v1/workspaces/{workspaceId}/invitations/{invitationId}",
+      "/api/app/v1/workspaces/{workspaceId}/invitations/{invitationId}/resend",
+      "/api/app/v1/workspaces/{workspaceId}/members",
+      "/api/app/v1/workspaces/{workspaceId}/members/{workspaceIdentityId}",
+      "/api/app/v1/workspaces/{workspaceId}/members/{workspaceIdentityId}/role",
       "/api/app/v1/workspaces/{workspaceId}/membership",
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
@@ -74,7 +83,10 @@ it.effect("keeps first-party authentication in the app HTTP contract", () =>
     expect(document.components.schemas).toMatchObject({
       CoveAppErrorResponse: {
         anyOf: expect.arrayContaining([
+          { $ref: "#/components/schemas/FullMemberUnavailableResponse" },
           { $ref: "#/components/schemas/InvalidMagicLinkResponse" },
+          { $ref: "#/components/schemas/WorkspaceAdministrationForbiddenResponse" },
+          { $ref: "#/components/schemas/WorkspaceInvitationUnavailableResponse" },
           { $ref: "#/components/schemas/WorkspaceUnavailableResponse" },
         ]),
       },

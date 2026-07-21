@@ -63,7 +63,7 @@ describe("Cove API transport", () => {
           new Response(
             JSON.stringify({
               code: "LAST_WORKSPACE_OWNER",
-              message: "The final workspace owner cannot leave.",
+              message: "The final workspace owner cannot leave, be removed, or be demoted.",
             }),
             { headers: { "content-type": "application/json" }, status: 409 },
           ),
@@ -74,7 +74,7 @@ describe("Cove API transport", () => {
     await expect(workspacesEndMembership("workspace-1")).rejects.toMatchObject({
       info: {
         code: "LAST_WORKSPACE_OWNER",
-        message: "The final workspace owner cannot leave.",
+        message: "The final workspace owner cannot leave, be removed, or be demoted.",
       },
       status: 409,
     });
@@ -107,7 +107,7 @@ describe("Cove API transport", () => {
           new Response(
             JSON.stringify({
               code: "LAST_WORKSPACE_OWNER",
-              message: "The final workspace owner cannot leave.",
+              message: "The final workspace owner cannot leave, be removed, or be demoted.",
             }),
             { headers: { "content-type": "application/json" }, status: 409 },
           ),

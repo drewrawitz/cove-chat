@@ -1,20 +1,32 @@
 import {
+  AcceptWorkspaceInvitationCommand,
+  ChangeWorkspaceRoleCommand,
   CreateWorkspaceCommand,
-  JoinWorkspaceCommand,
+  InviteWorkspaceMemberCommand,
   LeaveWorkspaceCommand,
+  RemoveFullMemberCommand,
+  ResendWorkspaceInvitationCommand,
+  RedeemWorkspaceInvitationCommand,
+  RevokeWorkspaceInvitationCommand,
   UpdateWorkspaceIdentityCommand,
   WorkspaceAccess,
+  redeemWorkspaceInvitation,
+  makeEmailAddress,
+  makeWorkspaceInvitationToken,
   makeCsrfToken,
   makeSessionToken,
   validateCsrf,
 } from "@cove/application";
 import {
+  DisplayName,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
   WorkspaceIdentityProfile,
   WorkspaceName,
   makeUserId,
   makeWorkspaceId,
+  makeWorkspaceIdentityId,
+  makeWorkspaceInvitationId,
 } from "@cove/domain";
 import {
   AuthErrorResponses,
@@ -25,12 +37,21 @@ import {
 } from "@cove/protocol";
 import { Effect, Redacted } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { setAuthenticationCookies } from "../auth/index.ts";
 import {
+  fullMemberListResponse,
+  pendingWorkspaceInvitationListResponse,
   workspaceAccessResponse,
   workspaceCreatedResponse,
   workspaceIdentityUpdateResponse,
-  workspaceJoinedResponse,
+  workspaceInvitationAcceptedResponse,
+  workspaceInvitationIssuedResponse,
+  workspaceInvitationListResponse,
+  workspaceInvitationRedeemedResponse,
+  workspaceInvitationResentResponse,
+  workspaceInvitationRevokedResponse,
   workspaceListResponse,
+  workspaceRoleChangeResponse,
 } from "./workspace-response.ts";
 
 const errorTag = (error: unknown): unknown =>
@@ -47,7 +68,7 @@ const endMembershipErrorResponse = (error: unknown) =>
     ? WorkspaceErrorResponses.lastOwner
     : workspaceUnavailableErrorResponse(error);
 
-const joinWorkspaceErrorResponse = (error: unknown) => {
+const acceptInvitationErrorResponse = (error: unknown) => {
   switch (errorTag(error)) {
     case "Application.AlreadyWorkspaceMember":
       return WorkspaceErrorResponses.alreadyMember;
@@ -55,6 +76,68 @@ const joinWorkspaceErrorResponse = (error: unknown) => {
       return WorkspaceErrorResponses.existingProfileNotAccepted;
     case "Application.InitialWorkspaceIdentityProfileRequired":
       return WorkspaceErrorResponses.initialProfileRequired;
+    case "Application.WorkspaceInvitationUnavailable":
+    case "Domain.InvalidIdentifier":
+      return WorkspaceErrorResponses.invitationUnavailable;
+    default:
+      return AuthErrorResponses.internalServerError;
+  }
+};
+
+const inviteMemberErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.AlreadyWorkspaceMember":
+      return WorkspaceErrorResponses.alreadyMember;
+    case "Application.WorkspaceAdministrationForbidden":
+      return WorkspaceErrorResponses.administrationForbidden;
+    default:
+      return workspaceUnavailableErrorResponse(error);
+  }
+};
+
+const redeemInvitationErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.AlreadyWorkspaceMember":
+      return WorkspaceErrorResponses.alreadyMember;
+    case "Application.WorkspaceInvitationRedemptionUnavailable":
+      return WorkspaceErrorResponses.invitationUnavailable;
+    default:
+      return AuthErrorResponses.internalServerError;
+  }
+};
+
+const workspaceAdministrationListErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.WorkspaceAdministrationForbidden"
+    ? WorkspaceErrorResponses.administrationForbidden
+    : workspaceUnavailableErrorResponse(error);
+
+const invitationAdministrationErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.WorkspaceAdministrationForbidden":
+      return WorkspaceErrorResponses.administrationForbidden;
+    case "Application.WorkspaceInvitationUnavailable":
+    case "Domain.InvalidIdentifier":
+      return WorkspaceErrorResponses.invitationUnavailable;
+    default:
+      return workspaceUnavailableErrorResponse(error);
+  }
+};
+
+const resendInvitationAdministrationErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.WorkspaceInvitationResendTooSoon"
+    ? WorkspaceErrorResponses.invitationResendTooSoon(
+        (error as { readonly resendAvailableAt: Date }).resendAvailableAt,
+      )
+    : invitationAdministrationErrorResponse(error);
+
+const memberAdministrationErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.LastWorkspaceOwner":
+      return WorkspaceErrorResponses.lastOwner;
+    case "Application.WorkspaceAdministrationForbidden":
+      return WorkspaceErrorResponses.administrationForbidden;
+    case "Application.FullMemberUnavailable":
+      return WorkspaceErrorResponses.fullMemberUnavailable;
     default:
       return workspaceUnavailableErrorResponse(error);
   }
@@ -171,7 +254,17 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           .pipe(Effect.mapError(endMembershipErrorResponse));
       }),
     )
-    .handle("joinWorkspace", ({ headers, params, payload }) =>
+    .handle("listWorkspaceInvitations", () =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceAccess = yield* WorkspaceAccess;
+        return workspaceInvitationListResponse(
+          yield* workspaceAccess.listInvitationsForActor(actorId),
+        );
+      }).pipe(Effect.mapError(() => AuthErrorResponses.internalServerError)),
+    )
+    .handle("inviteWorkspaceMember", ({ headers, params, payload }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const actor = yield* AuthenticatedActor;
@@ -182,11 +275,97 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
           Effect.mapError(workspaceUnavailableErrorResponse),
         );
         const workspaceAccess = yield* WorkspaceAccess;
-        const joined = yield* workspaceAccess
-          .join(
-            JoinWorkspaceCommand.make({
+        const invitation = yield* workspaceAccess
+          .inviteMember(
+            InviteWorkspaceMemberCommand.make({
               actorAccountId: actorId,
               workspaceId,
+              inviteeEmail: makeEmailAddress(payload.email),
+            }),
+          )
+          .pipe(Effect.mapError(inviteMemberErrorResponse));
+        return workspaceInvitationIssuedResponse(invitation);
+      }),
+    )
+    .handle("listPendingWorkspaceInvitations", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const workspaceAccess = yield* WorkspaceAccess;
+        return pendingWorkspaceInvitationListResponse(
+          yield* workspaceAccess.listPendingInvitationsForAdministrator(actorId, workspaceId),
+        );
+      }).pipe(Effect.mapError(workspaceAdministrationListErrorResponse)),
+    )
+    .handle("resendWorkspaceInvitation", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
+          Effect.mapError(workspaceUnavailableErrorResponse),
+        );
+        const invitationId = yield* makeWorkspaceInvitationId(params.invitationId).pipe(
+          Effect.mapError(invitationAdministrationErrorResponse),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const resent = yield* workspaceAccess
+          .resendInvitation(
+            ResendWorkspaceInvitationCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              invitationId,
+            }),
+          )
+          .pipe(Effect.mapError(resendInvitationAdministrationErrorResponse));
+        return workspaceInvitationResentResponse(resent);
+      }),
+    )
+    .handle("revokeWorkspaceInvitation", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
+          Effect.mapError(workspaceUnavailableErrorResponse),
+        );
+        const invitationId = yield* makeWorkspaceInvitationId(params.invitationId).pipe(
+          Effect.mapError(invitationAdministrationErrorResponse),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const revoked = yield* workspaceAccess
+          .revokeInvitation(
+            RevokeWorkspaceInvitationCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              invitationId,
+            }),
+          )
+          .pipe(Effect.mapError(invitationAdministrationErrorResponse));
+        return workspaceInvitationRevokedResponse(revoked);
+      }),
+    )
+    .handle("acceptWorkspaceInvitation", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const invitationId = yield* makeWorkspaceInvitationId(params.invitationId).pipe(
+          Effect.mapError(acceptInvitationErrorResponse),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const accepted = yield* workspaceAccess
+          .acceptInvitation(
+            AcceptWorkspaceInvitationCommand.make({
+              actorAccountId: actorId,
+              invitationId,
               ...(payload.initialIdentityProfile === undefined
                 ? {}
                 : {
@@ -197,8 +376,91 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
                   }),
             }),
           )
-          .pipe(Effect.mapError(joinWorkspaceErrorResponse));
-        return workspaceJoinedResponse(joined);
+          .pipe(Effect.mapError(acceptInvitationErrorResponse));
+        return workspaceInvitationAcceptedResponse(accepted);
+      }),
+    )
+    .handle("redeemWorkspaceInvitation", ({ payload }) =>
+      Effect.gen(function* () {
+        const authenticated = yield* redeemWorkspaceInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token: makeWorkspaceInvitationToken(payload.token),
+            displayName: DisplayName.make(payload.displayName),
+            initialIdentityProfile: WorkspaceIdentityProfile.make({
+              name: WorkspaceIdentityName.make(payload.initialIdentityProfile.name),
+              avatarUrl: WorkspaceAvatarUrl.make(payload.initialIdentityProfile.avatarUrl),
+            }),
+          }),
+        ).pipe(Effect.mapError(redeemInvitationErrorResponse));
+        yield* setAuthenticationCookies(
+          authenticated.session.token,
+          authenticated.session.csrfToken,
+          authenticated.session.expiresAt,
+        );
+        return workspaceInvitationRedeemedResponse(authenticated.invitation);
+      }),
+    )
+    .handle("listFullMembers", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const workspaceAccess = yield* WorkspaceAccess;
+        return fullMemberListResponse(
+          yield* workspaceAccess.listFullMembersForActor(actorId, workspaceId),
+        );
+      }).pipe(Effect.mapError(workspaceAdministrationListErrorResponse)),
+    )
+    .handle("changeWorkspaceRole", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
+          Effect.mapError(workspaceUnavailableErrorResponse),
+        );
+        const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId).pipe(
+          Effect.mapError(() => WorkspaceErrorResponses.fullMemberUnavailable),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        const changed = yield* workspaceAccess
+          .changeMemberRole(
+            ChangeWorkspaceRoleCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              workspaceIdentityId,
+              role: payload.role,
+            }),
+          )
+          .pipe(Effect.mapError(memberAdministrationErrorResponse));
+        return workspaceRoleChangeResponse(changed);
+      }),
+    )
+    .handle("removeFullMember", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId).pipe(
+          Effect.mapError(() => AuthErrorResponses.internalServerError),
+        );
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId).pipe(
+          Effect.mapError(workspaceUnavailableErrorResponse),
+        );
+        const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId).pipe(
+          Effect.mapError(() => WorkspaceErrorResponses.fullMemberUnavailable),
+        );
+        const workspaceAccess = yield* WorkspaceAccess;
+        yield* workspaceAccess
+          .removeFullMember(
+            RemoveFullMemberCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              workspaceIdentityId,
+            }),
+          )
+          .pipe(Effect.mapError(memberAdministrationErrorResponse));
       }),
     ),
 );

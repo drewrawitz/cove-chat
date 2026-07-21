@@ -168,7 +168,9 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
 export interface BrowserAcceptanceService {
   readonly page: Page;
   readonly webUrl: string;
+  readonly makeWorkspaceInvitationResendable: (inviteeEmail: string) => Effect.Effect<void, Error>;
   readonly takeMagicLink: () => Effect.Effect<string, Error>;
+  readonly takeWorkspaceInvitationLink: () => Effect.Effect<string, Error>;
 }
 
 export class BrowserAcceptance extends Context.Service<
@@ -204,7 +206,7 @@ export const BrowserAcceptanceLive = Layer.effect(
           EXPOSE_APP_API_DOCS: "false",
           HOST: "127.0.0.1",
           PORT: String(apiPort),
-          PUBLIC_APP_URL: webUrl,
+          PUBLIC_WEB_ORIGIN: webUrl,
         },
       },
       apiOutput,
@@ -247,9 +249,12 @@ export const BrowserAcceptanceLive = Layer.effect(
     const takeMagicLink = Effect.fn("BrowserAcceptance.takeMagicLink")(() =>
       Effect.try({
         try: () => {
-          const link = apiOutput
-            .join("")
-            .match(/http:\/\/localhost:\d+\/auth\/verify\?token=[A-Za-z0-9_-]+/)?.[0];
+          const links = [
+            ...apiOutput
+              .join("")
+              .matchAll(/http:\/\/localhost:\d+\/auth\/verify\?token=[A-Za-z0-9_-]+/g),
+          ];
+          const link = links.at(-1)?.[0];
           if (link === undefined) throw new Error("No development magic link has been delivered.");
           return link;
         },
@@ -272,6 +277,74 @@ export const BrowserAcceptanceLive = Layer.effect(
       ),
     );
 
-    return BrowserAcceptance.of({ page, webUrl, takeMagicLink });
+    const takeWorkspaceInvitationLink = Effect.fn("BrowserAcceptance.takeWorkspaceInvitationLink")(
+      () =>
+        Effect.try({
+          try: () => {
+            const links = [
+              ...apiOutput
+                .join("")
+                .matchAll(
+                  /http:\/\/localhost:\d+\/workspace-invitations\/redeem\?token=[A-Za-z0-9_-]+/g,
+                ),
+            ];
+            const link = links.at(-1)?.[0];
+            if (link === undefined) {
+              throw new Error("No development Workspace invitation link has been delivered.");
+            }
+            return link;
+          },
+          catch: (cause) =>
+            new Error("No development Workspace invitation link has been delivered.", { cause }),
+        }).pipe(
+          Effect.retry(Schedule.spaced("50 millis")),
+          Effect.timeout("10 seconds"),
+          Effect.mapError(
+            (cause) =>
+              new Error(
+                [
+                  "No development Workspace invitation link has been delivered.",
+                  `API output:\n${apiOutput.join("")}`,
+                  `Web output:\n${webOutput.join("")}`,
+                  `Browser output:\n${browserOutput.join("")}`,
+                ].join("\n"),
+                { cause },
+              ),
+          ),
+        ),
+    );
+
+    const makeWorkspaceInvitationResendable = Effect.fn(
+      "BrowserAcceptance.makeWorkspaceInvitationResendable",
+    )((inviteeEmail: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const result = await container.exec([
+            "psql",
+            "--username",
+            container.getUsername(),
+            "--dbname",
+            container.getDatabase(),
+            "--set",
+            `invitee_email=${inviteeEmail}`,
+            "--command",
+            "UPDATE workspace_invitations SET invited_at = NOW() - INTERVAL '61 seconds' WHERE invitee_email = :'invitee_email';",
+          ]);
+          if (result.exitCode !== 0 || !result.stdout.includes("UPDATE 1")) {
+            throw new Error(result.stderr || result.stdout);
+          }
+        },
+        catch: (cause) =>
+          new Error(`Could not age the Workspace invitation for ${inviteeEmail}.`, { cause }),
+      }),
+    );
+
+    return BrowserAcceptance.of({
+      page,
+      webUrl,
+      makeWorkspaceInvitationResendable,
+      takeMagicLink,
+      takeWorkspaceInvitationLink,
+    });
   }),
 );

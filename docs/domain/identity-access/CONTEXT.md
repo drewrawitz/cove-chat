@@ -16,6 +16,10 @@ _Avoid_: Global profile, active membership
 The time-bounded relationship that grants a Workspace Identity access to a Workspace and assigns its current Workspace Role. Ending it removes access and every Channel Membership established under it while preserving the Workspace Identity and its history; a later Workspace Membership does not restore those Channel Memberships.
 _Avoid_: Workspace identity
 
+**Workspace Invitation**:
+An expiring, email-addressed offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Redeeming the invitation proves control of the invited email address and creates an Account when none exists. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity. Until accepted, revoked, or expired, it is pending; resending replaces its credential and renews its expiry, while revocation ends the offer immediately.
+_Avoid_: Workspace membership, share link
+
 **Workspace Role**:
 The authority assigned to a workspace membership: owner, admin, member, or guest. The same account can hold a different role in each workspace.
 _Avoid_: Account role, global role
@@ -26,7 +30,7 @@ _Avoid_: Account role, global role
 A full member with ultimate Workspace authority, including appointing other Owners and archiving the Workspace. Until archived, a Workspace must have at least one Owner with an active Workspace Membership; no departure, removal, or Workspace Role change may eliminate the final active Owner.
 
 **Admin**:
-A full member who manages workspace membership, roles below owner, and plugin installation without automatically gaining access to private conversations.
+A full member who manages workspace membership, pending Workspace Invitations, roles below owner, and plugin installation without automatically gaining access to private conversations.
 
 **Member**:
 An internal workspace participant without workspace-wide administrative authority.

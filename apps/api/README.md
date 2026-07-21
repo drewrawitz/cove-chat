@@ -6,6 +6,9 @@ The initial HTTP surface exposes:
 
 - `POST /api/app/v1/auth/login` to request a short-lived magic link.
 - `POST /api/app/v1/auth/login/verify` to redeem a one-time magic-link token and issue a session.
+- `POST /api/app/v1/workspace-invitations/redeem` to redeem an emailed Workspace invitation,
+  atomically creating the invited Account when necessary, joining the Workspace, and issuing its
+  first session.
 - `POST /api/app/v1/auth/logout` to revoke the current session after CSRF validation and expire
   its cookies.
 - `GET /api/app/v1/me` to return the server-authenticated current user.
@@ -26,8 +29,9 @@ relevant shared contract.
 Authentication uses an opaque `cove_session` cookie with `HttpOnly`, `Secure`, `SameSite=Strict`,
 and a root path. A separate readable `cove_csrf` cookie supplies the token clients must echo in the
 `x-csrf-token` header for cookie-authenticated state changes. Only SHA-256 hashes of magic-link,
-session, and CSRF tokens are stored in PostgreSQL. `CoveAppApi` declares the cookie security scheme
-and CSRF header for protected first-party operations without publishing them in public Scalar docs.
+Workspace Invitation, session, and CSRF tokens are stored in PostgreSQL. `CoveAppApi` declares the
+cookie security scheme and CSRF header for protected first-party operations without publishing them
+in public Scalar docs.
 
 Magic-link verification delegates session creation to a provider-neutral application use case.
 Future passkey and Google sign-in adapters should authenticate their credential, resolve a Cove
@@ -38,7 +42,7 @@ infrastructure owns the magic-link template and `/auth/verify` route, then deleg
 message to the generic `EmailSender` port. Local development uses `ConsoleEmailSender`; staging and
 production can provide a Resend adapter without changing authentication workflows or templates.
 
-`PUBLIC_APP_URL` is the deployment-specific web origin used to construct public links. Route paths
+`PUBLIC_WEB_ORIGIN` is the deployment-specific web origin used to construct public links. Route paths
 remain code-owned rather than configurable.
 
 ## Compatibility
@@ -54,6 +58,6 @@ Runtime configuration:
 - `DATABASE_URL` is required.
 - `EXPOSE_APP_API_DOCS` defaults to `false`. The local `.env.example` enables it; leave it disabled
   unless `/internal/docs` is protected from public access.
-- `PUBLIC_APP_URL` is required. The local `.env.example` uses `http://localhost:3000`.
+- `PUBLIC_WEB_ORIGIN` is required. The local `.env.example` uses `http://localhost:3000`.
 - `HOST` defaults to `0.0.0.0`.
 - `PORT` defaults to `3001` so it does not collide with the local web app.

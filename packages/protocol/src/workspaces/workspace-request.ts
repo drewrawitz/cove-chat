@@ -22,7 +22,32 @@ export const CreateWorkspaceRequest = Schema.Struct({
 }).annotate({ identifier: "CreateWorkspaceRequest" });
 export interface CreateWorkspaceRequest extends Schema.Schema.Type<typeof CreateWorkspaceRequest> {}
 
-export const JoinWorkspaceRequest = Schema.Struct({
+export const InviteWorkspaceMemberRequest = Schema.Struct({
+  email: Schema.Trimmed.check(Schema.isNonEmpty(), Schema.isPattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
+}).annotate({ identifier: "InviteWorkspaceMemberRequest" });
+export interface InviteWorkspaceMemberRequest extends Schema.Schema.Type<
+  typeof InviteWorkspaceMemberRequest
+> {}
+
+export const AcceptWorkspaceInvitationRequest = Schema.Struct({
   initialIdentityProfile: Schema.optionalKey(WorkspaceIdentityProfileRequest),
-}).annotate({ identifier: "JoinWorkspaceRequest" });
-export interface JoinWorkspaceRequest extends Schema.Schema.Type<typeof JoinWorkspaceRequest> {}
+}).annotate({ identifier: "AcceptWorkspaceInvitationRequest" });
+export interface AcceptWorkspaceInvitationRequest extends Schema.Schema.Type<
+  typeof AcceptWorkspaceInvitationRequest
+> {}
+
+export const RedeemWorkspaceInvitationRequest = Schema.Struct({
+  token: WorkspaceRequestValue,
+  displayName: WorkspaceRequestValue,
+  initialIdentityProfile: WorkspaceIdentityProfileRequest,
+}).annotate({ identifier: "RedeemWorkspaceInvitationRequest" });
+export interface RedeemWorkspaceInvitationRequest extends Schema.Schema.Type<
+  typeof RedeemWorkspaceInvitationRequest
+> {}
+
+export const ChangeWorkspaceRoleRequest = Schema.Struct({
+  role: Schema.Literals(["owner", "admin", "member"]),
+}).annotate({ identifier: "ChangeWorkspaceRoleRequest" });
+export interface ChangeWorkspaceRoleRequest extends Schema.Schema.Type<
+  typeof ChangeWorkspaceRoleRequest
+> {}

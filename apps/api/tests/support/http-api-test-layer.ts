@@ -12,6 +12,7 @@ import {
   SessionRepository,
   TransactionManager,
   UserRepository,
+  WorkspaceInvitationNotifier,
 } from "@cove/ports";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -35,11 +36,48 @@ const AuthPortsTest = Layer.mergeAll(
         unmockedWorkspaceAccess("getForActor"),
       ),
       create: Effect.fn("WorkspaceAccess.Test.create")(() => unmockedWorkspaceAccess("create")),
-      join: Effect.fn("WorkspaceAccess.Test.join")(() => unmockedWorkspaceAccess("join")),
       updateMyIdentity: Effect.fn("WorkspaceAccess.Test.updateMyIdentity")(() =>
         unmockedWorkspaceAccess("updateMyIdentity"),
       ),
       leave: Effect.fn("WorkspaceAccess.Test.leave")(() => unmockedWorkspaceAccess("leave")),
+      listInvitationsForActor: Effect.fn("WorkspaceAccess.Test.listInvitationsForActor")(() =>
+        unmockedWorkspaceAccess("listInvitationsForActor"),
+      ),
+      listPendingInvitationsForAdministrator: Effect.fn(
+        "WorkspaceAccess.Test.listPendingInvitationsForAdministrator",
+      )(() => unmockedWorkspaceAccess("listPendingInvitationsForAdministrator")),
+      listFullMembersForActor: Effect.fn("WorkspaceAccess.Test.listFullMembersForActor")(() =>
+        unmockedWorkspaceAccess("listFullMembersForActor"),
+      ),
+      inviteMember: Effect.fn("WorkspaceAccess.Test.inviteMember")(() =>
+        unmockedWorkspaceAccess("inviteMember"),
+      ),
+      resendInvitation: Effect.fn("WorkspaceAccess.Test.resendInvitation")(() =>
+        unmockedWorkspaceAccess("resendInvitation"),
+      ),
+      revokeInvitation: Effect.fn("WorkspaceAccess.Test.revokeInvitation")(() =>
+        unmockedWorkspaceAccess("revokeInvitation"),
+      ),
+      acceptInvitation: Effect.fn("WorkspaceAccess.Test.acceptInvitation")(() =>
+        unmockedWorkspaceAccess("acceptInvitation"),
+      ),
+      redeemInvitation: Effect.fn("WorkspaceAccess.Test.redeemInvitation")(() =>
+        unmockedWorkspaceAccess("redeemInvitation"),
+      ),
+      changeMemberRole: Effect.fn("WorkspaceAccess.Test.changeMemberRole")(() =>
+        unmockedWorkspaceAccess("changeMemberRole"),
+      ),
+      removeFullMember: Effect.fn("WorkspaceAccess.Test.removeFullMember")(() =>
+        unmockedWorkspaceAccess("removeFullMember"),
+      ),
+    }),
+  ),
+  Layer.succeed(
+    WorkspaceInvitationNotifier,
+    WorkspaceInvitationNotifier.of({
+      sendInvitation: Effect.fn("WorkspaceInvitationNotifier.Test.sendInvitation")(
+        () => Effect.void,
+      ),
     }),
   ),
   Layer.succeed(

@@ -9,7 +9,8 @@ const seed = Effect.gen(function* () {
     INSERT INTO users (id, email, display_name)
     VALUES
       ('demo-alice', 'alice@cove.local', 'Alice Demo'),
-      ('demo-bob', 'bob@cove.local', 'Bob Demo')
+      ('demo-bob', 'bob@cove.local', 'Bob Demo'),
+      ('demo-carol', 'carol@cove.local', 'Carol Demo')
     ON CONFLICT (id) DO UPDATE
     SET
       email = EXCLUDED.email,

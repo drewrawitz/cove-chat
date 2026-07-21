@@ -4,12 +4,16 @@ import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import {
   AuthenticationNotifier,
+  WorkspaceInvitationNotifier,
   type AuthenticationNotifierService,
   type MagicLinkNotification,
+  type WorkspaceInvitationNotification,
+  type WorkspaceInvitationNotifierService,
 } from "@cove/ports";
-import { Context, Duration, Effect, Layer, Option, Queue, Redacted } from "effect";
+import { Context, Duration, Effect, Layer, Option, Queue, Redacted, Schema } from "effect";
 import { Cookies, HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
+import { randomUUID } from "node:crypto";
 import { PostgresDatabaseReadiness } from "../../src/health/index.ts";
 import { makeHttpRoutes } from "../../src/http-live.ts";
 
@@ -32,9 +36,19 @@ class TestAuthenticationNotifier extends Context.Service<
   TestAuthenticationNotifierService
 >()("@cove/api/test/TestAuthenticationNotifier") {}
 
+interface TestWorkspaceInvitationNotifierService extends WorkspaceInvitationNotifierService {
+  readonly take: () => Effect.Effect<WorkspaceInvitationNotification>;
+}
+
+class TestWorkspaceInvitationNotifier extends Context.Service<
+  TestWorkspaceInvitationNotifier,
+  TestWorkspaceInvitationNotifierService
+>()("@cove/api/test/TestWorkspaceInvitationNotifier") {}
+
 const AuthenticationNotifierTest = Layer.effectContext(
   Effect.gen(function* () {
     const messages = yield* Queue.unbounded<MagicLinkNotification>();
+    const invitationMessages = yield* Queue.unbounded<WorkspaceInvitationNotification>();
     const service = TestAuthenticationNotifier.of({
       sendMagicLink: Effect.fn("TestAuthenticationNotifier.sendMagicLink")((message) =>
         Queue.offer(messages, message).pipe(Effect.asVoid),
@@ -42,10 +56,18 @@ const AuthenticationNotifierTest = Layer.effectContext(
       poll: Effect.fn("TestAuthenticationNotifier.poll")(() => Queue.poll(messages)),
       take: Effect.fn("TestAuthenticationNotifier.take")(() => Queue.take(messages)),
     });
+    const invitationService = TestWorkspaceInvitationNotifier.of({
+      sendInvitation: Effect.fn("WorkspaceInvitationNotifier.Test.sendInvitation")((message) =>
+        Queue.offer(invitationMessages, message).pipe(Effect.asVoid),
+      ),
+      take: Effect.fn("TestWorkspaceInvitationNotifier.take")(() => Queue.take(invitationMessages)),
+    });
 
     return Context.empty().pipe(
       Context.add(AuthenticationNotifier, service),
+      Context.add(WorkspaceInvitationNotifier, invitationService),
       Context.add(TestAuthenticationNotifier, service),
+      Context.add(TestWorkspaceInvitationNotifier, invitationService),
     );
   }),
 );
@@ -74,6 +96,8 @@ const AppRoutes = {
   workspaces: "/api/app/v1/workspaces",
   workspace: "/api/app/v1/workspaces/demo-workspace",
   workspaceMembership: "/api/app/v1/workspaces/demo-workspace/membership",
+  workspaceInvitations: "/api/app/v1/workspaces/demo-workspace/invitations",
+  redeemWorkspaceInvitation: "/api/app/v1/workspace-invitations/redeem",
 };
 
 layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
@@ -197,6 +221,183 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
             },
           ],
         });
+      }),
+    );
+
+    it.effect("redeems an invitation into an Account and authenticated session", () =>
+      Effect.gen(function* () {
+        const authenticationDelivery = yield* TestAuthenticationNotifier;
+        const invitationDelivery = yield* TestWorkspaceInvitationNotifier;
+        const inviteeEmail = `http-invitee-${randomUUID()}@example.test`;
+
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
+        });
+        const magicLink = yield* authenticationDelivery.take();
+        const ownerSignIn = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(magicLink.token) }),
+        });
+        const ownerCookie = authenticatedCookies(ownerSignIn.cookies);
+        const ownerCsrfToken = cookieValue(ownerSignIn.cookies, "cove_csrf");
+        const inviteResponse = yield* HttpClient.post(AppRoutes.workspaceInvitations, {
+          headers: { cookie: ownerCookie, "x-csrf-token": ownerCsrfToken },
+          body: HttpBody.jsonUnsafe({ email: inviteeEmail }),
+        });
+        const invitation = yield* invitationDelivery.take();
+        const redemptionResponse = yield* HttpClient.post(AppRoutes.redeemWorkspaceInvitation, {
+          body: HttpBody.jsonUnsafe({
+            token: Redacted.value(invitation.token),
+            displayName: "HTTP Invitee",
+            initialIdentityProfile: {
+              name: "HTTP Workspace Member",
+              avatarUrl: "/avatars/http-invitee.svg",
+            },
+          }),
+        });
+        const redemptionBody = yield* redemptionResponse.json;
+        const sessionCookie = Option.getOrThrow(
+          Cookies.get(redemptionResponse.cookies, "cove_session"),
+        );
+        const csrfCookie = Option.getOrThrow(Cookies.get(redemptionResponse.cookies, "cove_csrf"));
+        const meResponse = yield* HttpClient.get(AppRoutes.me, {
+          headers: { cookie: authenticatedCookies(redemptionResponse.cookies) },
+        });
+
+        expect(inviteResponse.status).toBe(200);
+        expect(redemptionResponse.status).toBe(200);
+        expect(redemptionBody).toMatchObject({
+          outcome: "WorkspaceInvitationRedeemed",
+          account: { email: inviteeEmail, displayName: "HTTP Invitee" },
+          workspaceId: "demo-workspace",
+        });
+        expect(sessionCookie.options).toMatchObject({
+          httpOnly: true,
+          secure: true,
+          sameSite: "strict",
+        });
+        expect(csrfCookie.options).toMatchObject({ secure: true, sameSite: "strict" });
+        expect(meResponse.status).toBe(200);
+        expect(yield* meResponse.json).toMatchObject({
+          email: inviteeEmail,
+          displayName: "HTTP Invitee",
+        });
+      }),
+    );
+
+    it.effect("lets a Workspace administrator list, resend, and revoke pending invitations", () =>
+      Effect.gen(function* () {
+        const authenticationDelivery = yield* TestAuthenticationNotifier;
+        const invitationDelivery = yield* TestWorkspaceInvitationNotifier;
+        const sql = yield* SqlClient.SqlClient;
+        const inviteeEmail = `http-pending-${randomUUID()}@example.test`;
+
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
+        });
+        const magicLink = yield* authenticationDelivery.take();
+        const ownerSignIn = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(magicLink.token) }),
+        });
+        const cookie = authenticatedCookies(ownerSignIn.cookies);
+        const csrfToken = cookieValue(ownerSignIn.cookies, "cove_csrf");
+        const inviteResponse = yield* HttpClient.post(AppRoutes.workspaceInvitations, {
+          headers: { cookie, "x-csrf-token": csrfToken },
+          body: HttpBody.jsonUnsafe({ email: inviteeEmail }),
+        });
+        const inviteBody = yield* inviteResponse.json.pipe(
+          Effect.flatMap(
+            Schema.decodeUnknownEffect(Schema.Struct({ invitationId: Schema.String })),
+          ),
+        );
+        const originalNotification = yield* invitationDelivery.take();
+
+        const pendingResponse = yield* HttpClient.get(AppRoutes.workspaceInvitations, {
+          headers: { cookie },
+        });
+        const pendingBody = yield* pendingResponse.json;
+        const resendTooSoonResponse = yield* HttpClient.post(
+          `${AppRoutes.workspaceInvitations}/${inviteBody.invitationId}/resend`,
+          { headers: { cookie, "x-csrf-token": csrfToken } },
+        );
+        const resendTooSoonBody = yield* resendTooSoonResponse.json;
+
+        yield* sql`
+          UPDATE workspace_invitations
+          SET invited_at = NOW() - INTERVAL '61 seconds'
+          WHERE id = ${inviteBody.invitationId}
+        `;
+
+        const resendResponse = yield* HttpClient.post(
+          `${AppRoutes.workspaceInvitations}/${inviteBody.invitationId}/resend`,
+          { headers: { cookie, "x-csrf-token": csrfToken } },
+        );
+        const replacementNotification = yield* invitationDelivery.take();
+        const oldLinkResponse = yield* HttpClient.post(AppRoutes.redeemWorkspaceInvitation, {
+          body: HttpBody.jsonUnsafe({
+            token: Redacted.value(originalNotification.token),
+            displayName: "Old Link Invitee",
+            initialIdentityProfile: {
+              name: "Old Link Invitee",
+              avatarUrl: "/avatars/old-link.svg",
+            },
+          }),
+        });
+        const revokeResponse = yield* HttpClient.del(
+          `${AppRoutes.workspaceInvitations}/${inviteBody.invitationId}`,
+          { headers: { cookie, "x-csrf-token": csrfToken } },
+        );
+        const remainingResponse = yield* HttpClient.get(AppRoutes.workspaceInvitations, {
+          headers: { cookie },
+        });
+        const replacementLinkResponse = yield* HttpClient.post(
+          AppRoutes.redeemWorkspaceInvitation,
+          {
+            body: HttpBody.jsonUnsafe({
+              token: Redacted.value(replacementNotification.token),
+              displayName: "Revoked Invitee",
+              initialIdentityProfile: {
+                name: "Revoked Invitee",
+                avatarUrl: "/avatars/revoked.svg",
+              },
+            }),
+          },
+        );
+
+        expect(inviteResponse.status).toBe(200);
+        expect(pendingResponse.status).toBe(200);
+        expect(pendingBody).toMatchObject({
+          invitations: [
+            {
+              id: inviteBody.invitationId,
+              inviteeEmail,
+              resendAvailableAt: expect.any(String),
+            },
+          ],
+        });
+        expect(resendTooSoonResponse.status).toBe(429);
+        expect(resendTooSoonBody).toMatchObject({
+          code: "WORKSPACE_INVITATION_RESEND_TOO_SOON",
+          resendAvailableAt: expect.any(String),
+        });
+        expect(resendResponse.status).toBe(200);
+        expect(yield* resendResponse.json).toMatchObject({
+          outcome: "WorkspaceInvitationResent",
+          invitationId: inviteBody.invitationId,
+          inviteeEmail,
+        });
+        expect(Redacted.value(replacementNotification.token)).not.toBe(
+          Redacted.value(originalNotification.token),
+        );
+        expect(oldLinkResponse.status).toBe(404);
+        expect(revokeResponse.status).toBe(200);
+        expect(yield* revokeResponse.json).toMatchObject({
+          outcome: "WorkspaceInvitationRevoked",
+          invitationId: inviteBody.invitationId,
+          inviteeEmail,
+        });
+        expect(remainingResponse.status).toBe(200);
+        expect(yield* remainingResponse.json).toEqual({ invitations: [] });
+        expect(replacementLinkResponse.status).toBe(404);
       }),
     );
 
@@ -349,7 +550,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         expect(leaveResponse.status).toBe(409);
         expect(yield* leaveResponse.json).toEqual({
           code: "LAST_WORKSPACE_OWNER",
-          message: "The final workspace owner cannot leave.",
+          message: "The final workspace owner cannot leave, be removed, or be demoted.",
         });
 
         const workspaceResponse = yield* HttpClient.get(AppRoutes.workspace, {

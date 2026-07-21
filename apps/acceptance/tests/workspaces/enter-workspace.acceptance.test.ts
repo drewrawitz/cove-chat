@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { randomUUID } from "node:crypto";
 import type { Page } from "playwright";
 import { BrowserAcceptance, BrowserAcceptanceLive } from "../support/browser-acceptance.ts";
 
@@ -111,6 +112,94 @@ it.live(
       yield* browserAction(() =>
         page.getByRole("heading", { name: "Alice North Updated" }).waitFor(),
       );
+    }).pipe(Effect.provide(BrowserAcceptanceLive)),
+  120_000,
+);
+
+it.live(
+  "invites a Full Member, accepts the invitation, and lets an Owner appoint an Admin",
+  () =>
+    Effect.gen(function* () {
+      const acceptance = yield* BrowserAcceptance;
+      const page = acceptance.page;
+      const inviteeEmail = `new-member-${randomUUID()}@example.test`;
+
+      const signIn = (email: string) =>
+        Effect.gen(function* () {
+          yield* browserAction(() => page.goto(acceptance.webUrl));
+          yield* browserAction(() => page.getByLabel("Email address").fill(email));
+          yield* browserAction(() => page.getByRole("button", { name: "Send magic link" }).click());
+          const magicLink = yield* acceptance.takeMagicLink();
+          yield* browserAction(() => page.goto(magicLink));
+          yield* waitForWorkspaceChooser(page);
+        });
+
+      yield* signIn("bob@cove.local");
+      yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "Bob in Cove" }).waitFor());
+      yield* browserAction(() => page.getByLabel("Email address to invite").fill(inviteeEmail));
+      yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
+      yield* browserAction(() => page.getByText(`Invitation sent to ${inviteeEmail}.`).waitFor());
+      const pendingInvitations = page.getByRole("region", { name: "Pending invitations" });
+      yield* browserAction(() => pendingInvitations.getByText(inviteeEmail).waitFor());
+      yield* browserAction(() => pendingInvitations.getByText("Sent", { exact: true }).waitFor());
+      yield* browserAction(() =>
+        pendingInvitations.getByText("Expires", { exact: true }).waitFor(),
+      );
+      const resendButton = page.getByRole("button", {
+        name: `Resend invitation to ${inviteeEmail}`,
+      });
+      expect(yield* browserAction(() => resendButton.isDisabled())).toBe(true);
+      expect(yield* browserAction(() => resendButton.textContent())).toMatch(/Resend in \d+s/);
+
+      yield* acceptance.makeWorkspaceInvitationResendable(inviteeEmail);
+      yield* browserAction(() => page.reload());
+      yield* browserAction(() =>
+        page.getByRole("button", { name: `Resend invitation to ${inviteeEmail}` }).click(),
+      );
+      yield* browserAction(() =>
+        page
+          .getByText(
+            `Invitation email sent again to ${inviteeEmail}. Resend is available again in 60 seconds.`,
+          )
+          .waitFor(),
+      );
+
+      yield* acceptance.takeWorkspaceInvitationLink();
+      const invitationLink = yield* acceptance.takeWorkspaceInvitationLink();
+      yield* browserAction(() => page.context().clearCookies());
+      yield* browserAction(() => page.goto(invitationLink));
+      yield* browserAction(() => page.getByLabel("Your name").fill("New Member"));
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Create account and join workspace" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("heading", { name: "New Member" }).waitFor());
+
+      yield* browserAction(() => page.context().clearCookies());
+      yield* signIn("bob@cove.local");
+      yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "Full Members" }).waitFor());
+      yield* browserAction(() => page.getByLabel("Role for New Member").selectOption("admin"));
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Save role for New Member" }).click(),
+      );
+      yield* browserAction(() => page.getByText("New Member is now Admin.").waitFor());
+
+      const revokedEmail = `revoked-member-${randomUUID()}@example.test`;
+      yield* browserAction(() => page.getByLabel("Email address to invite").fill(revokedEmail));
+      yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
+      yield* browserAction(() => page.getByText(`Invitation sent to ${revokedEmail}.`).waitFor());
+      yield* browserAction(() =>
+        page.getByRole("button", { name: `Revoke invitation to ${revokedEmail}` }).click(),
+      );
+      yield* browserAction(() =>
+        page.getByText(`Invitation to ${revokedEmail} revoked.`).waitFor(),
+      );
+      expect(
+        yield* browserAction(() =>
+          page.getByRole("button", { name: `Revoke invitation to ${revokedEmail}` }).count(),
+        ),
+      ).toBe(0);
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,
 );

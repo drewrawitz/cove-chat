@@ -2,11 +2,13 @@ import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useNavigate } from "@tanstack/react-router";
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactElement } from "react";
 import {
   invalidateWorkspacesListWorkspaces,
   useAuthMe,
+  useWorkspacesAcceptWorkspaceInvitation,
   useWorkspacesCreateWorkspace,
+  useWorkspacesListWorkspaceInvitations,
   useWorkspacesListWorkspaces,
 } from "../api/generated/cove-app.ts";
 import { PageMessage } from "../components/page-message.tsx";
@@ -17,6 +19,11 @@ interface HomeSearch {
   readonly left?: string;
 }
 
+interface WorkspaceInvitationSummary {
+  readonly id: string;
+  readonly requiresIdentityProfile: boolean;
+}
+
 export const Route = createFileRoute("/")({
   validateSearch: (search: Record<string, unknown>): HomeSearch => ({
     left: typeof search.left === "string" ? search.left : undefined,
@@ -24,7 +31,7 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-function Home() {
+function Home(): ReactElement {
   const { left } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -32,7 +39,11 @@ function Home() {
   const workspaces = useWorkspacesListWorkspaces({
     query: { enabled: account.isSuccess, retry: false },
   });
+  const invitations = useWorkspacesListWorkspaceInvitations({
+    query: { enabled: account.isSuccess, retry: false },
+  });
   const createWorkspace = useWorkspacesCreateWorkspace();
+  const acceptInvitation = useWorkspacesAcceptWorkspaceInvitation();
 
   if (account.isPending) return <PageMessage message="Opening Cove…" />;
   if (account.isError && account.error.status === 401) return <SignIn />;
@@ -41,13 +52,17 @@ function Home() {
   if (workspaces.isError) {
     return <PageMessage message="Cove could not load your workspaces." />;
   }
+  if (invitations.isPending) return <PageMessage message="Opening Cove…" />;
+  if (invitations.isError) {
+    return <PageMessage message="Cove could not load your Workspace invitations." />;
+  }
 
   const identityDefaults = workspaces.data.workspaces[0]?.identity ?? {
     name: account.data.displayName,
     avatarUrl: "/avatars/default.svg",
   };
 
-  const create = (event: FormEvent<HTMLFormElement>) => {
+  const create = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = requiredFormValue(form, "workspaceName");
@@ -66,6 +81,34 @@ function Home() {
           await navigate({
             to: "/workspaces/$workspaceId",
             params: { workspaceId: created.workspaceId },
+          });
+        },
+      },
+    );
+  };
+
+  const accept = (
+    event: FormEvent<HTMLFormElement>,
+    invitation: WorkspaceInvitationSummary,
+  ): void => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const data = invitation.requiresIdentityProfile
+      ? {
+          initialIdentityProfile: {
+            name: requiredFormValue(form, "identityName"),
+            avatarUrl: requiredFormValue(form, "avatarUrl"),
+          },
+        }
+      : {};
+    acceptInvitation.mutate(
+      { invitationId: invitation.id, data },
+      {
+        onSuccess: async (accepted) => {
+          await Promise.all([invitations.refetch(), workspaces.refetch()]);
+          await navigate({
+            to: "/workspaces/$workspaceId",
+            params: { workspaceId: accepted.workspaceId },
           });
         },
       },
@@ -92,6 +135,69 @@ function Home() {
           >
             Your access to {left} has ended.
           </p>
+        )}
+
+        {invitations.data.invitations.length === 0 ? null : (
+          <section className="mt-8 rounded-3xl border border-primary/20 bg-primary/5 p-6 sm:p-8">
+            <p className="font-heading text-sm font-semibold tracking-[0.16em] text-primary uppercase">
+              Invitations
+            </p>
+            <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight">
+              Join a Workspace as yourself
+            </h2>
+            <div className="mt-6 grid gap-4">
+              {invitations.data.invitations.map((invitation) => (
+                <form
+                  className="grid gap-4 rounded-2xl border bg-card p-5 sm:grid-cols-2"
+                  key={invitation.id}
+                  onSubmit={(event) => accept(event, invitation)}
+                >
+                  <div className="sm:col-span-2">
+                    <h3 className="font-heading text-lg font-semibold">
+                      {invitation.workspace.name}
+                    </h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      You were invited as a Member.
+                    </p>
+                  </div>
+                  {invitation.requiresIdentityProfile ? (
+                    <>
+                      <label className="text-sm font-medium">
+                        Your name for {invitation.workspace.name}
+                        <input
+                          name="identityName"
+                          required
+                          defaultValue={identityDefaults.name}
+                          className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        />
+                      </label>
+                      <label className="text-sm font-medium">
+                        Avatar URL for {invitation.workspace.name}
+                        <input
+                          name="avatarUrl"
+                          required
+                          defaultValue={identityDefaults.avatarUrl}
+                          className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        />
+                      </label>
+                    </>
+                  ) : null}
+                  <div className="sm:col-span-2">
+                    <Button type="submit" disabled={acceptInvitation.isPending}>
+                      {acceptInvitation.isPending
+                        ? "Joining…"
+                        : `Accept invitation to ${invitation.workspace.name}`}
+                    </Button>
+                    {acceptInvitation.isError ? (
+                      <p className="mt-3 text-sm text-destructive" role="alert">
+                        Cove could not accept this invitation. Refresh and try again.
+                      </p>
+                    ) : null}
+                  </div>
+                </form>
+              ))}
+            </div>
+          </section>
         )}
 
         <ul className="mt-8 grid gap-3 sm:grid-cols-2">

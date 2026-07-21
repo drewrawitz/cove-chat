@@ -1,7 +1,10 @@
 export { WorkspaceApiGroup } from "./workspace-api.ts";
 export {
+  AcceptWorkspaceInvitationRequest,
+  ChangeWorkspaceRoleRequest,
   CreateWorkspaceRequest,
-  JoinWorkspaceRequest,
+  InviteWorkspaceMemberRequest,
+  RedeemWorkspaceInvitationRequest,
   UpdateWorkspaceIdentityRequest,
 } from "./workspace-request.ts";
 export {
@@ -9,17 +12,32 @@ export {
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
+  WorkspaceAdministrationForbiddenResponse,
   WorkspaceErrorResponses,
   WorkspaceUnavailableResponse,
+  WorkspaceInvitationResendTooSoonResponse,
+  WorkspaceInvitationUnavailableResponse,
+  FullMemberUnavailableResponse,
 } from "./workspace-error-response.ts";
 export {
   WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
+  WorkspaceInvitationAcceptedResponse,
+  WorkspaceInvitationIssuedResponse,
+  WorkspaceInvitationResentResponse,
+  WorkspaceInvitationRevokedResponse,
+  WorkspaceInvitationListResponse,
+  WorkspaceInvitationRedeemedResponse,
+  WorkspaceInvitationResponse,
+  PendingWorkspaceInvitationListResponse,
+  PendingWorkspaceInvitationResponse,
   WorkspaceIdentityResponse,
   WorkspaceIdentityUpdateResponse,
-  WorkspaceJoinedResponse,
   WorkspaceListResponse,
+  FullMemberListResponse,
+  FullMemberResponse,
   WorkspaceMembershipResponse,
   WorkspaceRoleResponse,
+  WorkspaceRoleChangeResponse,
   WorkspaceSummaryResponse,
 } from "./workspace-response.ts";
