@@ -1,4 +1,5 @@
 import {
+  makeGeneralChannel,
   User,
   UserId,
   Workspace,
@@ -293,10 +294,12 @@ const make = Effect.gen(function* () {
               startedAt: occurredAt,
             }),
           });
-          yield* transaction.createWorkspaceWithOwner(access);
+          const generalChannel = makeGeneralChannel(workspaceId, workspaceIdentityId);
+          yield* transaction.createWorkspaceWithOwner(access, generalChannel);
           const outcome = WorkspaceCreated.make({
             workspaceId,
             workspaceIdentityId,
+            generalChannelId: generalChannel.id,
             occurredAt,
           });
 
@@ -307,6 +310,7 @@ const make = Effect.gen(function* () {
               metadata: {
                 workspaceId,
                 workspaceIdentityId,
+                generalChannelId: generalChannel.id,
               },
             }),
           } satisfies TransitionCommit<WorkspaceCreatedType>;

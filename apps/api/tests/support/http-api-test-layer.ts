@@ -31,9 +31,6 @@ const AuthPortsTest = Layer.mergeAll(
       listPublicForActor: Effect.fn("ChannelAccess.Test.listPublicForActor")(() =>
         Effect.succeed([]),
       ),
-      listMaintainersForActor: Effect.fn("ChannelAccess.Test.listMaintainersForActor")(() =>
-        Effect.succeed([]),
-      ),
       getPublicForActor: Effect.fn("ChannelAccess.Test.getPublicForActor")(() =>
         unmockedChannelAccess("getPublicForActor"),
       ),

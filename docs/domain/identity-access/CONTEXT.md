@@ -50,5 +50,5 @@ An explicit relationship between a Workspace Identity with an active Workspace M
 _Avoid_: Workspace membership, topic membership
 
 **Channel Maintainer**:
-A full member responsible for a channel's purpose, membership, and lifecycle. Channel maintenance is independent of workspace role.
+A full member responsible for a channel's purpose, membership, and lifecycle. A Channel's creator becomes its initial Channel Maintainer; maintenance is independent of Workspace Role.
 _Avoid_: Channel Steward, Channel Owner, Channel Admin, Workspace Admin

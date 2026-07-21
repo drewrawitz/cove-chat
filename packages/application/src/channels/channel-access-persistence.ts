@@ -1,15 +1,10 @@
 import { type ChannelId, type UserId, type WorkspaceId } from "@cove/domain";
 import { Context, type Effect, Schema } from "effect";
-import {
-  CreatePublicChannelCommand,
-  PublicChannelView,
-  ChannelMaintainerView,
-} from "./channel-access.ts";
+import { CreatePublicChannelCommand, PublicChannelView } from "./channel-access.ts";
 
 export const CreatePublicChannelPersistenceResult = Schema.TaggedUnion({
   Created: { channel: PublicChannelView },
   ActorUnavailable: {},
-  MaintainerUnavailable: {},
 });
 export type CreatePublicChannelPersistenceResult = typeof CreatePublicChannelPersistenceResult.Type;
 
@@ -23,13 +18,6 @@ export interface ChannelAccessPersistenceService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<PublicChannelView> | undefined, ChannelAccessPersistenceFailure>;
-  readonly listMaintainersForActor: (
-    actorAccountId: UserId,
-    workspaceId: WorkspaceId,
-  ) => Effect.Effect<
-    ReadonlyArray<ChannelMaintainerView> | undefined,
-    ChannelAccessPersistenceFailure
-  >;
   readonly getPublicForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,

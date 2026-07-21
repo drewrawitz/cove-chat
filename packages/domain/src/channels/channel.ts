@@ -16,3 +16,23 @@ export const Channel = Schema.Struct({
 });
 
 export interface Channel extends Schema.Schema.Type<typeof Channel> {}
+
+export const GENERAL_CHANNEL_ID = ChannelId.make("general");
+export const GENERAL_CHANNEL_NAME = ChannelName.make("general");
+export const GENERAL_CHANNEL_PURPOSE = ChannelPurpose.make(
+  "A shared place for workspace-wide topics.",
+);
+
+export function makeGeneralChannel(
+  workspaceId: WorkspaceId,
+  maintainerIdentityId: WorkspaceIdentityId,
+): Channel {
+  return Channel.make({
+    id: GENERAL_CHANNEL_ID,
+    workspaceId,
+    name: GENERAL_CHANNEL_NAME,
+    purpose: GENERAL_CHANNEL_PURPOSE,
+    visibility: "public",
+    maintainerIdentityId,
+  });
+}

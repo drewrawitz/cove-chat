@@ -1,10 +1,6 @@
 import { Effect, Layer } from "effect";
 import { WorkspaceUnavailable } from "../workspaces/workspace-access.ts";
-import {
-  ChannelAccess,
-  ChannelAccessFailure,
-  ChannelMaintainerUnavailable,
-} from "./channel-access.ts";
+import { ChannelAccess, ChannelAccessFailure } from "./channel-access.ts";
 import { ChannelAccessPersistence } from "./channel-access-persistence.ts";
 import { ChannelUnavailable } from "./get-channel-for-actor.ts";
 
@@ -28,18 +24,6 @@ const make = Effect.gen(function* () {
         return channels;
       },
     ),
-    listMaintainersForActor: Effect.fn("ChannelAccess.listMaintainersForActor")(
-      function* (actorAccountId, workspaceId) {
-        const maintainers = yield* recoverPersistence(
-          "ChannelAccess.listMaintainersForActor",
-          persistence.listMaintainersForActor(actorAccountId, workspaceId),
-        );
-        if (maintainers === undefined) {
-          return yield* Effect.fail(new WorkspaceUnavailable({ workspaceId }));
-        }
-        return maintainers;
-      },
-    ),
     getPublicForActor: Effect.fn("ChannelAccess.getPublicForActor")(
       function* (actorAccountId, workspaceId, channelId) {
         const channel = yield* recoverPersistence(
@@ -59,14 +43,7 @@ const make = Effect.gen(function* () {
       );
       return yield* result._tag === "Created"
         ? Effect.succeed(result.channel)
-        : result._tag === "MaintainerUnavailable"
-          ? Effect.fail(
-              new ChannelMaintainerUnavailable({
-                workspaceId: command.workspaceId,
-                maintainerIdentityId: command.maintainerIdentityId,
-              }),
-            )
-          : Effect.fail(new WorkspaceUnavailable({ workspaceId: command.workspaceId }));
+        : Effect.fail(new WorkspaceUnavailable({ workspaceId: command.workspaceId }));
     }),
     joinPublic: Effect.fn("ChannelAccess.joinPublic")(function* (command) {
       const channel = yield* recoverPersistence(

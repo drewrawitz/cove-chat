@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as WorkspaceInvitationsRedeemRouteImport } from './routes/workspace-invitations.redeem'
 import { Route as AuthVerifyRouteImport } from './routes/auth.verify'
+import { Route as WorkspacesWorkspaceIdIndexRouteImport } from './routes/workspaces.$workspaceId.index'
 import { Route as WorkspacesWorkspaceIdChannelsChannelIdRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -36,6 +37,12 @@ const AuthVerifyRoute = AuthVerifyRouteImport.update({
   path: '/auth/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WorkspacesWorkspaceIdIndexRoute =
+  WorkspacesWorkspaceIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => WorkspacesWorkspaceIdRoute,
+  } as any)
 const WorkspacesWorkspaceIdChannelsChannelIdRoute =
   WorkspacesWorkspaceIdChannelsChannelIdRouteImport.update({
     id: '/channels/$channelId',
@@ -48,13 +55,14 @@ export interface FileRoutesByFullPath {
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
-  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRoutesById {
@@ -63,6 +71,7 @@ export interface FileRoutesById {
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
+  '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
   '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 export interface FileRouteTypes {
@@ -72,6 +81,7 @@ export interface FileRouteTypes {
     | '/auth/verify'
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/channels/$channelId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
     | '/auth/verify'
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
+    | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/channels/$channelId'
   fileRoutesById: FileRoutesById
 }
@@ -126,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/workspaces/$workspaceId/': {
+      id: '/workspaces/$workspaceId/'
+      path: '/'
+      fullPath: '/workspaces/$workspaceId/'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdIndexRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdRoute
+    }
     '/workspaces/$workspaceId/channels/$channelId': {
       id: '/workspaces/$workspaceId/channels/$channelId'
       path: '/channels/$channelId'
@@ -137,10 +155,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface WorkspacesWorkspaceIdRouteChildren {
+  WorkspacesWorkspaceIdIndexRoute: typeof WorkspacesWorkspaceIdIndexRoute
   WorkspacesWorkspaceIdChannelsChannelIdRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
 }
 
 const WorkspacesWorkspaceIdRouteChildren: WorkspacesWorkspaceIdRouteChildren = {
+  WorkspacesWorkspaceIdIndexRoute: WorkspacesWorkspaceIdIndexRoute,
   WorkspacesWorkspaceIdChannelsChannelIdRoute:
     WorkspacesWorkspaceIdChannelsChannelIdRoute,
 }

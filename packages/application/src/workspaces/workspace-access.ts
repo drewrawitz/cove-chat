@@ -1,4 +1,5 @@
 import {
+  ChannelId,
   DisplayName,
   EmailAddress,
   User,
@@ -155,6 +156,7 @@ export interface RemoveFullMemberCommand extends Schema.Schema.Type<
 export const WorkspaceCreated = Schema.TaggedStruct("WorkspaceCreated", {
   workspaceId: WorkspaceId,
   workspaceIdentityId: WorkspaceIdentity.fields.id,
+  generalChannelId: ChannelId,
   occurredAt: Schema.DateFromString,
 });
 export type WorkspaceCreated = typeof WorkspaceCreated.Type;

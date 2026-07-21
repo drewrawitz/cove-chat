@@ -35,7 +35,6 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspace-invitations/{invitationId}/accept",
       "/api/app/v1/workspaces",
       "/api/app/v1/workspaces/{workspaceId}",
-      "/api/app/v1/workspaces/{workspaceId}/channel-maintainers",
       "/api/app/v1/workspaces/{workspaceId}/channels",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/membership",

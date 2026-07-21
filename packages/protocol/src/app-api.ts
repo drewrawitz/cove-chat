@@ -1,10 +1,6 @@
 import { Schema } from "effect";
 import { HttpApi, OpenApi } from "effect/unstable/httpapi";
-import {
-  ChannelApiGroup,
-  ChannelMaintainerUnavailableResponse,
-  ChannelUnavailableResponse,
-} from "./channels/index.ts";
+import { ChannelApiGroup, ChannelUnavailableResponse } from "./channels/index.ts";
 import {
   AuthApiGroup,
   CsrfValidationFailedResponse,
@@ -40,7 +36,6 @@ export const CoveAppErrorResponse = Schema.Union([
   WorkspaceInvitationUnavailableResponse,
   WorkspaceUnavailableResponse,
   ChannelUnavailableResponse,
-  ChannelMaintainerUnavailableResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 
 export const CoveAppApi = HttpApi.make("CoveAppApi")

@@ -4,9 +4,7 @@ export { CovePublicApi } from "./public-api.ts";
 export {
   ChannelApiGroup,
   ChannelErrorResponses,
-  ChannelMaintainerListResponse,
   ChannelMaintainerResponse,
-  ChannelMaintainerUnavailableResponse,
   ChannelUnavailableResponse,
   CreatePublicChannelRequest,
   PublicChannelListResponse,

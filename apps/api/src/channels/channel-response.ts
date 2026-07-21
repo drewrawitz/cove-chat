@@ -1,6 +1,5 @@
 import type { ChannelMaintainerView, PublicChannelView } from "@cove/application";
 import {
-  ChannelMaintainerListResponse,
   ChannelMaintainerResponse,
   PublicChannelListResponse,
   PublicChannelResponse,
@@ -28,10 +27,3 @@ export const publicChannelListResponse = (
   channels: ReadonlyArray<PublicChannelView>,
 ): PublicChannelListResponse =>
   PublicChannelListResponse.make({ channels: channels.map(publicChannelResponse) });
-
-export const channelMaintainerListResponse = (
-  maintainers: ReadonlyArray<ChannelMaintainerView>,
-): ChannelMaintainerListResponse =>
-  ChannelMaintainerListResponse.make({
-    maintainers: maintainers.map(channelMaintainerResponse),
-  });

@@ -15,6 +15,7 @@ import {
   type WorkspaceRoleChanged,
   type WorkspaceRoleUnchanged,
 } from "@cove/application";
+import { GENERAL_CHANNEL_ID } from "@cove/domain";
 import {
   FullMemberListResponse,
   FullMemberResponse,
@@ -58,6 +59,7 @@ export function workspaceAccessResponse(access: WorkspaceAccessView): WorkspaceA
     },
     identity: workspaceIdentityResponse(access.identity),
     membership: { role: access.membership.role },
+    generalChannelId: GENERAL_CHANNEL_ID,
   });
 }
 
@@ -81,6 +83,7 @@ export function workspaceCreatedResponse(outcome: WorkspaceCreated): WorkspaceCr
     outcome: outcome._tag,
     workspaceId: outcome.workspaceId,
     workspaceIdentityId: outcome.workspaceIdentityId,
+    generalChannelId: outcome.generalChannelId,
     occurredAt: outcome.occurredAt,
   });
 }

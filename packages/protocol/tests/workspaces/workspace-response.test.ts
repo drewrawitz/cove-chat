@@ -5,6 +5,7 @@ import {
   WorkspaceInvitationListResponse,
   WorkspaceInvitationRedeemedResponse,
   WorkspaceRoleChangeResponse,
+  WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
   WorkspaceIdentityUpdateResponse,
   FullMemberListResponse,
@@ -19,12 +20,14 @@ it.effect("encodes stable profile-free workspace mutation outcomes", () =>
         outcome: "WorkspaceCreated",
         workspaceId: "workspace-1",
         workspaceIdentityId: "identity-1",
+        generalChannelId: "general",
         occurredAt,
       }),
     ).toEqual({
       outcome: "WorkspaceCreated",
       workspaceId: "workspace-1",
       workspaceIdentityId: "identity-1",
+      generalChannelId: "general",
       occurredAt: "2026-07-18T14:30:00.000Z",
     });
 
@@ -40,6 +43,24 @@ it.effect("encodes stable profile-free workspace mutation outcomes", () =>
       workspaceId: "workspace-1",
       workspaceIdentityId: "identity-1",
       occurredAt: "2026-07-18T14:30:00.000Z",
+    });
+  }),
+);
+
+it.effect("includes the General Channel in Workspace access", () =>
+  Effect.gen(function* () {
+    expect(
+      yield* Schema.encodeUnknownEffect(WorkspaceAccessResponse)({
+        workspace: { id: "workspace-1", name: "Product Studio" },
+        identity: { id: "identity-1", name: "Alice", avatarUrl: "/alice.svg" },
+        membership: { role: "owner" },
+        generalChannelId: "general",
+      }),
+    ).toEqual({
+      workspace: { id: "workspace-1", name: "Product Studio" },
+      identity: { id: "identity-1", name: "Alice", avatarUrl: "/alice.svg" },
+      membership: { role: "owner" },
+      generalChannelId: "general",
     });
   }),
 );

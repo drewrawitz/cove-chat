@@ -33,7 +33,6 @@ export const CreatePublicChannelCommand = Schema.Struct({
   channelId: ChannelId,
   name: ChannelName,
   purpose: ChannelPurpose,
-  maintainerIdentityId: WorkspaceIdentityId,
 });
 export interface CreatePublicChannelCommand extends Schema.Schema.Type<
   typeof CreatePublicChannelCommand
@@ -48,11 +47,6 @@ export interface JoinPublicChannelCommand extends Schema.Schema.Type<
   typeof JoinPublicChannelCommand
 > {}
 
-export class ChannelMaintainerUnavailable extends Schema.TaggedErrorClass<ChannelMaintainerUnavailable>()(
-  "Application.ChannelMaintainerUnavailable",
-  { workspaceId: WorkspaceId, maintainerIdentityId: WorkspaceIdentityId },
-) {}
-
 export class ChannelAccessFailure extends Schema.TaggedErrorClass<ChannelAccessFailure>()(
   "Application.ChannelAccessFailure",
   { operation: Schema.String },
@@ -63,13 +57,6 @@ export interface ChannelAccessService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<PublicChannelView>, WorkspaceUnavailable | ChannelAccessFailure>;
-  readonly listMaintainersForActor: (
-    actorAccountId: UserId,
-    workspaceId: WorkspaceId,
-  ) => Effect.Effect<
-    ReadonlyArray<ChannelMaintainerView>,
-    WorkspaceUnavailable | ChannelAccessFailure
-  >;
   readonly getPublicForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
@@ -77,10 +64,7 @@ export interface ChannelAccessService {
   ) => Effect.Effect<PublicChannelView, ChannelUnavailable | ChannelAccessFailure>;
   readonly createPublic: (
     command: CreatePublicChannelCommand,
-  ) => Effect.Effect<
-    PublicChannelView,
-    WorkspaceUnavailable | ChannelMaintainerUnavailable | ChannelAccessFailure
-  >;
+  ) => Effect.Effect<PublicChannelView, WorkspaceUnavailable | ChannelAccessFailure>;
   readonly joinPublic: (
     command: JoinPublicChannelCommand,
   ) => Effect.Effect<PublicChannelView, ChannelUnavailable | ChannelAccessFailure>;

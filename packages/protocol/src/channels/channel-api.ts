@@ -7,16 +7,9 @@ import {
 import { CsrfHeaders } from "../auth/logout-headers.ts";
 import { SessionAuth } from "../auth/session-auth.ts";
 import { WorkspaceUnavailableResponse } from "../workspaces/workspace-error-response.ts";
-import {
-  ChannelMaintainerUnavailableResponse,
-  ChannelUnavailableResponse,
-} from "./channel-error-response.ts";
+import { ChannelUnavailableResponse } from "./channel-error-response.ts";
 import { CreatePublicChannelRequest } from "./channel-request.ts";
-import {
-  ChannelMaintainerListResponse,
-  PublicChannelListResponse,
-  PublicChannelResponse,
-} from "./channel-response.ts";
+import { PublicChannelListResponse, PublicChannelResponse } from "./channel-response.ts";
 
 const WorkspaceParams = { workspaceId: Schema.NonEmptyString };
 const ChannelParams = { ...WorkspaceParams, channelId: Schema.NonEmptyString };
@@ -31,16 +24,6 @@ const ListPublicChannelsEndpoint = HttpApiEndpoint.get(
   },
 ).middleware(SessionAuth);
 
-const ListChannelMaintainersEndpoint = HttpApiEndpoint.get(
-  "listChannelMaintainers",
-  "/api/app/v1/workspaces/:workspaceId/channel-maintainers",
-  {
-    params: WorkspaceParams,
-    success: ChannelMaintainerListResponse,
-    error: [WorkspaceUnavailableResponse, InternalServerErrorResponse],
-  },
-).middleware(SessionAuth);
-
 const CreatePublicChannelEndpoint = HttpApiEndpoint.post(
   "createPublicChannel",
   "/api/app/v1/workspaces/:workspaceId/channels",
@@ -51,7 +34,6 @@ const CreatePublicChannelEndpoint = HttpApiEndpoint.post(
     success: PublicChannelResponse,
     error: [
       CsrfValidationFailedResponse,
-      ChannelMaintainerUnavailableResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,
     ],
@@ -81,7 +63,6 @@ const JoinPublicChannelEndpoint = HttpApiEndpoint.post(
 
 export const ChannelApiGroup = HttpApiGroup.make("channels").add(
   ListPublicChannelsEndpoint,
-  ListChannelMaintainersEndpoint,
   CreatePublicChannelEndpoint,
   GetPublicChannelEndpoint,
   JoinPublicChannelEndpoint,

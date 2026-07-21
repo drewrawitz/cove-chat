@@ -12,7 +12,6 @@ import {
   makeChannelId,
   makeUserId,
   makeWorkspaceId,
-  makeWorkspaceIdentityId,
 } from "@cove/domain";
 import {
   AuthErrorResponses,
@@ -25,11 +24,7 @@ import {
 import { Effect, Redacted } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
-import {
-  channelMaintainerListResponse,
-  publicChannelListResponse,
-  publicChannelResponse,
-} from "./channel-response.ts";
+import { publicChannelListResponse, publicChannelResponse } from "./channel-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -46,14 +41,7 @@ const channelErrorResponse = (error: unknown) =>
     ? ChannelErrorResponses.unavailable
     : AuthErrorResponses.internalServerError;
 
-const createChannelErrorResponse = (error: unknown) => {
-  switch (errorTag(error)) {
-    case "Application.ChannelMaintainerUnavailable":
-      return ChannelErrorResponses.maintainerUnavailable;
-    default:
-      return workspaceErrorResponse(error);
-  }
-};
+const createChannelErrorResponse = workspaceErrorResponse;
 
 const validateMutationCsrf = Effect.fn("ChannelApi.validateMutationCsrf")(function* (
   csrfHeader: string | undefined,
@@ -86,17 +74,6 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         return publicChannelListResponse(yield* channels.listPublicForActor(actorId, workspaceId));
       }).pipe(Effect.mapError(workspaceErrorResponse)),
     )
-    .handle("listChannelMaintainers", ({ params }) =>
-      Effect.gen(function* () {
-        const actor = yield* AuthenticatedActor;
-        const actorId = yield* makeUserId(actor.userId);
-        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
-        const channels = yield* ChannelAccess;
-        return channelMaintainerListResponse(
-          yield* channels.listMaintainersForActor(actorId, workspaceId),
-        );
-      }).pipe(Effect.mapError(workspaceErrorResponse)),
-    )
     .handle("createPublicChannel", ({ headers, params, payload }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
@@ -104,7 +81,6 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
         const channelId = yield* makeChannelId(randomUUID());
-        const maintainerIdentityId = yield* makeWorkspaceIdentityId(payload.maintainerIdentityId);
         const channels = yield* ChannelAccess;
         return publicChannelResponse(
           yield* channels.createPublic(
@@ -114,7 +90,6 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
               channelId,
               name: ChannelName.make(payload.name),
               purpose: ChannelPurpose.make(payload.purpose),
-              maintainerIdentityId,
             }),
           ),
         );

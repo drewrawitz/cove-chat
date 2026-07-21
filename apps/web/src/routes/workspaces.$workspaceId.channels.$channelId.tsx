@@ -7,9 +7,10 @@ import {
   getChannelsListPublicChannelsQueryKey,
   useChannelsGetPublicChannel,
   useChannelsJoinPublicChannel,
+  useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
+import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
-import { WorkspaceChannels } from "../components/workspace-channels.tsx";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId")({
   component: PublicChannel,
@@ -18,13 +19,16 @@ export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channel
 function PublicChannel(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
   const queryClient = useQueryClient();
+  const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetPublicChannel(workspaceId, channelId, {
     query: { retry: false },
   });
   const joinChannel = useChannelsJoinPublicChannel();
 
-  if (channel.isPending) return <PageMessage message="Opening channel…" />;
-  if (channel.isError) {
+  if (workspace.isPending || channel.isPending) {
+    return <PageMessage message="Opening channel…" />;
+  }
+  if (workspace.isError || channel.isError) {
     return (
       <PageMessage message="This channel is not available in this workspace.">
         <Link
@@ -32,7 +36,7 @@ function PublicChannel(): ReactElement {
           to="/workspaces/$workspaceId"
           params={{ workspaceId }}
         >
-          Return to workspace
+          Return to workspace management
         </Link>
       </PageMessage>
     );
@@ -57,43 +61,64 @@ function PublicChannel(): ReactElement {
   };
 
   return (
-    <main className="min-h-svh bg-muted/30 p-5 sm:p-8">
-      <div className="mx-auto grid w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,0.7fr)]">
-        <article className="h-fit overflow-hidden rounded-3xl border bg-card shadow-sm">
-          <header className="border-b bg-primary/5 p-6 sm:p-8">
-            <Link
-              to="/workspaces/$workspaceId"
-              params={{ workspaceId }}
-              className="text-sm font-semibold text-primary hover:underline"
-            >
-              Back to workspace
-            </Link>
-            <h1 className="mt-5 font-heading text-3xl font-semibold tracking-tight">
-              #{channel.data.name}
-            </h1>
-            <p className="mt-3 max-w-2xl text-muted-foreground">{channel.data.purpose}</p>
-            <p className="mt-5 text-sm font-medium">Maintained by {channel.data.maintainer.name}</p>
-          </header>
-          <div className="p-6 sm:p-8">
-            <h2 className="font-heading text-xl font-semibold">Public Channel</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Full Members can read this channel without joining. Join when you want it kept in your
-              channel navigation.
-            </p>
-            {channel.data.hasChannelMembership ? (
-              <p className="mt-5 rounded-xl bg-primary/5 p-4 text-sm font-medium">
-                This channel is in your navigation.
-              </p>
-            ) : (
-              <Button
-                className="mt-5"
-                type="button"
-                disabled={joinChannel.isPending}
-                onClick={join}
+    <main className="min-h-svh bg-muted/30 p-3 sm:p-5">
+      <div className="mx-auto grid min-h-[calc(100svh-1.5rem)] w-full max-w-[96rem] overflow-hidden rounded-3xl border bg-card shadow-sm sm:min-h-[calc(100svh-2.5rem)] lg:grid-cols-[19rem_minmax(0,1fr)]">
+        <aside className="border-b bg-muted/20 p-4 lg:border-r lg:border-b-0 lg:p-5">
+          <header className="border-b pb-5">
+            <div className="flex items-center justify-between gap-3">
+              <Link
+                className="font-heading text-sm font-semibold tracking-[0.18em] text-primary uppercase"
+                to="/"
               >
-                {joinChannel.isPending ? "Joining…" : "Join channel"}
-              </Button>
-            )}
+                Cove
+              </Link>
+              <Link
+                className="text-xs font-medium text-primary hover:underline"
+                to="/workspaces/$workspaceId"
+                params={{ workspaceId }}
+              >
+                Manage
+              </Link>
+            </div>
+            <h1 className="mt-4 truncate font-heading text-xl font-semibold tracking-tight">
+              {workspace.data.workspace.name}
+            </h1>
+            <p className="mt-1 truncate text-sm text-muted-foreground">
+              {workspace.data.identity.name}
+            </p>
+          </header>
+
+          <ChannelSidebar activeChannelId={channelId} workspaceId={workspaceId} />
+        </aside>
+
+        <section className="min-w-0 bg-background">
+          <header className="border-b px-5 py-5 sm:px-8 sm:py-6">
+            <div className="flex flex-wrap items-start justify-between gap-5">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.14em] text-primary uppercase">
+                  Public Channel
+                </p>
+                <h2 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
+                  #{channel.data.name}
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  {channel.data.purpose}
+                </p>
+                <p className="mt-3 text-xs font-medium text-muted-foreground">
+                  Maintained by {channel.data.maintainer.name}
+                </p>
+              </div>
+
+              {channel.data.hasChannelMembership ? (
+                <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                  Joined
+                </span>
+              ) : (
+                <Button type="button" disabled={joinChannel.isPending} onClick={join}>
+                  {joinChannel.isPending ? "Joining…" : "Join channel"}
+                </Button>
+              )}
+            </div>
             {joinChannel.isSuccess ? (
               <p className="mt-3 text-sm text-muted-foreground" role="status">
                 You joined #{channel.data.name}.
@@ -104,12 +129,24 @@ function PublicChannel(): ReactElement {
                 Cove could not join this channel. Refresh and try again.
               </p>
             ) : null}
-          </div>
-        </article>
+          </header>
 
-        <aside className="rounded-3xl border bg-card p-5 shadow-sm">
-          <WorkspaceChannels workspaceId={workspaceId} />
-        </aside>
+          <div className="px-5 py-8 sm:px-8 sm:py-10">
+            <div className="mx-auto max-w-3xl">
+              <div className="flex items-baseline justify-between gap-4">
+                <h3 className="font-heading text-xl font-semibold">Topics</h3>
+                <span className="text-xs font-medium text-muted-foreground">0 open</span>
+              </div>
+              <section className="mt-5 rounded-2xl border border-dashed bg-muted/20 px-6 py-12 text-center">
+                <h4 className="font-heading text-lg font-semibold">No topics yet</h4>
+                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                  Conversations in Cove begin with a named Topic and an Opening Brief. Topic
+                  creation arrives in the next conversation slice.
+                </p>
+              </section>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

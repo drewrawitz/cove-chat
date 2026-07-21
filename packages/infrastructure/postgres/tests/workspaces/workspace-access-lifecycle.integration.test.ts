@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import {
   AcceptWorkspaceInvitationCommand,
+  ChannelAccess,
   ChangeWorkspaceRoleCommand,
   CreateWorkspaceCommand,
   GetChannelForActorInput,
@@ -38,6 +39,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const suffix = randomUUID();
       const accountId = yield* makeUserId(`workspace-create-account-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
+      const channels = yield* ChannelAccess;
       const workspaces = yield* WorkspaceAccess;
 
       yield* sql`
@@ -56,6 +58,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         }),
       );
       const found = yield* workspaces.getForActor(accountId, created.workspaceId);
+      const general = yield* channels.getPublicForActor(
+        accountId,
+        created.workspaceId,
+        created.generalChannelId,
+      );
       const auditEvents = yield* sql<{
         eventType: string;
         occurredAt: Date;
@@ -72,6 +79,16 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       `;
 
       expect(found.membership.role).toBe("owner");
+      expect(general).toMatchObject({
+        channel: {
+          id: created.generalChannelId,
+          name: "general",
+          purpose: "A shared place for workspace-wide topics.",
+          visibility: "public",
+        },
+        maintainer: { id: created.workspaceIdentityId },
+        hasChannelMembership: true,
+      });
       expect(auditEvents).toEqual([
         {
           eventType: "workspace.created",
@@ -79,6 +96,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           metadata: {
             workspaceId: created.workspaceId,
             workspaceIdentityId: created.workspaceIdentityId,
+            generalChannelId: created.generalChannelId,
           },
         },
       ]);

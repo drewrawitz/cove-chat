@@ -36,18 +36,18 @@ it.live(
 
       yield* signIn(acceptance, "bob@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "#general" }).waitFor());
+      yield* browserAction(() =>
+        page.locator("summary").filter({ hasText: "Create channel" }).click(),
+      );
       yield* browserAction(() => page.getByLabel("Channel name").fill("product-lab"));
       yield* browserAction(() =>
         page
           .getByLabel("Purpose")
           .fill("A durable place to explore and maintain product experiments."),
       );
-      yield* browserAction(() =>
-        page.getByLabel("Initial Channel Maintainer").selectOption({ label: "Bob in Cove" }),
-      );
-      yield* browserAction(() =>
-        page.getByRole("button", { name: "Create Public Channel" }).click(),
-      );
+      yield* browserAction(() => page.getByRole("button", { name: "Create channel" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "#product-lab" }).waitFor());
 
       const channelId = new URL(page.url()).pathname.split("/").at(-1);
@@ -55,6 +55,7 @@ it.live(
       yield* browserAction(() => page.context().clearCookies());
       yield* signIn(acceptance, "alice@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
 
       const memberNavigation = page.getByRole("navigation", { name: "Your channels" });
       expect(
@@ -69,7 +70,7 @@ it.live(
           .getByText("A durable place to explore and maintain product experiments.")
           .waitFor(),
       );
-      yield* browserAction(() => discovery.getByRole("link", { name: "Read product-lab" }).click());
+      yield* browserAction(() => discovery.getByRole("link", { name: "product-lab" }).click());
 
       yield* browserAction(() => page.getByRole("heading", { name: "#product-lab" }).waitFor());
       yield* browserAction(() =>
@@ -101,6 +102,9 @@ it.live(
       yield* browserAction(() => page.getByRole("heading", { name: "Alice in Cove" }).waitFor());
       const otherWorkspaceId = new URL(page.url()).pathname.split("/").at(-1);
       expect(otherWorkspaceId).toBeDefined();
+      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "#general" }).waitFor());
+      yield* browserAction(() => page.getByText("Maintained by Alice in Cove").waitFor());
 
       yield* browserAction(() =>
         page.goto(`${acceptance.webUrl}/workspaces/${otherWorkspaceId}/channels/${channelId}`),

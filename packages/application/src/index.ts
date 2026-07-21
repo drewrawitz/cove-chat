@@ -26,7 +26,6 @@ export {
   ChannelAccessLive,
   ChannelAccessPersistence,
   ChannelAccessPersistenceFailure,
-  ChannelMaintainerUnavailable,
   ChannelMaintainerView,
   CreatePublicChannelCommand,
   CreatePublicChannelPersistenceResult,

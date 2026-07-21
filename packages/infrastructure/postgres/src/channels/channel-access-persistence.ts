@@ -38,11 +38,6 @@ const IdentityWorkspaceRequest = Schema.Struct({
   actorIdentityId: WorkspaceIdentityId,
 });
 
-const MaintainerRequest = Schema.Struct({
-  workspaceId: WorkspaceId,
-  maintainerIdentityId: WorkspaceIdentityId,
-});
-
 const ActiveFullMemberIdentityRow = Schema.Struct({
   id: WorkspaceIdentityId,
   name: WorkspaceIdentityName,
@@ -67,6 +62,14 @@ const PublicChannelRow = Schema.Struct({
   hasChannelMembership: Schema.Boolean,
 });
 interface PublicChannelRow extends Schema.Schema.Type<typeof PublicChannelRow> {}
+
+const InsertPublicChannelRequest = Schema.Struct({
+  ...CreatePublicChannelCommand.fields,
+  maintainerIdentityId: WorkspaceIdentityId,
+});
+interface InsertPublicChannelRequest extends Schema.Schema.Type<
+  typeof InsertPublicChannelRequest
+> {}
 
 const publicChannelViewFromRow = (row: PublicChannelRow): PublicChannelView =>
   PublicChannelView.make({
@@ -120,49 +123,6 @@ const make = Effect.gen(function* () {
         AND identity.role IN ('owner', 'admin', 'member')
       LIMIT 1
       FOR UPDATE
-    `,
-  });
-
-  const lockMaintainer = SqlSchema.findOneOption({
-    Request: MaintainerRequest,
-    Result: ActiveFullMemberIdentityRow,
-    execute: ({ workspaceId, maintainerIdentityId }) => sql<ActiveFullMemberIdentityRow>`
-      SELECT
-        identity.id,
-        identity.name,
-        identity.avatar_url AS "avatarUrl"
-      FROM workspace_identities AS identity
-      WHERE identity.workspace_id = ${workspaceId}
-        AND identity.id = ${maintainerIdentityId}
-        AND identity.membership_ended_at IS NULL
-        AND identity.role IN ('owner', 'admin', 'member')
-      LIMIT 1
-      FOR UPDATE
-    `,
-  });
-
-  const listMaintainerRows = SqlSchema.findAll({
-    Request: ActorWorkspaceRequest,
-    Result: ActiveFullMemberIdentityRow,
-    execute: ({ actorAccountId, workspaceId }) => sql<ActiveFullMemberIdentityRow>`
-      WITH actor AS (
-        SELECT identity.workspace_id
-        FROM workspace_identities AS identity
-        WHERE identity.account_id = ${actorAccountId}
-          AND identity.workspace_id = ${workspaceId}
-          AND identity.membership_ended_at IS NULL
-          AND identity.role IN ('owner', 'admin', 'member')
-      )
-      SELECT
-        maintainer.id,
-        maintainer.name,
-        maintainer.avatar_url AS "avatarUrl"
-      FROM actor
-      INNER JOIN workspace_identities AS maintainer
-        ON maintainer.workspace_id = actor.workspace_id
-        AND maintainer.membership_ended_at IS NULL
-        AND maintainer.role IN ('owner', 'admin', 'member')
-      ORDER BY lower(maintainer.name), maintainer.id
     `,
   });
 
@@ -240,7 +200,7 @@ const make = Effect.gen(function* () {
   });
 
   const insertPublicChannel = SqlSchema.findOne({
-    Request: CreatePublicChannelCommand,
+    Request: InsertPublicChannelRequest,
     Result: Channel,
     execute: ({ channelId, workspaceId, name, purpose, maintainerIdentityId }) => sql<ChannelType>`
       INSERT INTO channels (
@@ -282,20 +242,15 @@ const make = Effect.gen(function* () {
               return CreatePublicChannelPersistenceResult.cases.ActorUnavailable.make({});
             }
 
-            const maintainer = yield* lockMaintainer({
-              workspaceId: command.workspaceId,
-              maintainerIdentityId: command.maintainerIdentityId,
+            const inserted = yield* insertPublicChannel({
+              ...command,
+              maintainerIdentityId: actor.value.id,
             });
-            if (Option.isNone(maintainer)) {
-              return CreatePublicChannelPersistenceResult.cases.MaintainerUnavailable.make({});
-            }
-
-            const inserted = yield* insertPublicChannel(command);
 
             return CreatePublicChannelPersistenceResult.cases.Created.make({
               channel: PublicChannelView.make({
                 channel: inserted,
-                maintainer: maintainer.value,
+                maintainer: actor.value,
                 hasChannelMembership: false,
               }),
             });
@@ -323,20 +278,6 @@ const make = Effect.gen(function* () {
         effect.pipe(
           Effect.mapError((cause) =>
             persistenceFailure("ChannelAccessPersistence.listPublicForActor", cause),
-          ),
-        ),
-    ),
-    listMaintainersForActor: Effect.fn("PostgresChannelAccess.listMaintainersForActor")(
-      function* (actorAccountId, workspaceId) {
-        const actor = yield* readActiveWorkspaceActor({ actorAccountId, workspaceId });
-        if (Option.isNone(actor)) return undefined;
-        const rows = yield* listMaintainerRows({ actorAccountId, workspaceId });
-        return rows.map((row) => ChannelMaintainerView.make(row));
-      },
-      (effect) =>
-        effect.pipe(
-          Effect.mapError((cause) =>
-            persistenceFailure("ChannelAccessPersistence.listMaintainersForActor", cause),
           ),
         ),
     ),

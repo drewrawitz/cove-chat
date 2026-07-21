@@ -26,10 +26,3 @@ export const PublicChannelListResponse = Schema.Struct({
 export interface PublicChannelListResponse extends Schema.Schema.Type<
   typeof PublicChannelListResponse
 > {}
-
-export const ChannelMaintainerListResponse = Schema.Struct({
-  maintainers: Schema.Array(ChannelMaintainerResponse),
-}).annotate({ identifier: "ChannelMaintainerListResponse" });
-export interface ChannelMaintainerListResponse extends Schema.Schema.Type<
-  typeof ChannelMaintainerListResponse
-> {}
