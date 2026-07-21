@@ -6,9 +6,9 @@ const unavailableDefinition = {
   message: "Channel is unavailable.",
 } as const;
 
-const stewardUnavailableDefinition = {
-  code: "CHANNEL_STEWARD_UNAVAILABLE",
-  message: "The initial Channel Steward is unavailable.",
+const maintainerUnavailableDefinition = {
+  code: "CHANNEL_MAINTAINER_UNAVAILABLE",
+  message: "The initial Channel Maintainer is unavailable.",
 } as const;
 
 export const ChannelUnavailableResponse = Schema.Struct({
@@ -18,14 +18,14 @@ export const ChannelUnavailableResponse = Schema.Struct({
   .annotate({ identifier: "ChannelUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
-export const ChannelStewardUnavailableResponse = Schema.Struct({
-  code: Schema.Literals([stewardUnavailableDefinition.code]),
-  message: Schema.Literals([stewardUnavailableDefinition.message]),
+export const ChannelMaintainerUnavailableResponse = Schema.Struct({
+  code: Schema.Literals([maintainerUnavailableDefinition.code]),
+  message: Schema.Literals([maintainerUnavailableDefinition.message]),
 })
-  .annotate({ identifier: "ChannelStewardUnavailableResponse" })
+  .annotate({ identifier: "ChannelMaintainerUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
 export const ChannelErrorResponses = {
   unavailable: ChannelUnavailableResponse.make(unavailableDefinition),
-  stewardUnavailable: ChannelStewardUnavailableResponse.make(stewardUnavailableDefinition),
+  maintainerUnavailable: ChannelMaintainerUnavailableResponse.make(maintainerUnavailableDefinition),
 } as const;

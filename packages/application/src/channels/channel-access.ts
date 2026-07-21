@@ -13,16 +13,16 @@ import { Context, type Effect, Schema } from "effect";
 import { ChannelUnavailable } from "./get-channel-for-actor.ts";
 import type { WorkspaceUnavailable } from "../workspaces/workspace-access.ts";
 
-export const ChannelStewardView = Schema.Struct({
+export const ChannelMaintainerView = Schema.Struct({
   id: WorkspaceIdentityId,
   name: WorkspaceIdentityName,
   avatarUrl: WorkspaceAvatarUrl,
 });
-export interface ChannelStewardView extends Schema.Schema.Type<typeof ChannelStewardView> {}
+export interface ChannelMaintainerView extends Schema.Schema.Type<typeof ChannelMaintainerView> {}
 
 export const PublicChannelView = Schema.Struct({
   channel: Channel,
-  steward: ChannelStewardView,
+  maintainer: ChannelMaintainerView,
   hasChannelMembership: Schema.Boolean,
 });
 export interface PublicChannelView extends Schema.Schema.Type<typeof PublicChannelView> {}
@@ -33,7 +33,7 @@ export const CreatePublicChannelCommand = Schema.Struct({
   channelId: ChannelId,
   name: ChannelName,
   purpose: ChannelPurpose,
-  stewardIdentityId: WorkspaceIdentityId,
+  maintainerIdentityId: WorkspaceIdentityId,
 });
 export interface CreatePublicChannelCommand extends Schema.Schema.Type<
   typeof CreatePublicChannelCommand
@@ -48,9 +48,9 @@ export interface JoinPublicChannelCommand extends Schema.Schema.Type<
   typeof JoinPublicChannelCommand
 > {}
 
-export class ChannelStewardUnavailable extends Schema.TaggedErrorClass<ChannelStewardUnavailable>()(
-  "Application.ChannelStewardUnavailable",
-  { workspaceId: WorkspaceId, stewardIdentityId: WorkspaceIdentityId },
+export class ChannelMaintainerUnavailable extends Schema.TaggedErrorClass<ChannelMaintainerUnavailable>()(
+  "Application.ChannelMaintainerUnavailable",
+  { workspaceId: WorkspaceId, maintainerIdentityId: WorkspaceIdentityId },
 ) {}
 
 export class ChannelAccessFailure extends Schema.TaggedErrorClass<ChannelAccessFailure>()(
@@ -63,11 +63,11 @@ export interface ChannelAccessService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<PublicChannelView>, WorkspaceUnavailable | ChannelAccessFailure>;
-  readonly listStewardsForActor: (
+  readonly listMaintainersForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<
-    ReadonlyArray<ChannelStewardView>,
+    ReadonlyArray<ChannelMaintainerView>,
     WorkspaceUnavailable | ChannelAccessFailure
   >;
   readonly getPublicForActor: (
@@ -79,7 +79,7 @@ export interface ChannelAccessService {
     command: CreatePublicChannelCommand,
   ) => Effect.Effect<
     PublicChannelView,
-    WorkspaceUnavailable | ChannelStewardUnavailable | ChannelAccessFailure
+    WorkspaceUnavailable | ChannelMaintainerUnavailable | ChannelAccessFailure
   >;
   readonly joinPublic: (
     command: JoinPublicChannelCommand,

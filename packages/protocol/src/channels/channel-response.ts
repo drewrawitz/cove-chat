@@ -1,11 +1,13 @@
 import { Schema } from "effect";
 
-export const ChannelStewardResponse = Schema.Struct({
+export const ChannelMaintainerResponse = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   avatarUrl: Schema.String,
-}).annotate({ identifier: "ChannelStewardResponse" });
-export interface ChannelStewardResponse extends Schema.Schema.Type<typeof ChannelStewardResponse> {}
+}).annotate({ identifier: "ChannelMaintainerResponse" });
+export interface ChannelMaintainerResponse extends Schema.Schema.Type<
+  typeof ChannelMaintainerResponse
+> {}
 
 export const PublicChannelResponse = Schema.Struct({
   id: Schema.String,
@@ -13,7 +15,7 @@ export const PublicChannelResponse = Schema.Struct({
   name: Schema.String,
   purpose: Schema.String,
   visibility: Schema.Literal("public"),
-  steward: ChannelStewardResponse,
+  maintainer: ChannelMaintainerResponse,
   hasChannelMembership: Schema.Boolean,
 }).annotate({ identifier: "PublicChannelResponse" });
 export interface PublicChannelResponse extends Schema.Schema.Type<typeof PublicChannelResponse> {}
@@ -25,9 +27,9 @@ export interface PublicChannelListResponse extends Schema.Schema.Type<
   typeof PublicChannelListResponse
 > {}
 
-export const ChannelStewardListResponse = Schema.Struct({
-  stewards: Schema.Array(ChannelStewardResponse),
-}).annotate({ identifier: "ChannelStewardListResponse" });
-export interface ChannelStewardListResponse extends Schema.Schema.Type<
-  typeof ChannelStewardListResponse
+export const ChannelMaintainerListResponse = Schema.Struct({
+  maintainers: Schema.Array(ChannelMaintainerResponse),
+}).annotate({ identifier: "ChannelMaintainerListResponse" });
+export interface ChannelMaintainerListResponse extends Schema.Schema.Type<
+  typeof ChannelMaintainerListResponse
 > {}

@@ -3,7 +3,7 @@ import { WorkspaceUnavailable } from "../workspaces/workspace-access.ts";
 import {
   ChannelAccess,
   ChannelAccessFailure,
-  ChannelStewardUnavailable,
+  ChannelMaintainerUnavailable,
 } from "./channel-access.ts";
 import { ChannelAccessPersistence } from "./channel-access-persistence.ts";
 import { ChannelUnavailable } from "./get-channel-for-actor.ts";
@@ -28,16 +28,16 @@ const make = Effect.gen(function* () {
         return channels;
       },
     ),
-    listStewardsForActor: Effect.fn("ChannelAccess.listStewardsForActor")(
+    listMaintainersForActor: Effect.fn("ChannelAccess.listMaintainersForActor")(
       function* (actorAccountId, workspaceId) {
-        const stewards = yield* recoverPersistence(
-          "ChannelAccess.listStewardsForActor",
-          persistence.listStewardsForActor(actorAccountId, workspaceId),
+        const maintainers = yield* recoverPersistence(
+          "ChannelAccess.listMaintainersForActor",
+          persistence.listMaintainersForActor(actorAccountId, workspaceId),
         );
-        if (stewards === undefined) {
+        if (maintainers === undefined) {
           return yield* Effect.fail(new WorkspaceUnavailable({ workspaceId }));
         }
-        return stewards;
+        return maintainers;
       },
     ),
     getPublicForActor: Effect.fn("ChannelAccess.getPublicForActor")(
@@ -59,11 +59,11 @@ const make = Effect.gen(function* () {
       );
       return yield* result._tag === "Created"
         ? Effect.succeed(result.channel)
-        : result._tag === "StewardUnavailable"
+        : result._tag === "MaintainerUnavailable"
           ? Effect.fail(
-              new ChannelStewardUnavailable({
+              new ChannelMaintainerUnavailable({
                 workspaceId: command.workspaceId,
-                stewardIdentityId: command.stewardIdentityId,
+                maintainerIdentityId: command.maintainerIdentityId,
               }),
             )
           : Effect.fail(new WorkspaceUnavailable({ workspaceId: command.workspaceId }));

@@ -1,16 +1,16 @@
-import type { ChannelStewardView, PublicChannelView } from "@cove/application";
+import type { ChannelMaintainerView, PublicChannelView } from "@cove/application";
 import {
-  ChannelStewardListResponse,
-  ChannelStewardResponse,
+  ChannelMaintainerListResponse,
+  ChannelMaintainerResponse,
   PublicChannelListResponse,
   PublicChannelResponse,
 } from "@cove/protocol";
 
-const channelStewardResponse = (steward: ChannelStewardView): ChannelStewardResponse =>
-  ChannelStewardResponse.make({
-    id: steward.id,
-    name: steward.name,
-    avatarUrl: steward.avatarUrl,
+const channelMaintainerResponse = (maintainer: ChannelMaintainerView): ChannelMaintainerResponse =>
+  ChannelMaintainerResponse.make({
+    id: maintainer.id,
+    name: maintainer.name,
+    avatarUrl: maintainer.avatarUrl,
   });
 
 export const publicChannelResponse = (view: PublicChannelView): PublicChannelResponse =>
@@ -20,7 +20,7 @@ export const publicChannelResponse = (view: PublicChannelView): PublicChannelRes
     name: view.channel.name,
     purpose: view.channel.purpose,
     visibility: "public",
-    steward: channelStewardResponse(view.steward),
+    maintainer: channelMaintainerResponse(view.maintainer),
     hasChannelMembership: view.hasChannelMembership,
   });
 
@@ -29,7 +29,9 @@ export const publicChannelListResponse = (
 ): PublicChannelListResponse =>
   PublicChannelListResponse.make({ channels: channels.map(publicChannelResponse) });
 
-export const channelStewardListResponse = (
-  stewards: ReadonlyArray<ChannelStewardView>,
-): ChannelStewardListResponse =>
-  ChannelStewardListResponse.make({ stewards: stewards.map(channelStewardResponse) });
+export const channelMaintainerListResponse = (
+  maintainers: ReadonlyArray<ChannelMaintainerView>,
+): ChannelMaintainerListResponse =>
+  ChannelMaintainerListResponse.make({
+    maintainers: maintainers.map(channelMaintainerResponse),
+  });

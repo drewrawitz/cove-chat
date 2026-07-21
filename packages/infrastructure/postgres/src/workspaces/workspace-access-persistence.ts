@@ -661,7 +661,7 @@ const make = Effect.gen(function* () {
             )
           FOR UPDATE
         ),
-        replacement_steward AS (
+        replacement_maintainer AS (
           SELECT
             selected_membership.workspace_id,
             selected_membership.id AS departing_identity_id,
@@ -686,11 +686,11 @@ const make = Effect.gen(function* () {
         ),
         reassigned_channels AS (
           UPDATE channels AS channel
-          SET steward_identity_id = replacement_steward.replacement_identity_id
-          FROM replacement_steward
-          WHERE channel.workspace_id = replacement_steward.workspace_id
-            AND channel.steward_identity_id = replacement_steward.departing_identity_id
-            AND replacement_steward.replacement_identity_id IS NOT NULL
+          SET maintainer_identity_id = replacement_maintainer.replacement_identity_id
+          FROM replacement_maintainer
+          WHERE channel.workspace_id = replacement_maintainer.workspace_id
+            AND channel.maintainer_identity_id = replacement_maintainer.departing_identity_id
+            AND replacement_maintainer.replacement_identity_id IS NOT NULL
           RETURNING channel.workspace_id
         ),
         ended_membership AS (

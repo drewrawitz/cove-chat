@@ -6,7 +6,7 @@ import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getChannelsListPublicChannelsQueryKey,
   useChannelsCreatePublicChannel,
-  useChannelsListChannelStewards,
+  useChannelsListChannelMaintainers,
   useChannelsListPublicChannels,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
@@ -19,7 +19,7 @@ export function WorkspaceChannels({ workspaceId }: WorkspaceChannelsProps): Reac
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const channels = useChannelsListPublicChannels(workspaceId, { query: { retry: false } });
-  const stewards = useChannelsListChannelStewards(workspaceId, { query: { retry: false } });
+  const maintainers = useChannelsListChannelMaintainers(workspaceId, { query: { retry: false } });
   const createChannel = useChannelsCreatePublicChannel();
 
   const create = (event: FormEvent<HTMLFormElement>): void => {
@@ -32,7 +32,7 @@ export function WorkspaceChannels({ workspaceId }: WorkspaceChannelsProps): Reac
         data: {
           name: requiredFormValue(form, "channelName"),
           purpose: requiredFormValue(form, "channelPurpose"),
-          stewardIdentityId: requiredFormValue(form, "channelSteward"),
+          maintainerIdentityId: requiredFormValue(form, "channelMaintainer"),
         },
       },
       {
@@ -150,18 +150,18 @@ export function WorkspaceChannels({ workspaceId }: WorkspaceChannelsProps): Reac
             placeholder="product-lab"
           />
         </label>
-        <label className="text-sm font-medium" htmlFor="channelSteward">
-          Initial Channel Steward
+        <label className="text-sm font-medium" htmlFor="channelMaintainer">
+          Initial Channel Maintainer
           <select
-            id="channelSteward"
-            name="channelSteward"
+            id="channelMaintainer"
+            name="channelMaintainer"
             required
-            disabled={stewards.isPending || stewards.isError}
+            disabled={maintainers.isPending || maintainers.isError}
             className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           >
-            {stewards.data?.stewards.map((steward) => (
-              <option key={steward.id} value={steward.id}>
-                {steward.name}
+            {maintainers.data?.maintainers.map((maintainer) => (
+              <option key={maintainer.id} value={maintainer.id}>
+                {maintainer.name}
               </option>
             ))}
           </select>
@@ -181,7 +181,9 @@ export function WorkspaceChannels({ workspaceId }: WorkspaceChannelsProps): Reac
           <Button
             type="submit"
             disabled={
-              createChannel.isPending || !stewards.isSuccess || stewards.data.stewards.length === 0
+              createChannel.isPending ||
+              !maintainers.isSuccess ||
+              maintainers.data.maintainers.length === 0
             }
           >
             {createChannel.isPending ? "Creating…" : "Create Public Channel"}
@@ -198,8 +200,8 @@ export function WorkspaceChannels({ workspaceId }: WorkspaceChannelsProps): Reac
 }
 
 function createChannelErrorMessage(error: unknown): string {
-  if (error instanceof CoveApiError && error.info.code === "CHANNEL_STEWARD_UNAVAILABLE") {
-    return "Choose an active Full Member as the initial Channel Steward.";
+  if (error instanceof CoveApiError && error.info.code === "CHANNEL_MAINTAINER_UNAVAILABLE") {
+    return "Choose an active Full Member as the initial Channel Maintainer.";
   }
   return "Cove could not create this channel. Try again.";
 }

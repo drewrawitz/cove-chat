@@ -26,7 +26,7 @@ import { Effect, Redacted } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import {
-  channelStewardListResponse,
+  channelMaintainerListResponse,
   publicChannelListResponse,
   publicChannelResponse,
 } from "./channel-response.ts";
@@ -48,8 +48,8 @@ const channelErrorResponse = (error: unknown) =>
 
 const createChannelErrorResponse = (error: unknown) => {
   switch (errorTag(error)) {
-    case "Application.ChannelStewardUnavailable":
-      return ChannelErrorResponses.stewardUnavailable;
+    case "Application.ChannelMaintainerUnavailable":
+      return ChannelErrorResponses.maintainerUnavailable;
     default:
       return workspaceErrorResponse(error);
   }
@@ -86,14 +86,14 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         return publicChannelListResponse(yield* channels.listPublicForActor(actorId, workspaceId));
       }).pipe(Effect.mapError(workspaceErrorResponse)),
     )
-    .handle("listChannelStewards", ({ params }) =>
+    .handle("listChannelMaintainers", ({ params }) =>
       Effect.gen(function* () {
         const actor = yield* AuthenticatedActor;
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
         const channels = yield* ChannelAccess;
-        return channelStewardListResponse(
-          yield* channels.listStewardsForActor(actorId, workspaceId),
+        return channelMaintainerListResponse(
+          yield* channels.listMaintainersForActor(actorId, workspaceId),
         );
       }).pipe(Effect.mapError(workspaceErrorResponse)),
     )
@@ -104,7 +104,7 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
         const channelId = yield* makeChannelId(randomUUID());
-        const stewardIdentityId = yield* makeWorkspaceIdentityId(payload.stewardIdentityId);
+        const maintainerIdentityId = yield* makeWorkspaceIdentityId(payload.maintainerIdentityId);
         const channels = yield* ChannelAccess;
         return publicChannelResponse(
           yield* channels.createPublic(
@@ -114,7 +114,7 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
               channelId,
               name: ChannelName.make(payload.name),
               purpose: ChannelPurpose.make(payload.purpose),
-              stewardIdentityId,
+              maintainerIdentityId,
             }),
           ),
         );

@@ -3,13 +3,13 @@ import { Context, type Effect, Schema } from "effect";
 import {
   CreatePublicChannelCommand,
   PublicChannelView,
-  ChannelStewardView,
+  ChannelMaintainerView,
 } from "./channel-access.ts";
 
 export const CreatePublicChannelPersistenceResult = Schema.TaggedUnion({
   Created: { channel: PublicChannelView },
   ActorUnavailable: {},
-  StewardUnavailable: {},
+  MaintainerUnavailable: {},
 });
 export type CreatePublicChannelPersistenceResult = typeof CreatePublicChannelPersistenceResult.Type;
 
@@ -23,11 +23,11 @@ export interface ChannelAccessPersistenceService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<PublicChannelView> | undefined, ChannelAccessPersistenceFailure>;
-  readonly listStewardsForActor: (
+  readonly listMaintainersForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<
-    ReadonlyArray<ChannelStewardView> | undefined,
+    ReadonlyArray<ChannelMaintainerView> | undefined,
     ChannelAccessPersistenceFailure
   >;
   readonly getPublicForActor: (

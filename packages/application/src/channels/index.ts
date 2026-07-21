@@ -1,8 +1,8 @@
 export {
   ChannelAccess,
   ChannelAccessFailure,
-  ChannelStewardUnavailable,
-  ChannelStewardView,
+  ChannelMaintainerUnavailable,
+  ChannelMaintainerView,
   CreatePublicChannelCommand,
   JoinPublicChannelCommand,
   PublicChannelView,

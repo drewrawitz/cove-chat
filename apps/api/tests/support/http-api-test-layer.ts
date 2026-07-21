@@ -31,7 +31,7 @@ const AuthPortsTest = Layer.mergeAll(
       listPublicForActor: Effect.fn("ChannelAccess.Test.listPublicForActor")(() =>
         Effect.succeed([]),
       ),
-      listStewardsForActor: Effect.fn("ChannelAccess.Test.listStewardsForActor")(() =>
+      listMaintainersForActor: Effect.fn("ChannelAccess.Test.listMaintainersForActor")(() =>
         Effect.succeed([]),
       ),
       getPublicForActor: Effect.fn("ChannelAccess.Test.getPublicForActor")(() =>

@@ -40,10 +40,10 @@ it.live(
       yield* browserAction(() =>
         page
           .getByLabel("Purpose")
-          .fill("A durable place to explore and steward product experiments."),
+          .fill("A durable place to explore and maintain product experiments."),
       );
       yield* browserAction(() =>
-        page.getByLabel("Initial Channel Steward").selectOption({ label: "Bob in Cove" }),
+        page.getByLabel("Initial Channel Maintainer").selectOption({ label: "Bob in Cove" }),
       );
       yield* browserAction(() =>
         page.getByRole("button", { name: "Create Public Channel" }).click(),
@@ -66,16 +66,16 @@ it.live(
       yield* browserAction(() => discovery.getByText("product-lab", { exact: true }).waitFor());
       yield* browserAction(() =>
         discovery
-          .getByText("A durable place to explore and steward product experiments.")
+          .getByText("A durable place to explore and maintain product experiments.")
           .waitFor(),
       );
       yield* browserAction(() => discovery.getByRole("link", { name: "Read product-lab" }).click());
 
       yield* browserAction(() => page.getByRole("heading", { name: "#product-lab" }).waitFor());
       yield* browserAction(() =>
-        page.getByText("A durable place to explore and steward product experiments.").waitFor(),
+        page.getByText("A durable place to explore and maintain product experiments.").waitFor(),
       );
-      yield* browserAction(() => page.getByText("Stewarded by Bob in Cove").waitFor());
+      yield* browserAction(() => page.getByText("Maintained by Bob in Cove").waitFor());
       expect(
         yield* browserAction(() =>
           page

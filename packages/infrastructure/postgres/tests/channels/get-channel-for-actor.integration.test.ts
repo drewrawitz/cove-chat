@@ -29,8 +29,8 @@ const makeFixtures = Effect.gen(function* () {
   const publicChannelName = yield* makeChannelName("general");
   const privateChannelName = yield* makeChannelName("leadership");
   const channelPurpose = yield* makeChannelPurpose("A test channel purpose.");
-  const stewardIdentityId = yield* makeWorkspaceIdentityId(`steward-${suffix}`);
-  const otherStewardIdentityId = yield* makeWorkspaceIdentityId(`other-steward-${suffix}`);
+  const maintainerIdentityId = yield* makeWorkspaceIdentityId(`maintainer-${suffix}`);
+  const otherMaintainerIdentityId = yield* makeWorkspaceIdentityId(`other-maintainer-${suffix}`);
 
   return {
     workspaceId,
@@ -38,15 +38,15 @@ const makeFixtures = Effect.gen(function* () {
     privateMemberId,
     workspaceMemberId,
     outsiderId,
-    stewardIdentityId,
-    otherStewardIdentityId,
+    maintainerIdentityId,
+    otherMaintainerIdentityId,
     publicChannel: Channel.make({
       id: publicChannelId,
       workspaceId,
       name: publicChannelName,
       purpose: channelPurpose,
       visibility: "public",
-      stewardIdentityId,
+      maintainerIdentityId,
     }),
     privateChannel: Channel.make({
       id: privateChannelId,
@@ -54,7 +54,7 @@ const makeFixtures = Effect.gen(function* () {
       name: privateChannelName,
       purpose: channelPurpose,
       visibility: "private",
-      stewardIdentityId,
+      maintainerIdentityId,
     }),
     otherChannelId,
     invalidChannelId,
@@ -83,21 +83,21 @@ const seedFixtures = Effect.fn("PostgresIntegrationTest.seedFixtures")(function*
   yield* sql`
     INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url)
     VALUES
-      (${fixtures.stewardIdentityId}, ${fixtures.workspaceId}, ${fixtures.privateMemberId}, 'Private Member', '/avatars/default.svg'),
+      (${fixtures.maintainerIdentityId}, ${fixtures.workspaceId}, ${fixtures.privateMemberId}, 'Private Member', '/avatars/default.svg'),
       (${`identity-${fixtures.workspaceMemberId}`}, ${fixtures.workspaceId}, ${fixtures.workspaceMemberId}, 'Workspace Member', '/avatars/default.svg'),
-      (${fixtures.otherStewardIdentityId}, ${fixtures.otherWorkspaceId}, ${fixtures.workspaceMemberId}, 'Other Steward', '/avatars/default.svg')
+      (${fixtures.otherMaintainerIdentityId}, ${fixtures.otherWorkspaceId}, ${fixtures.workspaceMemberId}, 'Other Maintainer', '/avatars/default.svg')
   `;
   yield* sql`
-    INSERT INTO channels (id, workspace_id, name, purpose, visibility, steward_identity_id)
+    INSERT INTO channels (id, workspace_id, name, purpose, visibility, maintainer_identity_id)
     VALUES
-      (${fixtures.publicChannel.id}, ${fixtures.workspaceId}, ${fixtures.publicChannel.name}, ${fixtures.publicChannel.purpose}, 'public', ${fixtures.stewardIdentityId}),
-      (${fixtures.privateChannel.id}, ${fixtures.workspaceId}, ${fixtures.privateChannel.name}, ${fixtures.privateChannel.purpose}, 'private', ${fixtures.stewardIdentityId}),
-      (${fixtures.otherChannelId}, ${fixtures.otherWorkspaceId}, 'other-team', 'A test channel purpose.', 'public', ${fixtures.otherStewardIdentityId}),
-      (${fixtures.invalidChannelId}, ${fixtures.workspaceId}, '', 'A test channel purpose.', 'public', ${fixtures.stewardIdentityId})
+      (${fixtures.publicChannel.id}, ${fixtures.workspaceId}, ${fixtures.publicChannel.name}, ${fixtures.publicChannel.purpose}, 'public', ${fixtures.maintainerIdentityId}),
+      (${fixtures.privateChannel.id}, ${fixtures.workspaceId}, ${fixtures.privateChannel.name}, ${fixtures.privateChannel.purpose}, 'private', ${fixtures.maintainerIdentityId}),
+      (${fixtures.otherChannelId}, ${fixtures.otherWorkspaceId}, 'other-team', 'A test channel purpose.', 'public', ${fixtures.otherMaintainerIdentityId}),
+      (${fixtures.invalidChannelId}, ${fixtures.workspaceId}, '', 'A test channel purpose.', 'public', ${fixtures.maintainerIdentityId})
   `;
   yield* sql`
     INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
-    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${fixtures.stewardIdentityId})
+    VALUES (${fixtures.workspaceId}, ${fixtures.privateChannel.id}, ${fixtures.maintainerIdentityId})
   `;
 });
 

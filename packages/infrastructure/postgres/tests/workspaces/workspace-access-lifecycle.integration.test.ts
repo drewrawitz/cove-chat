@@ -311,7 +311,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           (${adminIdentityId}, ${workspaceId}, ${adminAccountId}, 'Boundary Admin', '/avatars/admin.svg', 'admin')
       `;
       yield* sql`
-        INSERT INTO channels (id, workspace_id, name, purpose, visibility, steward_identity_id)
+        INSERT INTO channels (id, workspace_id, name, purpose, visibility, maintainer_identity_id)
         VALUES (${channelId}, ${workspaceId}, 'boundary', 'Boundary access checks.', 'public', ${adminIdentityId})
       `;
       yield* sql`
@@ -434,7 +434,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         expect(failure).toBeInstanceOf(WorkspaceUnavailable);
       }
       expect(channelFailure._tag).toBe("Application.ChannelUnavailable");
-      expect(transferredChannel.stewardIdentityId).toBe(ownerIdentityId);
+      expect(transferredChannel.maintainerIdentityId).toBe(ownerIdentityId);
     }),
   );
 
@@ -923,7 +923,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           (${ownerIdentityId}, ${workspaceId}, ${ownerId}, 'Channel Owner', '/avatars/owner.svg', 'owner')
       `;
       yield* sql`
-        INSERT INTO channels (id, workspace_id, name, purpose, visibility, steward_identity_id)
+        INSERT INTO channels (id, workspace_id, name, purpose, visibility, maintainer_identity_id)
         VALUES
           (${publicChannelId}, ${workspaceId}, 'general', 'General coordination.', 'public', ${ownerIdentityId}),
           (${privateChannelId}, ${workspaceId}, 'leadership', 'Leadership coordination.', 'private', ${ownerIdentityId})

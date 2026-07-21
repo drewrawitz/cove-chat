@@ -113,7 +113,7 @@ model WorkspaceIdentity {
   workspace           Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   account             User                @relation(fields: [accountId], references: [id], onDelete: Restrict)
   channelMemberships  ChannelMembership[]
-  stewardedChannels   Channel[]           @relation("ChannelSteward")
+  maintainedChannels  Channel[]           @relation("ChannelMaintainer")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -129,15 +129,15 @@ model Channel {
   name              String
   purpose           String              @default("Purpose not recorded.")
   visibility        ChannelVisibility   @default(PUBLIC)
-  stewardIdentityId String              @map("steward_identity_id")
+  maintainerIdentityId String           @map("maintainer_identity_id")
   workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  steward           WorkspaceIdentity   @relation("ChannelSteward", fields: [workspaceId, stewardIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  maintainer        WorkspaceIdentity   @relation("ChannelMaintainer", fields: [workspaceId, maintainerIdentityId], references: [workspaceId, id], onDelete: Restrict)
   memberships       ChannelMembership[]
   createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
   @@index([workspaceId, visibility])
-  @@index([workspaceId, stewardIdentityId])
+  @@index([workspaceId, maintainerIdentityId])
   @@map("channels")
 }
 

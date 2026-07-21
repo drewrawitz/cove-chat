@@ -49,6 +49,6 @@ _Avoid_: Full member
 An explicit relationship between a Workspace Identity with an active Workspace Membership and a Channel. It represents joining a public Channel and grants access to a private Channel or any Channel shared with a Guest; it ends with the Workspace Membership and must be established again after rejoining.
 _Avoid_: Workspace membership, topic membership
 
-**Channel Steward**:
-A full member responsible for a channel's purpose, membership, and lifecycle. Stewardship is independent of workspace role.
-_Avoid_: Workspace admin, channel owner
+**Channel Maintainer**:
+A full member responsible for a channel's purpose, membership, and lifecycle. Channel maintenance is independent of workspace role.
+_Avoid_: Channel Steward, Channel Owner, Channel Admin, Workspace Admin

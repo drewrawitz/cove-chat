@@ -12,7 +12,7 @@ export const Channel = Schema.Struct({
   name: ChannelName,
   purpose: ChannelPurpose,
   visibility: ChannelVisibility,
-  stewardIdentityId: WorkspaceIdentityId,
+  maintainerIdentityId: WorkspaceIdentityId,
 });
 
 export interface Channel extends Schema.Schema.Type<typeof Channel> {}

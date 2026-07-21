@@ -1,9 +1,9 @@
 ALTER TABLE "channels"
 ADD COLUMN "purpose" TEXT NOT NULL DEFAULT 'Purpose not recorded.',
-ADD COLUMN "steward_identity_id" TEXT;
+ADD COLUMN "maintainer_identity_id" TEXT;
 
 UPDATE "channels" AS channel
-SET "steward_identity_id" = (
+SET "maintainer_identity_id" = (
   SELECT identity.id
   FROM "workspace_identities" AS identity
   WHERE identity."workspace_id" = channel."workspace_id"
@@ -21,14 +21,14 @@ SET "steward_identity_id" = (
 );
 
 ALTER TABLE "channels"
-ALTER COLUMN "steward_identity_id" SET NOT NULL;
+ALTER COLUMN "maintainer_identity_id" SET NOT NULL;
 
-CREATE INDEX "channels_workspace_id_steward_identity_id_idx"
-ON "channels" ("workspace_id", "steward_identity_id");
+CREATE INDEX "channels_workspace_id_maintainer_identity_id_idx"
+ON "channels" ("workspace_id", "maintainer_identity_id");
 
 ALTER TABLE "channels"
-ADD CONSTRAINT "channels_workspace_id_steward_identity_id_fkey"
-FOREIGN KEY ("workspace_id", "steward_identity_id")
+ADD CONSTRAINT "channels_workspace_id_maintainer_identity_id_fkey"
+FOREIGN KEY ("workspace_id", "maintainer_identity_id")
 REFERENCES "workspace_identities"("workspace_id", "id")
 ON DELETE RESTRICT
 ON UPDATE CASCADE;

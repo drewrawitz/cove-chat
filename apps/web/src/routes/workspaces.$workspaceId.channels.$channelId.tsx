@@ -72,7 +72,7 @@ function PublicChannel(): ReactElement {
               #{channel.data.name}
             </h1>
             <p className="mt-3 max-w-2xl text-muted-foreground">{channel.data.purpose}</p>
-            <p className="mt-5 text-sm font-medium">Stewarded by {channel.data.steward.name}</p>
+            <p className="mt-5 text-sm font-medium">Maintained by {channel.data.maintainer.name}</p>
           </header>
           <div className="p-6 sm:p-8">
             <h2 className="font-heading text-xl font-semibold">Public Channel</h2>
