@@ -47,6 +47,17 @@ export interface WorkspaceInvitationView extends Schema.Schema.Type<
   typeof WorkspaceInvitationView
 > {}
 
+export const PendingWorkspaceInvitationView = Schema.Struct({
+  id: WorkspaceInvitationId,
+  workspaceId: WorkspaceId,
+  inviteeEmail: EmailAddress,
+  invitedAt: Schema.DateFromString,
+  tokenExpiresAt: Schema.DateFromString,
+});
+export interface PendingWorkspaceInvitationView extends Schema.Schema.Type<
+  typeof PendingWorkspaceInvitationView
+> {}
+
 export const CreateWorkspaceCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceName: WorkspaceName,
@@ -76,6 +87,26 @@ export const InviteWorkspaceMemberCommand = Schema.Struct({
 });
 export interface InviteWorkspaceMemberCommand extends Schema.Schema.Type<
   typeof InviteWorkspaceMemberCommand
+> {}
+
+const WorkspaceInvitationAdministrationCommandFields = {
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  invitationId: WorkspaceInvitationId,
+};
+
+export const ResendWorkspaceInvitationCommand = Schema.Struct(
+  WorkspaceInvitationAdministrationCommandFields,
+);
+export interface ResendWorkspaceInvitationCommand extends Schema.Schema.Type<
+  typeof ResendWorkspaceInvitationCommand
+> {}
+
+export const RevokeWorkspaceInvitationCommand = Schema.Struct(
+  WorkspaceInvitationAdministrationCommandFields,
+);
+export interface RevokeWorkspaceInvitationCommand extends Schema.Schema.Type<
+  typeof RevokeWorkspaceInvitationCommand
 > {}
 
 export const AcceptWorkspaceInvitationCommand = Schema.Struct({
@@ -150,6 +181,22 @@ export const WorkspaceInvitationIssued = Schema.TaggedStruct("WorkspaceInvitatio
   occurredAt: Schema.DateFromString,
 });
 export type WorkspaceInvitationIssued = typeof WorkspaceInvitationIssued.Type;
+
+export const WorkspaceInvitationResent = Schema.TaggedStruct("WorkspaceInvitationResent", {
+  invitationId: WorkspaceInvitationId,
+  workspaceId: WorkspaceId,
+  inviteeEmail: EmailAddress,
+  occurredAt: Schema.DateFromString,
+});
+export type WorkspaceInvitationResent = typeof WorkspaceInvitationResent.Type;
+
+export const WorkspaceInvitationRevoked = Schema.TaggedStruct("WorkspaceInvitationRevoked", {
+  invitationId: WorkspaceInvitationId,
+  workspaceId: WorkspaceId,
+  inviteeEmail: EmailAddress,
+  occurredAt: Schema.DateFromString,
+});
+export type WorkspaceInvitationRevoked = typeof WorkspaceInvitationRevoked.Type;
 
 export const WorkspaceInvitationAccepted = Schema.TaggedStruct("WorkspaceInvitationAccepted", {
   invitationId: WorkspaceInvitationId,
@@ -256,6 +303,15 @@ export type InviteWorkspaceMemberFailure =
   | WorkspaceAccessFailure
   | WorkspaceAdministrationForbidden
   | WorkspaceUnavailable;
+export type ListPendingWorkspaceInvitationsFailure =
+  | WorkspaceAccessFailure
+  | WorkspaceAdministrationForbidden
+  | WorkspaceUnavailable;
+export type AdministerWorkspaceInvitationFailure =
+  | WorkspaceAccessFailure
+  | WorkspaceAdministrationForbidden
+  | WorkspaceInvitationUnavailable
+  | WorkspaceUnavailable;
 export type AcceptWorkspaceInvitationFailure =
   | AlreadyWorkspaceMember
   | ExistingWorkspaceIdentityProfileNotAccepted
@@ -301,6 +357,13 @@ export interface WorkspaceAccessService {
   readonly listInvitationsForActor: (
     actorAccountId: UserId,
   ) => Effect.Effect<ReadonlyArray<WorkspaceInvitationView>, WorkspaceAccessFailure>;
+  readonly listPendingInvitationsForAdministrator: (
+    actorAccountId: UserId,
+    workspaceId: WorkspaceId,
+  ) => Effect.Effect<
+    ReadonlyArray<PendingWorkspaceInvitationView>,
+    ListPendingWorkspaceInvitationsFailure
+  >;
   readonly listFullMembersForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
@@ -308,6 +371,12 @@ export interface WorkspaceAccessService {
   readonly inviteMember: (
     command: InviteWorkspaceMemberCommand,
   ) => Effect.Effect<WorkspaceInvitationIssued, InviteWorkspaceMemberFailure>;
+  readonly resendInvitation: (
+    command: ResendWorkspaceInvitationCommand,
+  ) => Effect.Effect<WorkspaceInvitationResent, AdministerWorkspaceInvitationFailure>;
+  readonly revokeInvitation: (
+    command: RevokeWorkspaceInvitationCommand,
+  ) => Effect.Effect<WorkspaceInvitationRevoked, AdministerWorkspaceInvitationFailure>;
   readonly acceptInvitation: (
     command: AcceptWorkspaceInvitationCommand,
   ) => Effect.Effect<WorkspaceInvitationAccepted, AcceptWorkspaceInvitationFailure>;

@@ -3,6 +3,7 @@ export {
   WorkspaceAccessPersistenceFailure,
   type IdentityMembershipFacts,
   type InvitationAcceptanceFacts,
+  type InvitationAdministrationFacts,
   type InvitationRedemptionFacts,
   type InviteWorkspaceMemberFacts,
   type FullMemberAdministrationFacts,
@@ -16,6 +17,7 @@ export {
 export { WorkspaceAccessLive } from "./workspace-access-live.ts";
 export {
   FullMemberRole,
+  PendingWorkspaceInvitationView,
   WorkspaceAccess,
   type FullMemberView,
   type WorkspaceAccessView,

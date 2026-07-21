@@ -79,6 +79,23 @@ export interface WorkspaceInvitationListResponse extends Schema.Schema.Type<
   typeof WorkspaceInvitationListResponse
 > {}
 
+export const PendingWorkspaceInvitationResponse = Schema.Struct({
+  id: Schema.String,
+  inviteeEmail: Schema.String,
+  invitedAt: Schema.DateFromString,
+  expiresAt: Schema.DateFromString,
+}).annotate({ identifier: "PendingWorkspaceInvitationResponse" });
+export interface PendingWorkspaceInvitationResponse extends Schema.Schema.Type<
+  typeof PendingWorkspaceInvitationResponse
+> {}
+
+export const PendingWorkspaceInvitationListResponse = Schema.Struct({
+  invitations: Schema.Array(PendingWorkspaceInvitationResponse),
+}).annotate({ identifier: "PendingWorkspaceInvitationListResponse" });
+export interface PendingWorkspaceInvitationListResponse extends Schema.Schema.Type<
+  typeof PendingWorkspaceInvitationListResponse
+> {}
+
 const workspaceMutationResponseFields = {
   workspaceId: Schema.String,
   workspaceIdentityId: Schema.String,
@@ -110,6 +127,29 @@ export const WorkspaceInvitationIssuedResponse = Schema.Struct({
 }).annotate({ identifier: "WorkspaceInvitationIssuedResponse" });
 export interface WorkspaceInvitationIssuedResponse extends Schema.Schema.Type<
   typeof WorkspaceInvitationIssuedResponse
+> {}
+
+const workspaceInvitationAdministrationResponseFields = {
+  invitationId: Schema.String,
+  workspaceId: Schema.String,
+  inviteeEmail: Schema.String,
+  occurredAt: Schema.DateFromString,
+};
+
+export const WorkspaceInvitationResentResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceInvitationResent"]),
+  ...workspaceInvitationAdministrationResponseFields,
+}).annotate({ identifier: "WorkspaceInvitationResentResponse" });
+export interface WorkspaceInvitationResentResponse extends Schema.Schema.Type<
+  typeof WorkspaceInvitationResentResponse
+> {}
+
+export const WorkspaceInvitationRevokedResponse = Schema.Struct({
+  outcome: Schema.Literals(["WorkspaceInvitationRevoked"]),
+  ...workspaceInvitationAdministrationResponseFields,
+}).annotate({ identifier: "WorkspaceInvitationRevokedResponse" });
+export interface WorkspaceInvitationRevokedResponse extends Schema.Schema.Type<
+  typeof WorkspaceInvitationRevokedResponse
 > {}
 
 export const WorkspaceInvitationAcceptedResponse = Schema.Struct({

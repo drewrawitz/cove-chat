@@ -8,7 +8,10 @@ import {
   useWorkspacesChangeWorkspaceRole,
   useWorkspacesInviteWorkspaceMember,
   useWorkspacesListFullMembers,
+  useWorkspacesListPendingWorkspaceInvitations,
   useWorkspacesRemoveFullMember,
+  useWorkspacesResendWorkspaceInvitation,
+  useWorkspacesRevokeWorkspaceInvitation,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
 
@@ -25,7 +28,24 @@ interface FullMemberReference {
   };
 }
 
+interface PendingInvitationReference {
+  readonly id: string;
+  readonly inviteeEmail: string;
+  readonly invitedAt: string;
+  readonly expiresAt: string;
+}
+
 type FullMemberRole = "admin" | "member" | "owner";
+
+const invitationDateFormatter = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "UTC",
+  timeZoneName: "short",
+});
 
 export function WorkspaceAdministration({
   actorIsOwner,
@@ -34,7 +54,12 @@ export function WorkspaceAdministration({
 }: WorkspaceAdministrationProps): ReactElement {
   const queryClient = useQueryClient();
   const members = useWorkspacesListFullMembers(workspaceId, { query: { retry: false } });
+  const pendingInvitations = useWorkspacesListPendingWorkspaceInvitations(workspaceId, {
+    query: { retry: false },
+  });
   const inviteMember = useWorkspacesInviteWorkspaceMember();
+  const resendInvitation = useWorkspacesResendWorkspaceInvitation();
+  const revokeInvitation = useWorkspacesRevokeWorkspaceInvitation();
   const changeRole = useWorkspacesChangeWorkspaceRole();
   const removeFullMember = useWorkspacesRemoveFullMember();
   const [invitedEmail, setInvitedEmail] = useState<string>();
@@ -49,8 +74,9 @@ export function WorkspaceAdministration({
     inviteMember.mutate(
       { workspaceId, data: { email } },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           formElement.reset();
+          await pendingInvitations.refetch();
           setInvitedEmail(email);
         },
       },
@@ -101,15 +127,42 @@ export function WorkspaceAdministration({
     );
   };
 
+  const resend = (invitationId: string, inviteeEmail: string): void => {
+    setAdministrationMessage(undefined);
+    resendInvitation.mutate(
+      { workspaceId, invitationId },
+      {
+        onSuccess: async () => {
+          await pendingInvitations.refetch();
+          setAdministrationMessage(`Invitation resent to ${inviteeEmail}.`);
+        },
+      },
+    );
+  };
+
+  const revoke = (invitationId: string, inviteeEmail: string): void => {
+    setAdministrationMessage(undefined);
+    revokeInvitation.mutate(
+      { workspaceId, invitationId },
+      {
+        onSuccess: async () => {
+          await pendingInvitations.refetch();
+          setAdministrationMessage(`Invitation to ${inviteeEmail} revoked.`);
+        },
+      },
+    );
+  };
+
   return (
     <section className="mt-10 border-t pt-6">
-      <h2 className="font-heading text-xl font-semibold">Full Members</h2>
+      <h2 className="font-heading text-xl font-semibold">Workspace administration</h2>
       <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
         Invite anyone by email as a Member and deliberately assign Workspace Roles. Owners alone can
         appoint another Owner.
       </p>
 
-      <form className="mt-6 flex flex-col gap-3 sm:flex-row" onSubmit={invite}>
+      <h3 className="mt-8 font-heading text-lg font-semibold">Invite a member</h3>
+      <form className="mt-4 flex flex-col gap-3 sm:flex-row" onSubmit={invite}>
         <label className="min-w-0 flex-1 text-sm font-medium">
           Email address to invite
           <input
@@ -137,16 +190,27 @@ export function WorkspaceAdministration({
         </p>
       )}
 
+      <PendingInvitationsSection
+        invitations={pendingInvitations.data?.invitations}
+        isError={pendingInvitations.isError}
+        isPending={pendingInvitations.isPending}
+        isMutating={resendInvitation.isPending || revokeInvitation.isPending}
+        onResend={resend}
+        onRevoke={revoke}
+      />
+
+      <h3 className="mt-8 border-t pt-6 font-heading text-lg font-semibold">Full Members</h3>
+
       {members.isPending ? (
-        <p className="mt-8 text-sm text-muted-foreground" role="status">
+        <p className="mt-4 text-sm text-muted-foreground" role="status">
           Loading Full Members…
         </p>
       ) : members.isError ? (
-        <p className="mt-8 text-sm text-destructive" role="alert">
+        <p className="mt-4 text-sm text-destructive" role="alert">
           Cove could not load this Workspace's Full Members.
         </p>
       ) : (
-        <ul className="mt-8 grid gap-3">
+        <ul className="mt-4 grid gap-3">
           {members.data.members.map((member) => {
             const isCurrentIdentity = member.identity.id === currentIdentityId;
             const canManageMember = actorIsOwner || member.membership.role !== "owner";
@@ -173,6 +237,7 @@ export function WorkspaceAdministration({
                       Workspace role
                       <select
                         name="role"
+                        aria-label={`Role for ${member.identity.name}`}
                         defaultValue={member.membership.role}
                         disabled={!canManageMember}
                         className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
@@ -214,10 +279,104 @@ export function WorkspaceAdministration({
           {administrationMessage}
         </p>
       )}
-      {changeRole.error === null && removeFullMember.error === null ? null : (
+      {changeRole.error === null &&
+      removeFullMember.error === null &&
+      resendInvitation.error === null &&
+      revokeInvitation.error === null ? null : (
         <p className="mt-4 text-sm text-destructive" role="alert">
-          {administrationErrorMessage(changeRole.error ?? removeFullMember.error)}
+          {administrationErrorMessage(
+            changeRole.error ??
+              removeFullMember.error ??
+              resendInvitation.error ??
+              revokeInvitation.error,
+          )}
         </p>
+      )}
+    </section>
+  );
+}
+
+interface PendingInvitationsSectionProps {
+  readonly invitations: ReadonlyArray<PendingInvitationReference> | undefined;
+  readonly isError: boolean;
+  readonly isMutating: boolean;
+  readonly isPending: boolean;
+  readonly onResend: (invitationId: string, inviteeEmail: string) => void;
+  readonly onRevoke: (invitationId: string, inviteeEmail: string) => void;
+}
+
+function PendingInvitationsSection({
+  invitations,
+  isError,
+  isMutating,
+  isPending,
+  onResend,
+  onRevoke,
+}: PendingInvitationsSectionProps): ReactElement {
+  return (
+    <section aria-labelledby="pending-invitations-heading" className="mt-8 border-t pt-6">
+      <h3 id="pending-invitations-heading" className="font-heading text-lg font-semibold">
+        Pending invitations
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        Invitations remain here until they are accepted, expire, or are revoked. Resending creates a
+        new link and invalidates the previous one.
+      </p>
+      {isPending ? (
+        <p className="mt-4 text-sm text-muted-foreground" role="status">
+          Loading pending invitations…
+        </p>
+      ) : isError || invitations === undefined ? (
+        <p className="mt-4 text-sm text-destructive" role="alert">
+          Cove could not load this Workspace's pending invitations.
+        </p>
+      ) : invitations.length === 0 ? (
+        <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
+          No pending invitations.
+        </p>
+      ) : (
+        <ul className="mt-4 grid gap-3">
+          {invitations.map((invitation) => (
+            <li
+              className="grid gap-4 rounded-2xl border p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              key={invitation.id}
+            >
+              <div className="min-w-0">
+                <p className="break-all font-medium">{invitation.inviteeEmail}</p>
+                <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                  <div className="flex gap-1.5">
+                    <dt>Sent</dt>
+                    <dd>{formatInvitationDate(invitation.invitedAt)}</dd>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <dt>Expires</dt>
+                    <dd>{formatInvitationDate(invitation.expiresAt)}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div className="grid gap-2 min-[28rem]:grid-cols-2 sm:flex sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Resend invitation to ${invitation.inviteeEmail}`}
+                  disabled={isMutating}
+                  onClick={() => onResend(invitation.id, invitation.inviteeEmail)}
+                >
+                  Resend
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  aria-label={`Revoke invitation to ${invitation.inviteeEmail}`}
+                  disabled={isMutating}
+                  onClick={() => onRevoke(invitation.id, invitation.inviteeEmail)}
+                >
+                  Revoke
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -229,6 +388,10 @@ function isFullMemberRole(role: string): role is FullMemberRole {
 
 function roleLabel(role: FullMemberRole): string {
   return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+function formatInvitationDate(value: string): string {
+  return invitationDateFormatter.format(new Date(value));
 }
 
 function invitationErrorMessage(error: unknown): string {
@@ -254,9 +417,11 @@ function administrationErrorMessage(error: unknown): string {
       return "Promote another Owner before demoting or removing the final Owner.";
     case "WORKSPACE_ADMINISTRATION_FORBIDDEN":
       return "Your Workspace Role cannot make that change.";
-    case "WORKSPACE_MEMBER_UNAVAILABLE":
+    case "FULL_MEMBER_UNAVAILABLE":
       return "That Full Member is no longer available.";
+    case "WORKSPACE_INVITATION_UNAVAILABLE":
+      return "That invitation is no longer pending. Refresh and try again.";
     default:
-      return "Cove could not change this Membership. Try again in a moment.";
+      return "Cove could not make that change. Try again in a moment.";
   }
 }

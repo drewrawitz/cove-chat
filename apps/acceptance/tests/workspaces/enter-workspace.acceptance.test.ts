@@ -140,7 +140,18 @@ it.live(
       yield* browserAction(() => page.getByLabel("Email address to invite").fill(inviteeEmail));
       yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
       yield* browserAction(() => page.getByText(`Invitation sent to ${inviteeEmail}.`).waitFor());
+      const pendingInvitations = page.getByRole("region", { name: "Pending invitations" });
+      yield* browserAction(() => pendingInvitations.getByText(inviteeEmail).waitFor());
+      yield* browserAction(() => pendingInvitations.getByText("Sent", { exact: true }).waitFor());
+      yield* browserAction(() =>
+        pendingInvitations.getByText("Expires", { exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        page.getByRole("button", { name: `Resend invitation to ${inviteeEmail}` }).click(),
+      );
+      yield* browserAction(() => page.getByText(`Invitation resent to ${inviteeEmail}.`).waitFor());
 
+      yield* acceptance.takeWorkspaceInvitationLink();
       const invitationLink = yield* acceptance.takeWorkspaceInvitationLink();
       yield* browserAction(() => page.context().clearCookies());
       yield* browserAction(() => page.goto(invitationLink));
@@ -159,6 +170,22 @@ it.live(
         page.getByRole("button", { name: "Save role for New Member" }).click(),
       );
       yield* browserAction(() => page.getByText("New Member is now Admin.").waitFor());
+
+      const revokedEmail = `revoked-member-${randomUUID()}@example.test`;
+      yield* browserAction(() => page.getByLabel("Email address to invite").fill(revokedEmail));
+      yield* browserAction(() => page.getByRole("button", { name: "Invite Member" }).click());
+      yield* browserAction(() => page.getByText(`Invitation sent to ${revokedEmail}.`).waitFor());
+      yield* browserAction(() =>
+        page.getByRole("button", { name: `Revoke invitation to ${revokedEmail}` }).click(),
+      );
+      yield* browserAction(() =>
+        page.getByText(`Invitation to ${revokedEmail} revoked.`).waitFor(),
+      );
+      expect(
+        yield* browserAction(() =>
+          page.getByRole("button", { name: `Revoke invitation to ${revokedEmail}` }).count(),
+        ),
+      ).toBe(0);
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,
 );

@@ -43,11 +43,20 @@ const AuthPortsTest = Layer.mergeAll(
       listInvitationsForActor: Effect.fn("WorkspaceAccess.Test.listInvitationsForActor")(() =>
         unmockedWorkspaceAccess("listInvitationsForActor"),
       ),
+      listPendingInvitationsForAdministrator: Effect.fn(
+        "WorkspaceAccess.Test.listPendingInvitationsForAdministrator",
+      )(() => unmockedWorkspaceAccess("listPendingInvitationsForAdministrator")),
       listFullMembersForActor: Effect.fn("WorkspaceAccess.Test.listFullMembersForActor")(() =>
         unmockedWorkspaceAccess("listFullMembersForActor"),
       ),
       inviteMember: Effect.fn("WorkspaceAccess.Test.inviteMember")(() =>
         unmockedWorkspaceAccess("inviteMember"),
+      ),
+      resendInvitation: Effect.fn("WorkspaceAccess.Test.resendInvitation")(() =>
+        unmockedWorkspaceAccess("resendInvitation"),
+      ),
+      revokeInvitation: Effect.fn("WorkspaceAccess.Test.revokeInvitation")(() =>
+        unmockedWorkspaceAccess("revokeInvitation"),
       ),
       acceptInvitation: Effect.fn("WorkspaceAccess.Test.acceptInvitation")(() =>
         unmockedWorkspaceAccess("acceptInvitation"),

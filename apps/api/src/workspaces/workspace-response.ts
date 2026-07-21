@@ -1,17 +1,24 @@
 import type {
   FullMemberView,
   IdentityProfileUnchanged,
+  PendingWorkspaceInvitationView,
   WorkspaceAccessView,
   WorkspaceCreated,
   WorkspaceIdentityUpdated,
   WorkspaceInvitationAccepted,
   WorkspaceInvitationIssued,
   WorkspaceInvitationRedeemed,
+  WorkspaceInvitationResent,
+  WorkspaceInvitationRevoked,
   WorkspaceInvitationView,
   WorkspaceRoleChanged,
   WorkspaceRoleUnchanged,
 } from "@cove/application";
 import {
+  FullMemberListResponse,
+  FullMemberResponse,
+  PendingWorkspaceInvitationListResponse,
+  PendingWorkspaceInvitationResponse,
   WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
   WorkspaceIdentityResponse,
@@ -20,10 +27,10 @@ import {
   WorkspaceInvitationIssuedResponse,
   WorkspaceInvitationListResponse,
   WorkspaceInvitationRedeemedResponse,
+  WorkspaceInvitationResentResponse,
+  WorkspaceInvitationRevokedResponse,
   WorkspaceInvitationResponse,
   WorkspaceListResponse,
-  FullMemberListResponse,
-  FullMemberResponse,
   WorkspaceRoleChangeResponse,
   WorkspaceSummaryResponse,
 } from "@cove/protocol";
@@ -117,10 +124,49 @@ export function fullMemberListResponse(
   });
 }
 
+export function pendingWorkspaceInvitationListResponse(
+  invitations: ReadonlyArray<PendingWorkspaceInvitationView>,
+): PendingWorkspaceInvitationListResponse {
+  return PendingWorkspaceInvitationListResponse.make({
+    invitations: invitations.map((invitation) =>
+      PendingWorkspaceInvitationResponse.make({
+        id: invitation.id,
+        inviteeEmail: invitation.inviteeEmail,
+        invitedAt: invitation.invitedAt,
+        expiresAt: invitation.tokenExpiresAt,
+      }),
+    ),
+  });
+}
+
 export function workspaceInvitationIssuedResponse(
   outcome: WorkspaceInvitationIssued,
 ): WorkspaceInvitationIssuedResponse {
   return WorkspaceInvitationIssuedResponse.make({
+    outcome: outcome._tag,
+    invitationId: outcome.invitationId,
+    workspaceId: outcome.workspaceId,
+    inviteeEmail: outcome.inviteeEmail,
+    occurredAt: outcome.occurredAt,
+  });
+}
+
+export function workspaceInvitationResentResponse(
+  outcome: WorkspaceInvitationResent,
+): WorkspaceInvitationResentResponse {
+  return WorkspaceInvitationResentResponse.make({
+    outcome: outcome._tag,
+    invitationId: outcome.invitationId,
+    workspaceId: outcome.workspaceId,
+    inviteeEmail: outcome.inviteeEmail,
+    occurredAt: outcome.occurredAt,
+  });
+}
+
+export function workspaceInvitationRevokedResponse(
+  outcome: WorkspaceInvitationRevoked,
+): WorkspaceInvitationRevokedResponse {
+  return WorkspaceInvitationRevokedResponse.make({
     outcome: outcome._tag,
     invitationId: outcome.invitationId,
     workspaceId: outcome.workspaceId,

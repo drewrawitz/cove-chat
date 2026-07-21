@@ -14,6 +14,7 @@ import type { WorkspaceInvitationToken } from "@cove/ports";
 import { Context, type Effect, Schema } from "effect";
 import type {
   FullMemberView,
+  PendingWorkspaceInvitationView,
   WorkspaceAccessView,
   WorkspaceInvitationView,
 } from "./workspace-access.ts";
@@ -57,6 +58,10 @@ export interface InvitationAcceptanceFacts extends IdentityMembershipFacts {
 
 export interface InvitationRedemptionFacts extends InvitationAcceptanceFacts {
   readonly account: User | undefined;
+}
+
+export interface InvitationAdministrationFacts extends IdentityMembershipFacts {
+  readonly invitation: WorkspaceInvitationRecord | undefined;
 }
 
 export interface FullMemberAdministrationFacts extends WorkspaceTransitionFacts {
@@ -124,6 +129,18 @@ export type WorkspaceAccessAuditEvent =
     }
   | {
       readonly id: string;
+      readonly type: "workspace.invitation_resent" | "workspace.invitation_revoked";
+      readonly version: 1;
+      readonly actorAccountId: UserId;
+      readonly occurredAt: Date;
+      readonly metadata: {
+        readonly workspaceId: WorkspaceId;
+        readonly invitationId: WorkspaceInvitationId;
+        readonly inviteeEmail: EmailAddress;
+      };
+    }
+  | {
+      readonly id: string;
       readonly type: "workspace.role_changed";
       readonly version: 1;
       readonly actorAccountId: UserId;
@@ -157,6 +174,11 @@ export interface WorkspaceAccessTransaction {
     proposedAccountId: UserId,
     redeemedAt: Date,
   ) => Effect.Effect<InvitationRedemptionFacts, WorkspaceAccessPersistenceFailure>;
+  readonly serializeInvitationAdministration: (
+    actorAccountId: UserId,
+    workspaceId: WorkspaceId,
+    invitationId: WorkspaceInvitationId,
+  ) => Effect.Effect<InvitationAdministrationFacts, WorkspaceAccessPersistenceFailure>;
   readonly serializeFullMemberAdministration: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
@@ -194,6 +216,9 @@ export interface WorkspaceAccessTransaction {
     acceptedByAccountId: UserId,
     acceptedAt: Date,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
+  readonly revokeInvitation: (
+    invitationId: WorkspaceInvitationId,
+  ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly updateMemberRole: (
     workspaceId: WorkspaceId,
     workspaceIdentityId: WorkspaceIdentity["id"],
@@ -221,6 +246,14 @@ export interface WorkspaceAccessPersistenceService {
     actorAccountId: UserId,
     activeAt: Date,
   ) => Effect.Effect<ReadonlyArray<WorkspaceInvitationView>, WorkspaceAccessPersistenceFailure>;
+  readonly listPendingInvitationsForAdministrator: (
+    actorAccountId: UserId,
+    workspaceId: WorkspaceId,
+    activeAt: Date,
+  ) => Effect.Effect<
+    ReadonlyArray<PendingWorkspaceInvitationView> | undefined,
+    WorkspaceAccessPersistenceFailure
+  >;
   readonly listFullMembersForAdministrator: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,

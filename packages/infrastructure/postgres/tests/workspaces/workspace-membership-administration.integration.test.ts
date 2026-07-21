@@ -8,7 +8,9 @@ import {
   InviteWorkspaceMemberCommand,
   LastWorkspaceOwner,
   RemoveFullMemberCommand,
+  ResendWorkspaceInvitationCommand,
   RedeemWorkspaceInvitationCommand,
+  RevokeWorkspaceInvitationCommand,
   WorkspaceAccess,
   WorkspaceAdministrationForbidden,
   WorkspaceInvitationRedemptionUnavailable,
@@ -266,6 +268,205 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
       expect(rotatedTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
       expect(expiredTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
       expect(redeemed.account.email).toBe(inviteeEmail);
+    }),
+  );
+
+  it.effect("lets an Admin list, resend, and revoke pending Workspace Invitations", () =>
+    Effect.gen(function* () {
+      const suffix = randomUUID();
+      const ownerAccountId = yield* makeUserId(`invitation-owner-${suffix}`);
+      const adminAccountId = yield* makeUserId(`invitation-admin-${suffix}`);
+      const workspaceId = yield* makeWorkspaceId(`invitation-workspace-${suffix}`);
+      const ownerIdentityId = yield* makeWorkspaceIdentityId(`invitation-owner-${suffix}`);
+      const adminIdentityId = yield* makeWorkspaceIdentityId(`invitation-admin-${suffix}`);
+      const inviteeEmail = EmailAddress.make(`pending-${suffix}@example.test`);
+      const sql = yield* SqlClient.SqlClient;
+      const workspaces = yield* WorkspaceAccess;
+      const notifications = yield* TestWorkspaceInvitationNotifier;
+
+      yield* sql`
+        INSERT INTO users (id, email, display_name)
+        VALUES
+          (${ownerAccountId}, ${`invitation-owner-${suffix}@example.test`}, 'Invitation Owner'),
+          (${adminAccountId}, ${`invitation-admin-${suffix}@example.test`}, 'Invitation Admin')
+      `;
+      yield* sql`
+        INSERT INTO workspaces (id, name)
+        VALUES (${workspaceId}, 'Invitation Administration Team')
+      `;
+      yield* sql`
+        INSERT INTO workspace_identities (
+          id,
+          workspace_id,
+          account_id,
+          name,
+          avatar_url,
+          role
+        )
+        VALUES
+          (${ownerIdentityId}, ${workspaceId}, ${ownerAccountId}, 'Invitation Owner', '/avatars/owner.svg', 'owner'),
+          (${adminIdentityId}, ${workspaceId}, ${adminAccountId}, 'Invitation Admin', '/avatars/admin.svg', 'admin')
+      `;
+
+      const issued = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerAccountId,
+          workspaceId,
+          inviteeEmail,
+        }),
+      );
+      const originalNotification = yield* notifications.take();
+      const pending = yield* workspaces.listPendingInvitationsForAdministrator(
+        adminAccountId,
+        workspaceId,
+      );
+
+      const resent = yield* workspaces.resendInvitation(
+        ResendWorkspaceInvitationCommand.make({
+          actorAccountId: adminAccountId,
+          workspaceId,
+          invitationId: issued.invitationId,
+        }),
+      );
+      const replacementNotification = yield* notifications.take();
+      const oldTokenFailure = yield* workspaces
+        .redeemInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token: originalNotification.token,
+            displayName: DisplayName.make("Old Link Invitee"),
+            initialIdentityProfile: {
+              name: WorkspaceIdentityName.make("Old Link Invitee"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/old-link.svg"),
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+
+      const revoked = yield* workspaces.revokeInvitation(
+        RevokeWorkspaceInvitationCommand.make({
+          actorAccountId: adminAccountId,
+          workspaceId,
+          invitationId: issued.invitationId,
+        }),
+      );
+      const replacementTokenFailure = yield* workspaces
+        .redeemInvitation(
+          RedeemWorkspaceInvitationCommand.make({
+            token: replacementNotification.token,
+            displayName: DisplayName.make("Revoked Invitee"),
+            initialIdentityProfile: {
+              name: WorkspaceIdentityName.make("Revoked Invitee"),
+              avatarUrl: WorkspaceAvatarUrl.make("/avatars/revoked.svg"),
+            },
+          }),
+        )
+        .pipe(Effect.flip);
+      const remaining = yield* workspaces.listPendingInvitationsForAdministrator(
+        adminAccountId,
+        workspaceId,
+      );
+      const auditEvents = yield* sql<{ actorAccountId: string; eventType: string }>`
+        SELECT actor_user_id AS "actorAccountId", event_type AS "eventType"
+        FROM audit_events
+        WHERE event_type IN ('workspace.invitation_resent', 'workspace.invitation_revoked')
+          AND metadata ->> 'workspaceId' = ${workspaceId}
+        ORDER BY occurred_at
+      `;
+
+      expect(pending).toEqual([
+        {
+          id: issued.invitationId,
+          workspaceId,
+          inviteeEmail,
+          invitedAt: issued.occurredAt,
+          tokenExpiresAt: originalNotification.expiresAt,
+        },
+      ]);
+      expect(resent).toMatchObject({
+        _tag: "WorkspaceInvitationResent",
+        invitationId: issued.invitationId,
+        workspaceId,
+        inviteeEmail,
+      });
+      expect(Redacted.value(replacementNotification.token)).not.toBe(
+        Redacted.value(originalNotification.token),
+      );
+      expect(replacementNotification.expiresAt.getTime()).toBeGreaterThanOrEqual(
+        originalNotification.expiresAt.getTime(),
+      );
+      expect(oldTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+      expect(revoked).toMatchObject({
+        _tag: "WorkspaceInvitationRevoked",
+        invitationId: issued.invitationId,
+        workspaceId,
+        inviteeEmail,
+      });
+      expect(replacementTokenFailure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+      expect(remaining).toEqual([]);
+      expect(auditEvents).toEqual([
+        { actorAccountId: adminAccountId, eventType: "workspace.invitation_resent" },
+        { actorAccountId: adminAccountId, eventType: "workspace.invitation_revoked" },
+      ]);
+
+      const raceEmail = EmailAddress.make(`invitation-race-${suffix}@example.test`);
+      const raceInvitation = yield* workspaces.inviteMember(
+        InviteWorkspaceMemberCommand.make({
+          actorAccountId: ownerAccountId,
+          workspaceId,
+          inviteeEmail: raceEmail,
+        }),
+      );
+      const raceNotification = yield* notifications.take();
+      const raceResults = yield* Effect.all(
+        [
+          workspaces
+            .redeemInvitation(
+              RedeemWorkspaceInvitationCommand.make({
+                token: raceNotification.token,
+                displayName: DisplayName.make("Racing Invitee"),
+                initialIdentityProfile: {
+                  name: WorkspaceIdentityName.make("Racing Invitee"),
+                  avatarUrl: WorkspaceAvatarUrl.make("/avatars/racing.svg"),
+                },
+              }),
+            )
+            .pipe(Effect.result),
+          workspaces
+            .revokeInvitation(
+              RevokeWorkspaceInvitationCommand.make({
+                actorAccountId: adminAccountId,
+                workspaceId,
+                invitationId: raceInvitation.invitationId,
+              }),
+            )
+            .pipe(Effect.result),
+        ],
+        { concurrency: 2 },
+      );
+      const [redemptionResult, revocationResult] = raceResults;
+
+      expect(raceResults.filter((result) => result._tag === "Success")).toHaveLength(1);
+      if (Result.isSuccess(redemptionResult)) {
+        expect(
+          Result.isFailure(revocationResult) ? revocationResult.failure : undefined,
+        ).toBeInstanceOf(WorkspaceInvitationUnavailable);
+        expect(
+          yield* workspaces.getForActor(redemptionResult.success.account.id, workspaceId),
+        ).toMatchObject({ membership: { role: "member" } });
+      } else {
+        expect(redemptionResult.failure).toBeInstanceOf(WorkspaceInvitationRedemptionUnavailable);
+        expect(Result.isSuccess(revocationResult)).toBe(true);
+        expect(
+          yield* sql<{ count: number }>`
+            SELECT count(*)::integer AS count
+            FROM users
+            WHERE lower(email) = lower(${raceEmail})
+          `,
+        ).toEqual([{ count: 0 }]);
+      }
+      expect(
+        yield* workspaces.listPendingInvitationsForAdministrator(adminAccountId, workspaceId),
+      ).toEqual([]);
     }),
   );
 

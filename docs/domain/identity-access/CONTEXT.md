@@ -17,7 +17,7 @@ The time-bounded relationship that grants a Workspace Identity access to a Works
 _Avoid_: Workspace identity
 
 **Workspace Invitation**:
-An expiring, email-addressed offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Redeeming the invitation proves control of the invited email address and creates an Account when none exists. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity. Inviting the same address again replaces the prior credential and renews the offer.
+An expiring, email-addressed offer from an Owner or Admin to start or reactivate a Member Workspace Membership. Redeeming the invitation proves control of the invited email address and creates an Account when none exists. Acceptance creates a Workspace Identity only when the Account has never belonged to the Workspace; a returning Account resumes its existing Workspace Identity. Until accepted, revoked, or expired, it is pending; resending replaces its credential and renews its expiry, while revocation ends the offer immediately.
 _Avoid_: Workspace membership, share link
 
 **Workspace Role**:
@@ -30,7 +30,7 @@ _Avoid_: Account role, global role
 A full member with ultimate Workspace authority, including appointing other Owners and archiving the Workspace. Until archived, a Workspace must have at least one Owner with an active Workspace Membership; no departure, removal, or Workspace Role change may eliminate the final active Owner.
 
 **Admin**:
-A full member who manages workspace membership, roles below owner, and plugin installation without automatically gaining access to private conversations.
+A full member who manages workspace membership, pending Workspace Invitations, roles below owner, and plugin installation without automatically gaining access to private conversations.
 
 **Member**:
 An internal workspace participant without workspace-wide administrative authority.
