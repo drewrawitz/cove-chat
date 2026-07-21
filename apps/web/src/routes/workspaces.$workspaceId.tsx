@@ -13,7 +13,7 @@ import {
 } from "../api/generated/cove-app.ts";
 import { PageMessage } from "../components/page-message.tsx";
 import { WorkspaceAdministration } from "../components/workspace-administration.tsx";
-import { requiredFormValue } from "../form-data.ts";
+import { requiredFormValue, roleLabel } from "../form-data.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId")({ component: WorkspaceHome });
 
@@ -234,10 +234,6 @@ function WorkspaceHome(): ReactElement {
       </div>
     </main>
   );
-}
-
-function roleLabel(role: string): string {
-  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function leaveErrorMessage(error: unknown): string {

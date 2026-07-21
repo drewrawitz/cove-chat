@@ -210,6 +210,10 @@ export interface WorkspaceAccessTransaction {
   readonly refreshInvitation: (
     invitation: WorkspaceInvitationRecord,
   ) => Effect.Effect<WorkspaceInvitationToken, WorkspaceAccessPersistenceFailure>;
+  readonly restoreInvitationAfterFailedDelivery: (
+    invitation: WorkspaceInvitationRecord,
+    failedDeliveryAt: Date,
+  ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly createAccount: (account: User) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly acceptInvitation: (
     invitationId: WorkspaceInvitationId,

@@ -1181,6 +1181,31 @@ const make = Effect.gen(function* () {
         return token;
       },
     ),
+    restoreInvitationAfterFailedDelivery: Effect.fn(
+      "PostgresWorkspaceAccess.restoreInvitationAfterFailedDelivery",
+    )(function* (invitation, failedDeliveryAt) {
+      const invalidatedToken = makeOpaqueToken(
+        (value) => WorkspaceInvitationTokenValue.make(value),
+        "WorkspaceInvitationToken",
+      );
+      yield* sql`
+        UPDATE workspace_invitations
+        SET
+          invited_by_account_id = ${invitation.invitedByAccountId},
+          token_hash = ${hashOpaqueToken(invalidatedToken)},
+          token_expires_at = ${invitation.tokenExpiresAt},
+          role = ${invitation.role},
+          invited_at = ${invitation.invitedAt}
+        WHERE id = ${invitation.id}
+          AND accepted_at IS NULL
+          AND invited_at = ${failedDeliveryAt}
+      `.pipe(
+        Effect.asVoid,
+        Effect.mapError((cause) =>
+          persistenceFailure("WorkspaceAccess.restoreInvitationAfterFailedDelivery", cause),
+        ),
+      );
+    }),
     createAccount: Effect.fn("PostgresWorkspaceAccess.createAccount")((account) =>
       sql`
         INSERT INTO users (id, email, display_name)

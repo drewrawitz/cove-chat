@@ -332,11 +332,28 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         )
         .pipe(Effect.flip);
 
+      const retryableInvitedAt = new Date(issued.occurredAt.getTime() - 61_000);
       yield* sql`
         UPDATE workspace_invitations
-        SET invited_at = ${new Date(issued.occurredAt.getTime() - 61_000)}
+        SET invited_at = ${retryableInvitedAt}
         WHERE id = ${issued.invitationId}
       `;
+
+      yield* notifications.failNext();
+      const resendDeliveryFailure = yield* workspaces
+        .resendInvitation(
+          ResendWorkspaceInvitationCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            invitationId: issued.invitationId,
+          }),
+        )
+        .pipe(Effect.flip);
+      const failedResendNotification = yield* notifications.takeFailed();
+      const afterFailedResend = yield* workspaces.listPendingInvitationsForAdministrator(
+        adminAccountId,
+        workspaceId,
+      );
 
       const resent = yield* workspaces.resendInvitation(
         ResendWorkspaceInvitationCommand.make({
@@ -404,6 +421,18 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         invitationId: issued.invitationId,
         resendAvailableAt: new Date(issued.occurredAt.getTime() + 60_000),
       });
+      expect(resendDeliveryFailure).toMatchObject({
+        _tag: "Application.WorkspaceAccessFailure",
+      });
+      expect(afterFailedResend).toEqual([
+        {
+          id: issued.invitationId,
+          workspaceId,
+          inviteeEmail,
+          invitedAt: retryableInvitedAt,
+          tokenExpiresAt: originalNotification.expiresAt,
+        },
+      ]);
       expect(resent).toMatchObject({
         _tag: "WorkspaceInvitationResent",
         invitationId: issued.invitationId,
@@ -412,6 +441,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
       });
       expect(Redacted.value(replacementNotification.token)).not.toBe(
         Redacted.value(originalNotification.token),
+      );
+      expect(Redacted.value(replacementNotification.token)).not.toBe(
+        Redacted.value(failedResendNotification.token),
       );
       expect(replacementNotification.expiresAt.getTime()).toBeGreaterThanOrEqual(
         originalNotification.expiresAt.getTime(),

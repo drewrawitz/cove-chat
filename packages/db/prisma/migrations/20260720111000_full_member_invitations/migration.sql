@@ -33,9 +33,6 @@ CREATE UNIQUE INDEX "workspace_invitations_pending_invitee_key"
 ON "workspace_invitations"("workspace_id", lower("invitee_email"))
 WHERE "accepted_at" IS NULL;
 
-CREATE UNIQUE INDEX "users_normalized_email_key"
-ON "users"(lower("email"));
-
 ALTER TABLE "workspace_invitations"
 ADD CONSTRAINT "workspace_invitations_workspace_id_fkey"
 FOREIGN KEY ("workspace_id") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;

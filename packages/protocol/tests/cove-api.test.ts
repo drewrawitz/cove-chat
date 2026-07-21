@@ -83,7 +83,10 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
     expect(document.components.schemas).toMatchObject({
       CoveAppErrorResponse: {
         anyOf: expect.arrayContaining([
+          { $ref: "#/components/schemas/FullMemberUnavailableResponse" },
           { $ref: "#/components/schemas/InvalidMagicLinkResponse" },
+          { $ref: "#/components/schemas/WorkspaceAdministrationForbiddenResponse" },
+          { $ref: "#/components/schemas/WorkspaceInvitationUnavailableResponse" },
           { $ref: "#/components/schemas/WorkspaceUnavailableResponse" },
         ]),
       },

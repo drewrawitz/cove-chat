@@ -10,10 +10,13 @@ import {
 import {
   AlreadyWorkspaceMemberResponse,
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
+  FullMemberUnavailableResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
+  WorkspaceAdministrationForbiddenResponse,
   WorkspaceApiGroup,
   WorkspaceInvitationResendTooSoonResponse,
+  WorkspaceInvitationUnavailableResponse,
   WorkspaceUnavailableResponse,
 } from "./workspaces/index.ts";
 
@@ -24,9 +27,12 @@ export const CoveAppErrorResponse = Schema.Union([
   UnauthorizedResponse,
   AlreadyWorkspaceMemberResponse,
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
+  FullMemberUnavailableResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
+  WorkspaceAdministrationForbiddenResponse,
   WorkspaceInvitationResendTooSoonResponse,
+  WorkspaceInvitationUnavailableResponse,
   WorkspaceUnavailableResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 

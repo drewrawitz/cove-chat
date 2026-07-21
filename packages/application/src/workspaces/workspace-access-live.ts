@@ -655,18 +655,18 @@ const make = Effect.gen(function* () {
             inviteeEmail: invitation.inviteeEmail,
             occurredAt,
           });
-          yield* transaction.appendAudit(
-            makeAuditEvent(command.actorAccountId, occurredAt, {
-              type: "workspace.invitation_resent",
-              metadata: {
-                workspaceId: invitation.workspaceId,
-                invitationId: invitation.id,
-                inviteeEmail: invitation.inviteeEmail,
-              },
-            }),
-          );
+          const auditEvent = makeAuditEvent(command.actorAccountId, occurredAt, {
+            type: "workspace.invitation_resent",
+            metadata: {
+              workspaceId: invitation.workspaceId,
+              invitationId: invitation.id,
+              inviteeEmail: invitation.inviteeEmail,
+            },
+          });
           return {
+            auditEvent,
             outcome,
+            previousInvitation: authorized.invitation,
             notification: {
               recipient: invitation.inviteeEmail,
               workspaceName: authorized.workspace.name,
@@ -681,9 +681,30 @@ const make = Effect.gen(function* () {
           Effect.fail(internalFailure("WorkspaceAccess.resendInvitation")),
         ),
       );
-    yield* invitationNotifier
-      .sendInvitation(committed.notification)
-      .pipe(Effect.mapError(() => internalFailure("WorkspaceAccess.resendInvitation.notify")));
+    yield* invitationNotifier.sendInvitation(committed.notification).pipe(
+      Effect.catch(() =>
+        persistence
+          .transact((transaction) =>
+            transaction.restoreInvitationAfterFailedDelivery(
+              committed.previousInvitation,
+              committed.outcome.occurredAt,
+            ),
+          )
+          .pipe(
+            Effect.catchTag("Application.WorkspaceAccessPersistenceFailure", () =>
+              Effect.fail(internalFailure("WorkspaceAccess.resendInvitation.restore")),
+            ),
+            Effect.andThen(Effect.fail(internalFailure("WorkspaceAccess.resendInvitation.notify"))),
+          ),
+      ),
+    );
+    yield* persistence
+      .transact((transaction) => transaction.appendAudit(committed.auditEvent))
+      .pipe(
+        Effect.catchTag("Application.WorkspaceAccessPersistenceFailure", () =>
+          Effect.fail(internalFailure("WorkspaceAccess.resendInvitation.audit")),
+        ),
+      );
     return committed.outcome;
   });
 

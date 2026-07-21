@@ -15,7 +15,6 @@ it.effect("uses the browser-facing web origin for public links", () =>
     Effect.provide(
       ConfigProvider.layer(
         ConfigProvider.fromUnknown({
-          PUBLIC_APP_URL: "http://localhost:3001",
           PUBLIC_WEB_ORIGIN: "http://localhost:3000",
         }),
       ),

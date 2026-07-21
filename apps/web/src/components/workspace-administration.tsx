@@ -13,7 +13,7 @@ import {
   useWorkspacesResendWorkspaceInvitation,
   useWorkspacesRevokeWorkspaceInvitation,
 } from "../api/generated/cove-app.ts";
-import { requiredFormValue } from "../form-data.ts";
+import { requiredFormValue, roleLabel } from "../form-data.ts";
 
 interface WorkspaceAdministrationProps {
   readonly actorIsOwner: boolean;
@@ -449,10 +449,6 @@ function PendingInvitationsSection({
 
 function isFullMemberRole(role: string): role is FullMemberRole {
   return role === "owner" || role === "admin" || role === "member";
-}
-
-function roleLabel(role: FullMemberRole): string {
-  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function formatInvitationDate(value: string): string {
