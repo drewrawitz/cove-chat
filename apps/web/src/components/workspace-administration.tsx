@@ -152,49 +152,57 @@ export function WorkspaceAdministration({
             const canManageMember = actorIsOwner || member.membership.role !== "owner";
 
             return (
-              <li className="rounded-2xl border p-4" key={member.identity.id}>
-                <form
-                  className="flex flex-col gap-4 sm:flex-row sm:items-end"
-                  onSubmit={(event) => saveRole(event, member)}
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-3 self-center sm:self-auto">
+              <li className="rounded-2xl border p-5" key={member.identity.id}>
+                <form className="grid gap-5" onSubmit={(event) => saveRole(event, member)}>
+                  <div className="flex min-w-0 items-center gap-3">
                     <img
-                      className="size-11 rounded-xl border bg-background object-cover"
+                      className="size-12 shrink-0 rounded-xl border bg-background object-cover"
                       src={member.identity.avatarUrl}
                       alt=""
                     />
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{member.identity.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="font-medium leading-tight">{member.identity.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {isCurrentIdentity ? "You · " : ""}
                         {roleLabel(member.membership.role)}
                       </p>
                     </div>
                   </div>
-                  <label className="text-sm font-medium">
-                    Role for {member.identity.name}
-                    <select
-                      name="role"
-                      defaultValue={member.membership.role}
-                      disabled={!canManageMember}
-                      className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-36"
-                    >
-                      {actorIsOwner ? <option value="owner">Owner</option> : null}
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
-                    </select>
-                  </label>
-                  <Button type="submit" disabled={!canManageMember || changeRole.isPending}>
-                    Save role for {member.identity.name}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={!canManageMember || isCurrentIdentity || removeFullMember.isPending}
-                    onClick={() => remove(member)}
-                  >
-                    Remove {member.identity.name}
-                  </Button>
+                  <div className="grid gap-4 border-t pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <label className="min-w-0 text-sm font-medium">
+                      Workspace role
+                      <select
+                        name="role"
+                        defaultValue={member.membership.role}
+                        disabled={!canManageMember}
+                        className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      >
+                        {actorIsOwner ? <option value="owner">Owner</option> : null}
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                      </select>
+                    </label>
+                    <div className="grid gap-2 min-[28rem]:grid-cols-2 sm:flex sm:justify-end">
+                      <Button
+                        type="submit"
+                        aria-label={`Save role for ${member.identity.name}`}
+                        disabled={!canManageMember || changeRole.isPending}
+                      >
+                        Save role
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        aria-label={`Remove ${member.identity.name}`}
+                        disabled={
+                          !canManageMember || isCurrentIdentity || removeFullMember.isPending
+                        }
+                        onClick={() => remove(member)}
+                      >
+                        Remove member
+                      </Button>
+                    </div>
+                  </div>
                 </form>
               </li>
             );
