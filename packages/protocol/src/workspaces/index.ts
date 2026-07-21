@@ -15,6 +15,7 @@ export {
   WorkspaceAdministrationForbiddenResponse,
   WorkspaceErrorResponses,
   WorkspaceUnavailableResponse,
+  WorkspaceInvitationResendTooSoonResponse,
   WorkspaceInvitationUnavailableResponse,
   FullMemberUnavailableResponse,
 } from "./workspace-error-response.ts";

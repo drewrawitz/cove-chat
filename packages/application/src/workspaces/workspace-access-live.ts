@@ -57,6 +57,7 @@ import {
   type WorkspaceInvitationAccepted as WorkspaceInvitationAcceptedType,
   WorkspaceInvitationIssued,
   WorkspaceInvitationResent,
+  WorkspaceInvitationResendTooSoon,
   WorkspaceInvitationRevoked,
   type WorkspaceInvitationRevoked as WorkspaceInvitationRevokedType,
   WorkspaceInvitationRedemptionUnavailable,
@@ -71,6 +72,7 @@ import {
   type WorkspaceRoleChanged as WorkspaceRoleChangedType,
   WorkspaceRoleUnchanged,
   type WorkspaceRoleUnchanged as WorkspaceRoleUnchangedType,
+  workspaceInvitationResendAvailableAt,
 } from "./workspace-access.ts";
 import {
   type WorkspaceAccessAuditEvent,
@@ -625,6 +627,17 @@ const make = Effect.gen(function* () {
         Effect.gen(function* () {
           const occurredAt = new Date(yield* Clock.currentTimeMillis);
           const authorized = yield* authorizePendingInvitation(transaction, command, occurredAt);
+          const resendAvailableAt = workspaceInvitationResendAvailableAt(
+            authorized.invitation.invitedAt,
+          );
+          if (resendAvailableAt > occurredAt) {
+            return yield* Effect.fail(
+              new WorkspaceInvitationResendTooSoon({
+                invitationId: authorized.invitation.id,
+                resendAvailableAt,
+              }),
+            );
+          }
 
           const tokenExpiresAt = new Date(
             occurredAt.getTime() + WORKSPACE_INVITATION_TOKEN_LIFETIME_MILLIS,

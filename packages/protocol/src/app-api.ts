@@ -13,6 +13,7 @@ import {
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
   WorkspaceApiGroup,
+  WorkspaceInvitationResendTooSoonResponse,
   WorkspaceUnavailableResponse,
 } from "./workspaces/index.ts";
 
@@ -25,6 +26,7 @@ export const CoveAppErrorResponse = Schema.Union([
   ExistingWorkspaceIdentityProfileNotAcceptedResponse,
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
+  WorkspaceInvitationResendTooSoonResponse,
   WorkspaceUnavailableResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 

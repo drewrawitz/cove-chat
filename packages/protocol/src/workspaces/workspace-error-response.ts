@@ -21,6 +21,11 @@ const invitationUnavailableDefinition = {
   message: "The Workspace invitation is unavailable.",
 } as const;
 
+const invitationResendTooSoonDefinition = {
+  code: "WORKSPACE_INVITATION_RESEND_TOO_SOON",
+  message: "Wait before resending this Workspace invitation.",
+} as const;
+
 const fullMemberUnavailableDefinition = {
   code: "FULL_MEMBER_UNAVAILABLE",
   message: "The Full Member is unavailable.",
@@ -96,6 +101,14 @@ export const WorkspaceInvitationUnavailableResponse = Schema.Struct({
   .annotate({ identifier: "WorkspaceInvitationUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
+export const WorkspaceInvitationResendTooSoonResponse = Schema.Struct({
+  code: Schema.Literals([invitationResendTooSoonDefinition.code]),
+  message: Schema.Literals([invitationResendTooSoonDefinition.message]),
+  resendAvailableAt: Schema.DateFromString,
+})
+  .annotate({ identifier: "WorkspaceInvitationResendTooSoonResponse" })
+  .pipe(HttpApiSchema.status("TooManyRequests"));
+
 export const FullMemberUnavailableResponse = Schema.Struct({
   code: Schema.Literals([fullMemberUnavailableDefinition.code]),
   message: Schema.Literals([fullMemberUnavailableDefinition.message]),
@@ -117,6 +130,11 @@ export const WorkspaceErrorResponses = {
   invitationUnavailable: WorkspaceInvitationUnavailableResponse.make(
     invitationUnavailableDefinition,
   ),
+  invitationResendTooSoon: (resendAvailableAt: Date) =>
+    WorkspaceInvitationResendTooSoonResponse.make({
+      ...invitationResendTooSoonDefinition,
+      resendAvailableAt,
+    }),
   lastOwner: LastWorkspaceOwnerResponse.make(lastOwnerDefinition),
   unavailable: WorkspaceUnavailableResponse.make(unavailableDefinition),
   fullMemberUnavailable: FullMemberUnavailableResponse.make(fullMemberUnavailableDefinition),

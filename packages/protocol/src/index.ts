@@ -51,6 +51,7 @@ export {
   WorkspaceInvitationResponse,
   PendingWorkspaceInvitationListResponse,
   PendingWorkspaceInvitationResponse,
+  WorkspaceInvitationResendTooSoonResponse,
   WorkspaceInvitationUnavailableResponse,
   WorkspaceListResponse,
   WorkspaceMembershipResponse,

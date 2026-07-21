@@ -146,10 +146,24 @@ it.live(
       yield* browserAction(() =>
         pendingInvitations.getByText("Expires", { exact: true }).waitFor(),
       );
+      const resendButton = page.getByRole("button", {
+        name: `Resend invitation to ${inviteeEmail}`,
+      });
+      expect(yield* browserAction(() => resendButton.isDisabled())).toBe(true);
+      expect(yield* browserAction(() => resendButton.textContent())).toMatch(/Resend in \d+s/);
+
+      yield* acceptance.makeWorkspaceInvitationResendable(inviteeEmail);
+      yield* browserAction(() => page.reload());
       yield* browserAction(() =>
         page.getByRole("button", { name: `Resend invitation to ${inviteeEmail}` }).click(),
       );
-      yield* browserAction(() => page.getByText(`Invitation resent to ${inviteeEmail}.`).waitFor());
+      yield* browserAction(() =>
+        page
+          .getByText(
+            `Invitation email sent again to ${inviteeEmail}. Resend is available again in 60 seconds.`,
+          )
+          .waitFor(),
+      );
 
       yield* acceptance.takeWorkspaceInvitationLink();
       const invitationLink = yield* acceptance.takeWorkspaceInvitationLink();

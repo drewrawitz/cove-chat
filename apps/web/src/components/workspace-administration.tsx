@@ -1,6 +1,6 @@
 import { Button } from "@cove/ui/components/button";
 import { useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type ReactElement, useState } from "react";
+import { type FormEvent, type ReactElement, useEffect, useState } from "react";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getWorkspacesGetWorkspaceQueryKey,
@@ -33,6 +33,12 @@ interface PendingInvitationReference {
   readonly inviteeEmail: string;
   readonly invitedAt: string;
   readonly expiresAt: string;
+  readonly resendAvailableAt: string;
+}
+
+interface InvitationToast {
+  readonly kind: "error" | "success";
+  readonly message: string;
 }
 
 type FullMemberRole = "admin" | "member" | "owner";
@@ -64,6 +70,15 @@ export function WorkspaceAdministration({
   const removeFullMember = useWorkspacesRemoveFullMember();
   const [invitedEmail, setInvitedEmail] = useState<string>();
   const [administrationMessage, setAdministrationMessage] = useState<string>();
+  const [invitationToast, setInvitationToast] = useState<InvitationToast>();
+  const [resendingInvitationId, setResendingInvitationId] = useState<string>();
+
+  useEffect(() => {
+    if (invitationToast === undefined) return;
+
+    const timeoutId = window.setTimeout(() => setInvitationToast(undefined), 5_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [invitationToast]);
 
   const invite = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -128,14 +143,23 @@ export function WorkspaceAdministration({
   };
 
   const resend = (invitationId: string, inviteeEmail: string): void => {
-    setAdministrationMessage(undefined);
+    setInvitationToast(undefined);
+    setResendingInvitationId(invitationId);
     resendInvitation.mutate(
       { workspaceId, invitationId },
       {
         onSuccess: async () => {
+          setInvitationToast({
+            kind: "success",
+            message: `Invitation email sent again to ${inviteeEmail}. Resend is available again in 60 seconds.`,
+          });
           await pendingInvitations.refetch();
-          setAdministrationMessage(`Invitation resent to ${inviteeEmail}.`);
         },
+        onError: async (error) => {
+          setInvitationToast({ kind: "error", message: resendInvitationErrorMessage(error) });
+          await pendingInvitations.refetch();
+        },
+        onSettled: () => setResendingInvitationId(undefined),
       },
     );
   };
@@ -195,6 +219,7 @@ export function WorkspaceAdministration({
         isError={pendingInvitations.isError}
         isPending={pendingInvitations.isPending}
         isMutating={resendInvitation.isPending || revokeInvitation.isPending}
+        resendingInvitationId={resendingInvitationId}
         onResend={resend}
         onRevoke={revoke}
       />
@@ -281,16 +306,32 @@ export function WorkspaceAdministration({
       )}
       {changeRole.error === null &&
       removeFullMember.error === null &&
-      resendInvitation.error === null &&
       revokeInvitation.error === null ? null : (
         <p className="mt-4 text-sm text-destructive" role="alert">
           {administrationErrorMessage(
-            changeRole.error ??
-              removeFullMember.error ??
-              resendInvitation.error ??
-              revokeInvitation.error,
+            changeRole.error ?? removeFullMember.error ?? revokeInvitation.error,
           )}
         </p>
+      )}
+      {invitationToast === undefined ? null : (
+        <div
+          className={`fixed right-5 bottom-5 z-50 flex max-w-sm items-start gap-3 rounded-2xl border bg-background p-4 shadow-lg ${
+            invitationToast.kind === "error" ? "border-destructive/40" : "border-primary/30"
+          }`}
+          role={invitationToast.kind === "error" ? "alert" : "status"}
+          aria-live={invitationToast.kind === "error" ? "assertive" : "polite"}
+        >
+          <p className="min-w-0 flex-1 text-sm leading-relaxed">{invitationToast.message}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Dismiss notification"
+            onClick={() => setInvitationToast(undefined)}
+          >
+            <span aria-hidden="true">×</span>
+          </Button>
+        </div>
       )}
     </section>
   );
@@ -301,6 +342,7 @@ interface PendingInvitationsSectionProps {
   readonly isError: boolean;
   readonly isMutating: boolean;
   readonly isPending: boolean;
+  readonly resendingInvitationId: string | undefined;
   readonly onResend: (invitationId: string, inviteeEmail: string) => void;
   readonly onRevoke: (invitationId: string, inviteeEmail: string) => void;
 }
@@ -310,9 +352,19 @@ function PendingInvitationsSection({
   isError,
   isMutating,
   isPending,
+  resendingInvitationId,
   onResend,
   onRevoke,
 }: PendingInvitationsSectionProps): ReactElement {
+  const [currentTimeMillis, setCurrentTimeMillis] = useState<number>();
+
+  useEffect(() => {
+    const updateCurrentTime = (): void => setCurrentTimeMillis(Date.now());
+    updateCurrentTime();
+    const intervalId = window.setInterval(updateCurrentTime, 1_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   return (
     <section aria-labelledby="pending-invitations-heading" className="mt-8 border-t pt-6">
       <h3 id="pending-invitations-heading" className="font-heading text-lg font-semibold">
@@ -320,7 +372,8 @@ function PendingInvitationsSection({
       </h3>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
         Invitations remain here until they are accepted, expire, or are revoked. Resending creates a
-        new link and invalidates the previous one.
+        new link and invalidates the previous one. To prevent duplicate emails, an invitation can be
+        resent at most once per minute.
       </p>
       {isPending ? (
         <p className="mt-4 text-sm text-muted-foreground" role="status">
@@ -336,46 +389,58 @@ function PendingInvitationsSection({
         </p>
       ) : (
         <ul className="mt-4 grid gap-3">
-          {invitations.map((invitation) => (
-            <li
-              className="grid gap-4 rounded-2xl border p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-              key={invitation.id}
-            >
-              <div className="min-w-0">
-                <p className="break-all font-medium">{invitation.inviteeEmail}</p>
-                <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                  <div className="flex gap-1.5">
-                    <dt>Sent</dt>
-                    <dd>{formatInvitationDate(invitation.invitedAt)}</dd>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <dt>Expires</dt>
-                    <dd>{formatInvitationDate(invitation.expiresAt)}</dd>
-                  </div>
-                </dl>
-              </div>
-              <div className="grid gap-2 min-[28rem]:grid-cols-2 sm:flex sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  aria-label={`Resend invitation to ${invitation.inviteeEmail}`}
-                  disabled={isMutating}
-                  onClick={() => onResend(invitation.id, invitation.inviteeEmail)}
-                >
-                  Resend
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  aria-label={`Revoke invitation to ${invitation.inviteeEmail}`}
-                  disabled={isMutating}
-                  onClick={() => onRevoke(invitation.id, invitation.inviteeEmail)}
-                >
-                  Revoke
-                </Button>
-              </div>
-            </li>
-          ))}
+          {invitations.map((invitation) => {
+            const resendSeconds = resendSecondsRemaining(
+              invitation.resendAvailableAt,
+              currentTimeMillis,
+            );
+            const isResending = resendingInvitationId === invitation.id;
+
+            return (
+              <li
+                className="grid gap-4 rounded-2xl border p-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                key={invitation.id}
+              >
+                <div className="min-w-0">
+                  <p className="break-all font-medium">{invitation.inviteeEmail}</p>
+                  <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                    <div className="flex gap-1.5">
+                      <dt>Sent</dt>
+                      <dd>{formatInvitationDate(invitation.invitedAt)}</dd>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <dt>Expires</dt>
+                      <dd>{formatInvitationDate(invitation.expiresAt)}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="grid gap-2 min-[28rem]:grid-cols-2 sm:flex sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={`Resend invitation to ${invitation.inviteeEmail}`}
+                    disabled={isMutating || resendSeconds === undefined || resendSeconds > 0}
+                    onClick={() => onResend(invitation.id, invitation.inviteeEmail)}
+                  >
+                    {isResending
+                      ? "Sending…"
+                      : resendSeconds !== undefined && resendSeconds > 0
+                        ? `Resend in ${resendSeconds}s`
+                        : "Resend"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    aria-label={`Revoke invitation to ${invitation.inviteeEmail}`}
+                    disabled={isMutating}
+                    onClick={() => onRevoke(invitation.id, invitation.inviteeEmail)}
+                  >
+                    Revoke
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -392,6 +457,26 @@ function roleLabel(role: FullMemberRole): string {
 
 function formatInvitationDate(value: string): string {
   return invitationDateFormatter.format(new Date(value));
+}
+
+function resendSecondsRemaining(
+  resendAvailableAt: string,
+  currentTimeMillis: number | undefined,
+): number | undefined {
+  if (currentTimeMillis === undefined) return undefined;
+
+  return Math.max(
+    0,
+    Math.ceil((new Date(resendAvailableAt).getTime() - currentTimeMillis) / 1_000),
+  );
+}
+
+function resendInvitationErrorMessage(error: unknown): string {
+  if (error instanceof CoveApiError && error.info.code === "WORKSPACE_INVITATION_RESEND_TOO_SOON") {
+    return "That invitation was just sent. Wait for the countdown before sending another email.";
+  }
+
+  return "Cove could not resend this invitation. Try again in a moment.";
 }
 
 function invitationErrorMessage(error: unknown): string {

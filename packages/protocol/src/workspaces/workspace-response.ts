@@ -84,6 +84,7 @@ export const PendingWorkspaceInvitationResponse = Schema.Struct({
   inviteeEmail: Schema.String,
   invitedAt: Schema.DateFromString,
   expiresAt: Schema.DateFromString,
+  resendAvailableAt: Schema.DateFromString,
 }).annotate({ identifier: "PendingWorkspaceInvitationResponse" });
 export interface PendingWorkspaceInvitationResponse extends Schema.Schema.Type<
   typeof PendingWorkspaceInvitationResponse

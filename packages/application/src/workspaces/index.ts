@@ -30,6 +30,7 @@ export {
   WorkspaceInvitationAccepted,
   WorkspaceInvitationIssued,
   WorkspaceInvitationResent,
+  WorkspaceInvitationResendTooSoon,
   WorkspaceInvitationRevoked,
   WorkspaceInvitationRedeemed,
   WorkspaceInvitationRedemptionUnavailable,
@@ -47,9 +48,13 @@ export {
   type ListFullMembersFailure,
   type ListPendingWorkspaceInvitationsFailure,
   type RemoveFullMemberFailure,
+  type ResendWorkspaceInvitationFailure,
   type RedeemWorkspaceInvitationFailure,
+  type RevokeWorkspaceInvitationFailure,
   type UpdateWorkspaceIdentityFailure,
   type WorkspaceAccessService,
+  WORKSPACE_INVITATION_RESEND_COOLDOWN_MILLIS,
+  workspaceInvitationResendAvailableAt,
 } from "./workspace-access.ts";
 export { makeWorkspaceInvitationToken } from "./workspace-invitation-token.ts";
 export {

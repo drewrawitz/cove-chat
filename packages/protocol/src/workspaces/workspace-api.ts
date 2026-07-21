@@ -12,6 +12,7 @@ import {
   InitialWorkspaceIdentityProfileRequiredResponse,
   LastWorkspaceOwnerResponse,
   WorkspaceAdministrationForbiddenResponse,
+  WorkspaceInvitationResendTooSoonResponse,
   WorkspaceInvitationUnavailableResponse,
   FullMemberUnavailableResponse,
   WorkspaceUnavailableResponse,
@@ -162,6 +163,7 @@ const ResendWorkspaceInvitationEndpoint = HttpApiEndpoint.post(
     error: [
       CsrfValidationFailedResponse,
       WorkspaceAdministrationForbiddenResponse,
+      WorkspaceInvitationResendTooSoonResponse,
       WorkspaceInvitationUnavailableResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,

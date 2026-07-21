@@ -168,6 +168,7 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
 export interface BrowserAcceptanceService {
   readonly page: Page;
   readonly webUrl: string;
+  readonly makeWorkspaceInvitationResendable: (inviteeEmail: string) => Effect.Effect<void, Error>;
   readonly takeMagicLink: () => Effect.Effect<string, Error>;
   readonly takeWorkspaceInvitationLink: () => Effect.Effect<string, Error>;
 }
@@ -313,6 +314,37 @@ export const BrowserAcceptanceLive = Layer.effect(
         ),
     );
 
-    return BrowserAcceptance.of({ page, webUrl, takeMagicLink, takeWorkspaceInvitationLink });
+    const makeWorkspaceInvitationResendable = Effect.fn(
+      "BrowserAcceptance.makeWorkspaceInvitationResendable",
+    )((inviteeEmail: string) =>
+      Effect.tryPromise({
+        try: async () => {
+          const result = await container.exec([
+            "psql",
+            "--username",
+            container.getUsername(),
+            "--dbname",
+            container.getDatabase(),
+            "--set",
+            `invitee_email=${inviteeEmail}`,
+            "--command",
+            "UPDATE workspace_invitations SET invited_at = NOW() - INTERVAL '61 seconds' WHERE invitee_email = :'invitee_email';",
+          ]);
+          if (result.exitCode !== 0 || !result.stdout.includes("UPDATE 1")) {
+            throw new Error(result.stderr || result.stdout);
+          }
+        },
+        catch: (cause) =>
+          new Error(`Could not age the Workspace invitation for ${inviteeEmail}.`, { cause }),
+      }),
+    );
+
+    return BrowserAcceptance.of({
+      page,
+      webUrl,
+      makeWorkspaceInvitationResendable,
+      takeMagicLink,
+      takeWorkspaceInvitationLink,
+    });
   }),
 );

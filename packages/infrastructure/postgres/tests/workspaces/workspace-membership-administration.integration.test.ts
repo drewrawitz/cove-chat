@@ -13,6 +13,7 @@ import {
   RevokeWorkspaceInvitationCommand,
   WorkspaceAccess,
   WorkspaceAdministrationForbidden,
+  WorkspaceInvitationResendTooSoon,
   WorkspaceInvitationRedemptionUnavailable,
   WorkspaceInvitationUnavailable,
   getCurrentUser,
@@ -321,6 +322,22 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
         workspaceId,
       );
 
+      const resendTooSoon = yield* workspaces
+        .resendInvitation(
+          ResendWorkspaceInvitationCommand.make({
+            actorAccountId: adminAccountId,
+            workspaceId,
+            invitationId: issued.invitationId,
+          }),
+        )
+        .pipe(Effect.flip);
+
+      yield* sql`
+        UPDATE workspace_invitations
+        SET invited_at = ${new Date(issued.occurredAt.getTime() - 61_000)}
+        WHERE id = ${issued.invitationId}
+      `;
+
       const resent = yield* workspaces.resendInvitation(
         ResendWorkspaceInvitationCommand.make({
           actorAccountId: adminAccountId,
@@ -382,6 +399,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
           tokenExpiresAt: originalNotification.expiresAt,
         },
       ]);
+      expect(resendTooSoon).toBeInstanceOf(WorkspaceInvitationResendTooSoon);
+      expect(resendTooSoon).toMatchObject({
+        invitationId: issued.invitationId,
+        resendAvailableAt: new Date(issued.occurredAt.getTime() + 60_000),
+      });
       expect(resent).toMatchObject({
         _tag: "WorkspaceInvitationResent",
         invitationId: issued.invitationId,

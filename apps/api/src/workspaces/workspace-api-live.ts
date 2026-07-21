@@ -123,6 +123,13 @@ const invitationAdministrationErrorResponse = (error: unknown) => {
   }
 };
 
+const resendInvitationAdministrationErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.WorkspaceInvitationResendTooSoon"
+    ? WorkspaceErrorResponses.invitationResendTooSoon(
+        (error as { readonly resendAvailableAt: Date }).resendAvailableAt,
+      )
+    : invitationAdministrationErrorResponse(error);
+
 const memberAdministrationErrorResponse = (error: unknown) => {
   switch (errorTag(error)) {
     case "Application.LastWorkspaceOwner":
@@ -313,7 +320,7 @@ export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (
               invitationId,
             }),
           )
-          .pipe(Effect.mapError(invitationAdministrationErrorResponse));
+          .pipe(Effect.mapError(resendInvitationAdministrationErrorResponse));
         return workspaceInvitationResentResponse(resent);
       }),
     )

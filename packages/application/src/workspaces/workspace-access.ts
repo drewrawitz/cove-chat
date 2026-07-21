@@ -58,6 +58,12 @@ export interface PendingWorkspaceInvitationView extends Schema.Schema.Type<
   typeof PendingWorkspaceInvitationView
 > {}
 
+export const WORKSPACE_INVITATION_RESEND_COOLDOWN_MILLIS = 60_000;
+
+export function workspaceInvitationResendAvailableAt(invitedAt: Date): Date {
+  return new Date(invitedAt.getTime() + WORKSPACE_INVITATION_RESEND_COOLDOWN_MILLIS);
+}
+
 export const CreateWorkspaceCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceName: WorkspaceName,
@@ -274,6 +280,14 @@ export class WorkspaceInvitationUnavailable extends Schema.TaggedErrorClass<Work
   { invitationId: WorkspaceInvitationId },
 ) {}
 
+export class WorkspaceInvitationResendTooSoon extends Schema.TaggedErrorClass<WorkspaceInvitationResendTooSoon>()(
+  "Application.WorkspaceInvitationResendTooSoon",
+  {
+    invitationId: WorkspaceInvitationId,
+    resendAvailableAt: Schema.DateFromString,
+  },
+) {}
+
 export class WorkspaceInvitationRedemptionUnavailable extends Schema.TaggedErrorClass<WorkspaceInvitationRedemptionUnavailable>()(
   "Application.WorkspaceInvitationRedemptionUnavailable",
   {},
@@ -312,6 +326,10 @@ export type AdministerWorkspaceInvitationFailure =
   | WorkspaceAdministrationForbidden
   | WorkspaceInvitationUnavailable
   | WorkspaceUnavailable;
+export type ResendWorkspaceInvitationFailure =
+  | AdministerWorkspaceInvitationFailure
+  | WorkspaceInvitationResendTooSoon;
+export type RevokeWorkspaceInvitationFailure = AdministerWorkspaceInvitationFailure;
 export type AcceptWorkspaceInvitationFailure =
   | AlreadyWorkspaceMember
   | ExistingWorkspaceIdentityProfileNotAccepted
@@ -373,10 +391,10 @@ export interface WorkspaceAccessService {
   ) => Effect.Effect<WorkspaceInvitationIssued, InviteWorkspaceMemberFailure>;
   readonly resendInvitation: (
     command: ResendWorkspaceInvitationCommand,
-  ) => Effect.Effect<WorkspaceInvitationResent, AdministerWorkspaceInvitationFailure>;
+  ) => Effect.Effect<WorkspaceInvitationResent, ResendWorkspaceInvitationFailure>;
   readonly revokeInvitation: (
     command: RevokeWorkspaceInvitationCommand,
-  ) => Effect.Effect<WorkspaceInvitationRevoked, AdministerWorkspaceInvitationFailure>;
+  ) => Effect.Effect<WorkspaceInvitationRevoked, RevokeWorkspaceInvitationFailure>;
   readonly acceptInvitation: (
     command: AcceptWorkspaceInvitationCommand,
   ) => Effect.Effect<WorkspaceInvitationAccepted, AcceptWorkspaceInvitationFailure>;

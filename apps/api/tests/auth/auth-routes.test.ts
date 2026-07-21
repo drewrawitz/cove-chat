@@ -288,6 +288,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
       Effect.gen(function* () {
         const authenticationDelivery = yield* TestAuthenticationNotifier;
         const invitationDelivery = yield* TestWorkspaceInvitationNotifier;
+        const sql = yield* SqlClient.SqlClient;
         const inviteeEmail = `http-pending-${randomUUID()}@example.test`;
 
         yield* HttpClient.post(AppRoutes.login, {
@@ -314,6 +315,18 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
           headers: { cookie },
         });
         const pendingBody = yield* pendingResponse.json;
+        const resendTooSoonResponse = yield* HttpClient.post(
+          `${AppRoutes.workspaceInvitations}/${inviteBody.invitationId}/resend`,
+          { headers: { cookie, "x-csrf-token": csrfToken } },
+        );
+        const resendTooSoonBody = yield* resendTooSoonResponse.json;
+
+        yield* sql`
+          UPDATE workspace_invitations
+          SET invited_at = NOW() - INTERVAL '61 seconds'
+          WHERE id = ${inviteBody.invitationId}
+        `;
+
         const resendResponse = yield* HttpClient.post(
           `${AppRoutes.workspaceInvitations}/${inviteBody.invitationId}/resend`,
           { headers: { cookie, "x-csrf-token": csrfToken } },
@@ -357,8 +370,14 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
             {
               id: inviteBody.invitationId,
               inviteeEmail,
+              resendAvailableAt: expect.any(String),
             },
           ],
+        });
+        expect(resendTooSoonResponse.status).toBe(429);
+        expect(resendTooSoonBody).toMatchObject({
+          code: "WORKSPACE_INVITATION_RESEND_TOO_SOON",
+          resendAvailableAt: expect.any(String),
         });
         expect(resendResponse.status).toBe(200);
         expect(yield* resendResponse.json).toMatchObject({
