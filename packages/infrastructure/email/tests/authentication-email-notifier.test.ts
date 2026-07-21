@@ -22,7 +22,7 @@ it.effect("renders a magic-link notification through the generic email sender", 
       }),
     );
     const notifier = AuthenticationEmailNotifier.layer({
-      publicAppUrl: new URL("https://app.cove.test/some-deployment-prefix"),
+      publicWebOrigin: new URL("https://app.cove.test"),
     }).pipe(Layer.provide(emailSender));
 
     const email = yield* Effect.gen(function* () {

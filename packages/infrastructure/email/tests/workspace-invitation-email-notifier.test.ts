@@ -22,7 +22,7 @@ it.effect("renders an expiring Workspace invitation through the generic email se
       }),
     );
     const notifier = WorkspaceInvitationEmailNotifier.layer({
-      publicAppUrl: new URL("https://app.cove.test/some-deployment-prefix"),
+      publicWebOrigin: new URL("https://app.cove.test"),
     }).pipe(Layer.provide(emailSender));
 
     const email = yield* Effect.gen(function* () {

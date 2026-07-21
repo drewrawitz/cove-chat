@@ -42,7 +42,7 @@ infrastructure owns the magic-link template and `/auth/verify` route, then deleg
 message to the generic `EmailSender` port. Local development uses `ConsoleEmailSender`; staging and
 production can provide a Resend adapter without changing authentication workflows or templates.
 
-`PUBLIC_APP_URL` is the deployment-specific web origin used to construct public links. Route paths
+`PUBLIC_WEB_ORIGIN` is the deployment-specific web origin used to construct public links. Route paths
 remain code-owned rather than configurable.
 
 ## Compatibility
@@ -58,6 +58,6 @@ Runtime configuration:
 - `DATABASE_URL` is required.
 - `EXPOSE_APP_API_DOCS` defaults to `false`. The local `.env.example` enables it; leave it disabled
   unless `/internal/docs` is protected from public access.
-- `PUBLIC_APP_URL` is required. The local `.env.example` uses `http://localhost:3000`.
+- `PUBLIC_WEB_ORIGIN` is required. The local `.env.example` uses `http://localhost:3000`.
 - `HOST` defaults to `0.0.0.0`.
 - `PORT` defaults to `3001` so it does not collide with the local web app.

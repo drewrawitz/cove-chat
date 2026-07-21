@@ -6,10 +6,10 @@ import {
 import { Effect, Layer, Redacted } from "effect";
 
 export interface WorkspaceInvitationEmailNotifierOptions {
-  readonly publicAppUrl: URL;
+  readonly publicWebOrigin: URL;
 }
 
-export const layer = ({ publicAppUrl }: WorkspaceInvitationEmailNotifierOptions) =>
+export const layer = ({ publicWebOrigin }: WorkspaceInvitationEmailNotifierOptions) =>
   Layer.effect(
     WorkspaceInvitationNotifier,
     Effect.gen(function* () {
@@ -18,7 +18,7 @@ export const layer = ({ publicAppUrl }: WorkspaceInvitationEmailNotifierOptions)
       return WorkspaceInvitationNotifier.of({
         sendInvitation: Effect.fn("WorkspaceInvitationEmailNotifier.sendInvitation")(
           ({ expiresAt, recipient, token, workspaceName }) => {
-            const redeemUrl = new URL("/workspace-invitations/redeem", publicAppUrl);
+            const redeemUrl = new URL("/workspace-invitations/redeem", publicWebOrigin);
             redeemUrl.searchParams.set("token", Redacted.value(token));
 
             return emails

@@ -12,10 +12,10 @@ import { HttpLive, NodeServerLive } from "./http-live.ts";
 const PostgresHealthLive = PostgresDatabaseReadiness.pipe(Layer.provide(PostgresClientLive));
 
 const EmailLive = Layer.unwrap(
-  Effect.map(ApiConfiguration, ({ publicAppUrl }) =>
+  Effect.map(ApiConfiguration, ({ publicWebOrigin }) =>
     Layer.mergeAll(
-      AuthenticationEmailNotifier.layer({ publicAppUrl }),
-      WorkspaceInvitationEmailNotifier.layer({ publicAppUrl }),
+      AuthenticationEmailNotifier.layer({ publicWebOrigin }),
+      WorkspaceInvitationEmailNotifier.layer({ publicWebOrigin }),
     ).pipe(Layer.provide(ConsoleEmailSender)),
   ),
 );

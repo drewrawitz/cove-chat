@@ -2,10 +2,10 @@ import { AuthenticationNotificationError, AuthenticationNotifier, EmailSender } 
 import { Effect, Layer, Redacted } from "effect";
 
 export interface AuthenticationEmailNotifierOptions {
-  readonly publicAppUrl: URL;
+  readonly publicWebOrigin: URL;
 }
 
-export const layer = ({ publicAppUrl }: AuthenticationEmailNotifierOptions) =>
+export const layer = ({ publicWebOrigin }: AuthenticationEmailNotifierOptions) =>
   Layer.effect(
     AuthenticationNotifier,
     Effect.gen(function* () {
@@ -14,7 +14,7 @@ export const layer = ({ publicAppUrl }: AuthenticationEmailNotifierOptions) =>
       return AuthenticationNotifier.of({
         sendMagicLink: Effect.fn("AuthenticationEmailNotifier.sendMagicLink")(
           ({ expiresAt, recipient, token }) => {
-            const verifyUrl = new URL("/auth/verify", publicAppUrl);
+            const verifyUrl = new URL("/auth/verify", publicWebOrigin);
             verifyUrl.searchParams.set("token", Redacted.value(token));
 
             return emails

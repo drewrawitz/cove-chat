@@ -205,7 +205,7 @@ export const BrowserAcceptanceLive = Layer.effect(
           EXPOSE_APP_API_DOCS: "false",
           HOST: "127.0.0.1",
           PORT: String(apiPort),
-          PUBLIC_APP_URL: webUrl,
+          PUBLIC_WEB_ORIGIN: webUrl,
         },
       },
       apiOutput,
