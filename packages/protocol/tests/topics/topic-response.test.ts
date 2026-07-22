@@ -28,19 +28,24 @@ it.effect("encodes Topic summaries with an optional intent and required Opening 
           contributionCount: 1,
           createdAt: new Date("2026-07-22T12:00:00.000Z"),
         },
-      ],
-    });
-
-    expect(encoded).toMatchObject({
-      topics: [
         {
-          id: "topic-1",
-          intent: "question",
-          openingBrief: { body: "Capture the remaining launch risks." },
+          id: "topic-2",
+          workspaceId: "workspace-1",
+          channelId: "channel-1",
+          title: "Launch notes",
+          openingBrief,
           contributionCount: 1,
+          createdAt: new Date("2026-07-22T13:00:00.000Z"),
         },
       ],
     });
+    expect(encoded.topics[0]).toMatchObject({
+      id: "topic-1",
+      intent: "question",
+      openingBrief: { body: "Capture the remaining launch risks." },
+      contributionCount: 1,
+    });
+    expect(encoded.topics[1]).not.toHaveProperty("intent");
   }),
 );
 
@@ -59,5 +64,6 @@ it.effect("encodes the complete Topic as a flat Contribution list", () =>
       id: "topic-1",
       contributions: [{ id: "contribution-1", position: 1 }],
     });
+    expect(encoded).not.toHaveProperty("intent");
   }),
 );

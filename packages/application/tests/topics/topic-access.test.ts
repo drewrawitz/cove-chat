@@ -5,13 +5,13 @@ import {
   ChannelPurpose,
   Contribution,
   ContributionBody,
-  TopicTitle,
   Topic,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
   makeChannelId,
   makeContributionId,
   makeTopicId,
+  makeTopicTitle,
   makeUserId,
   makeWorkspaceId,
   makeWorkspaceIdentityId,
@@ -24,6 +24,7 @@ import {
   TopicAccess,
   TopicAccessLive,
   ChannelUnavailable,
+  TopicUnavailable,
   type ChannelAccessService,
 } from "../../src/index.ts";
 
@@ -80,6 +81,7 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
     const contributionId = yield* makeContributionId("contribution-1");
+    const title = yield* makeTopicTitle("Release readiness");
     const channel = Channel.make({
       id: channelId,
       workspaceId,
@@ -117,7 +119,7 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
           channelId,
           topicId,
           openingBriefContributionId: contributionId,
-          title: TopicTitle.make("Release readiness"),
+          title,
           openingBrief: ContributionBody.make("Capture the remaining launch risks."),
           intent: "question",
         }),
@@ -154,6 +156,7 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
     const contributionId = yield* makeContributionId("contribution-1");
+    const title = yield* makeTopicTitle("Release readiness");
     const channel = Channel.make({
       id: channelId,
       workspaceId,
@@ -190,7 +193,7 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
             channelId,
             topicId,
             openingBriefContributionId: contributionId,
-            title: TopicTitle.make("Release readiness"),
+            title,
             openingBrief: ContributionBody.make("Capture the remaining launch risks."),
           }),
         )
@@ -212,6 +215,7 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
     const contributionId = yield* makeContributionId("contribution-1");
+    const title = yield* makeTopicTitle("Release readiness");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const channel = Channel.make({
       id: channelId,
@@ -225,7 +229,7 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
       id: topicId,
       workspaceId,
       channelId,
-      title: TopicTitle.make("Release readiness"),
+      title,
       intent: "discussion",
       openedByIdentityId: authorIdentityId,
       createdAt,
@@ -277,5 +281,50 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
     );
     expect(result.detail.topic.id).toBe(topicId);
     expect(result.detail.contributions).toHaveLength(1);
+  }),
+);
+
+it.effect("returns TopicUnavailable when an accessible Channel does not contain the Topic", () =>
+  Effect.gen(function* () {
+    const actorAccountId = yield* makeUserId("reader-account");
+    const actorIdentityId = yield* makeWorkspaceIdentityId("reader-identity");
+    const workspaceId = yield* makeWorkspaceId("workspace");
+    const channelId = yield* makeChannelId("general");
+    const topicId = yield* makeTopicId("missing-topic");
+    const channel = Channel.make({
+      id: channelId,
+      workspaceId,
+      name: ChannelName.make("general"),
+      purpose: ChannelPurpose.make("Coordinate workspace topics."),
+      visibility: "public",
+      maintainerIdentityId: actorIdentityId,
+    });
+    const lookupCount = yield* Ref.make(0);
+    const channelAccess = makeChannelAccess({
+      getConversationContextForActor: () =>
+        Effect.succeed({
+          channel,
+          actor: {
+            id: actorIdentityId,
+            name: WorkspaceIdentityName.make("Channel Reader"),
+            avatarUrl: WorkspaceAvatarUrl.make("/avatars/reader.svg"),
+          },
+          hasChannelMembership: false,
+        }),
+    });
+    const repository = makeRepository({
+      findById: () => Ref.update(lookupCount, (count) => count + 1).pipe(Effect.as(undefined)),
+    });
+
+    const error = yield* Effect.gen(function* () {
+      const topics = yield* TopicAccess;
+      return yield* topics
+        .getForActor(actorAccountId, workspaceId, channelId, topicId)
+        .pipe(Effect.flip);
+    }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
+
+    expect(error).toBeInstanceOf(TopicUnavailable);
+    expect(error).toMatchObject({ topicId });
+    expect(yield* Ref.get(lookupCount)).toBe(1);
   }),
 );

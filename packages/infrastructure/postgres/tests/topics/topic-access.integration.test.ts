@@ -7,10 +7,10 @@ import {
 } from "@cove/application";
 import {
   ContributionBody,
-  TopicTitle,
   makeChannelId,
   makeContributionId,
   makeTopicId,
+  makeTopicTitle,
   makeUserId,
   makeWorkspaceId,
   makeWorkspaceIdentityId,
@@ -100,7 +100,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
             openingBriefContributionId: fixtures.contributionId,
-            title: TopicTitle.make("Release readiness"),
+            title: yield* makeTopicTitle("Release readiness"),
             openingBrief: ContributionBody.make("Capture the remaining launch risks."),
             intent: "question",
           }),
@@ -127,7 +127,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               openingBriefContributionId: yield* makeContributionId(
                 `reader-${fixtures.contributionId}`,
               ),
-              title: TopicTitle.make("Reader topic"),
+              title: yield* makeTopicTitle("Reader topic"),
               openingBrief: ContributionBody.make("This should not be persisted."),
             }),
           )

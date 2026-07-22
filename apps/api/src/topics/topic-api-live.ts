@@ -1,10 +1,10 @@
 import { CreateTopicCommand, TopicAccess } from "@cove/application";
 import {
   ContributionBody,
-  TopicTitle,
   makeChannelId,
   makeContributionId,
   makeTopicId,
+  makeTopicTitle,
   makeUserId,
   makeWorkspaceId,
 } from "@cove/domain";
@@ -76,6 +76,7 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(randomUUID());
         const openingBriefContributionId = yield* makeContributionId(randomUUID());
+        const title = yield* makeTopicTitle(payload.title);
         const topics = yield* TopicAccess;
         return topicResponse(
           yield* topics.create(
@@ -85,7 +86,7 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
               channelId,
               topicId,
               openingBriefContributionId,
-              title: TopicTitle.make(payload.title),
+              title,
               openingBrief: ContributionBody.make(payload.openingBrief),
               ...(payload.intent === undefined ? {} : { intent: payload.intent }),
             }),
