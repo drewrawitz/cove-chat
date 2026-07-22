@@ -5,6 +5,7 @@ import { type ReactElement } from "react";
 import {
   getChannelsGetChannelQueryKey,
   getChannelsListPublicChannelsQueryKey,
+  useAuthMe,
   useChannelsGetChannel,
   useChannelsJoinPublicChannel,
   useWorkspacesGetWorkspace,
@@ -24,14 +25,18 @@ export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channel
 function ChannelPage(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
   const queryClient = useQueryClient();
+  const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetChannel(workspaceId, channelId, {
     query: { retry: false },
   });
   const joinChannel = useChannelsJoinPublicChannel();
 
-  if (workspace.isPending) {
+  if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
+  }
+  if (account.isError) {
+    return <PageMessage message="Cove could not load your account." theme="dark" />;
   }
   if (workspace.isError) {
     return (
@@ -172,6 +177,8 @@ function ChannelPage(): ReactElement {
           <div className="p-4 lg:p-5">
             <header>
               <WorkspaceSwitcher
+                accountDisplayName={account.data.displayName}
+                accountEmail={account.data.email}
                 activeChannelId={channelId}
                 identityName={workspace.data.identity.name}
                 workspaceId={workspaceId}

@@ -2,8 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { type ReactElement, useRef } from "react";
 import { useWorkspacesListWorkspaces } from "../api/generated/cove-app.ts";
 import { roleLabel } from "../form-data.ts";
+import { AccountSignOut } from "./account-sign-out.tsx";
 
 interface WorkspaceSwitcherProps {
+  readonly accountDisplayName: string;
+  readonly accountEmail: string;
   readonly activeChannelId: string;
   readonly identityName: string;
   readonly workspaceId: string;
@@ -11,6 +14,8 @@ interface WorkspaceSwitcherProps {
 }
 
 export function WorkspaceSwitcher({
+  accountDisplayName,
+  accountEmail,
   activeChannelId,
   identityName,
   workspaceId,
@@ -105,6 +110,7 @@ export function WorkspaceSwitcher({
             All workspaces
           </Link>
         </div>
+        <AccountSignOut displayName={accountDisplayName} email={accountEmail} variant="menu" />
       </div>
     </details>
   );

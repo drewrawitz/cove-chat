@@ -66,6 +66,48 @@ it.live(
 );
 
 it.live(
+  "signs out globally from the workspace switcher and reports a failed attempt",
+  () =>
+    Effect.gen(function* () {
+      const acceptance = yield* BrowserAcceptance;
+      const page = acceptance.page;
+
+      yield* signIn(acceptance, "alice@cove.local");
+
+      const chooserAccount = page.getByRole("region", { name: "Account" });
+      yield* browserAction(() => chooserAccount.getByText("alice@cove.local").waitFor());
+      yield* browserAction(() =>
+        chooserAccount.getByRole("button", { name: "Sign out of Cove" }).waitFor(),
+      );
+
+      yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
+      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
+      yield* browserAction(() => page.getByLabel("Switch workspace, currently Cove Demo").click());
+
+      const switcherAccount = page.getByRole("region", { name: "Account" });
+      yield* browserAction(() => switcherAccount.getByText("alice@cove.local").waitFor());
+      yield* browserAction(() => page.route("**/api/app/v1/auth/logout", (route) => route.abort()));
+      yield* browserAction(() =>
+        switcherAccount.getByRole("button", { name: "Sign out of Cove" }).click(),
+      );
+      yield* browserAction(() =>
+        switcherAccount
+          .getByText("Cove could not sign you out. Refresh the page and try again.")
+          .waitFor(),
+      );
+
+      yield* browserAction(() => page.unroute("**/api/app/v1/auth/logout"));
+      yield* browserAction(() =>
+        switcherAccount.getByRole("button", { name: "Sign out of Cove" }).click(),
+      );
+      yield* browserAction(() => page.getByLabel("Email address").waitFor());
+      yield* browserAction(() => page.reload());
+      yield* browserAction(() => page.getByLabel("Email address").waitFor());
+    }).pipe(Effect.provide(BrowserAcceptanceLive)),
+  120_000,
+);
+
+it.live(
   "creates and switches workspaces while keeping each workspace identity independent",
   () =>
     Effect.gen(function* () {

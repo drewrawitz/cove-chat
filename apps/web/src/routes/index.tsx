@@ -12,6 +12,7 @@ import {
   useWorkspacesListWorkspaces,
 } from "../api/generated/cove-app.ts";
 import { PageMessage } from "../components/page-message.tsx";
+import { AccountSignOut } from "../components/account-sign-out.tsx";
 import { SignIn } from "../components/sign-in.tsx";
 import { requiredFormValue } from "../form-data.ts";
 
@@ -118,15 +119,24 @@ function Home(): ReactElement {
   return (
     <main className="min-h-svh bg-muted/30 px-5 py-12 sm:px-8">
       <section className="mx-auto w-full max-w-4xl">
-        <p className="font-heading text-sm font-semibold tracking-[0.22em] text-primary uppercase">
-          Cove
-        </p>
-        <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-          Choose a workspace
-        </h1>
-        <p className="mt-3 max-w-xl text-muted-foreground">
-          Your account gets you in. Each workspace keeps its own name, avatar, and role.
-        </p>
+        <header className="flex flex-wrap items-start justify-between gap-5">
+          <div>
+            <p className="font-heading text-sm font-semibold tracking-[0.22em] text-primary uppercase">
+              Cove
+            </p>
+            <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
+              Choose a workspace
+            </h1>
+            <p className="mt-3 max-w-xl text-muted-foreground">
+              Your account gets you in. Each workspace keeps its own name, avatar, and role.
+            </p>
+          </div>
+          <AccountSignOut
+            displayName={account.data.displayName}
+            email={account.data.email}
+            variant="page"
+          />
+        </header>
 
         {left === undefined ? null : (
           <p
