@@ -210,7 +210,8 @@ interface TopicSummary {
   readonly intent?: TopicIntent;
   readonly contributionCount: number;
   readonly openingBrief: {
-    readonly body: string;
+    readonly body?: string;
+    readonly deleted: boolean;
     readonly author: { readonly name: string };
   };
 }
@@ -285,7 +286,7 @@ function TopicList({
               {topic.title}
             </h4>
             <p className="mt-2 line-clamp-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {topic.openingBrief.body}
+              {topic.openingBrief.deleted ? "Opening Brief removed" : topic.openingBrief.body}
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
               Opened by {topic.openingBrief.author.name}

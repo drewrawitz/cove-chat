@@ -10,9 +10,11 @@ export const Contribution = Schema.Struct({
   workspaceId: WorkspaceId,
   topicId: TopicId,
   authorIdentityId: WorkspaceIdentityId,
-  body: ContributionBody,
+  body: Schema.optionalKey(ContributionBody),
   position: ContributionPosition,
   createdAt: Schema.Date,
+  editedAt: Schema.optionalKey(Schema.Date),
+  deletedAt: Schema.optionalKey(Schema.Date),
 });
 
 export interface Contribution extends Schema.Schema.Type<typeof Contribution> {}

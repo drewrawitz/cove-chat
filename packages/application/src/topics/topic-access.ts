@@ -45,6 +45,39 @@ export const CreateTopicCommand = Schema.Struct({
 });
 export interface CreateTopicCommand extends Schema.Schema.Type<typeof CreateTopicCommand> {}
 
+export const AddContributionCommand = Schema.Struct({
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+  topicId: TopicId,
+  contributionId: ContributionId,
+  body: ContributionBody,
+});
+export interface AddContributionCommand extends Schema.Schema.Type<typeof AddContributionCommand> {}
+
+export const EditContributionCommand = Schema.Struct({
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+  topicId: TopicId,
+  contributionId: ContributionId,
+  body: ContributionBody,
+});
+export interface EditContributionCommand extends Schema.Schema.Type<
+  typeof EditContributionCommand
+> {}
+
+export const DeleteContributionCommand = Schema.Struct({
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+  topicId: TopicId,
+  contributionId: ContributionId,
+});
+export interface DeleteContributionCommand extends Schema.Schema.Type<
+  typeof DeleteContributionCommand
+> {}
+
 export class TopicAccessFailure extends Schema.TaggedErrorClass<TopicAccessFailure>()(
   "Application.TopicAccessFailure",
   { operation: Schema.String },
@@ -53,6 +86,16 @@ export class TopicAccessFailure extends Schema.TaggedErrorClass<TopicAccessFailu
 export class TopicUnavailable extends Schema.TaggedErrorClass<TopicUnavailable>()(
   "Application.TopicUnavailable",
   { topicId: TopicId },
+) {}
+
+export class ContributionMutationForbidden extends Schema.TaggedErrorClass<ContributionMutationForbidden>()(
+  "Application.ContributionMutationForbidden",
+  { contributionId: ContributionId },
+) {}
+
+export class ContributionUnavailable extends Schema.TaggedErrorClass<ContributionUnavailable>()(
+  "Application.ContributionUnavailable",
+  { contributionId: ContributionId },
 ) {}
 
 export interface TopicAccessService {
@@ -70,6 +113,32 @@ export interface TopicAccessService {
   readonly create: (
     command: CreateTopicCommand,
   ) => Effect.Effect<TopicView, ChannelUnavailable | TopicAccessFailure>;
+  readonly addContribution: (
+    command: AddContributionCommand,
+  ) => Effect.Effect<
+    TopicContributionView,
+    ChannelUnavailable | TopicUnavailable | TopicAccessFailure
+  >;
+  readonly editContribution: (
+    command: EditContributionCommand,
+  ) => Effect.Effect<
+    TopicContributionView,
+    | ChannelUnavailable
+    | TopicUnavailable
+    | ContributionUnavailable
+    | ContributionMutationForbidden
+    | TopicAccessFailure
+  >;
+  readonly deleteContribution: (
+    command: DeleteContributionCommand,
+  ) => Effect.Effect<
+    TopicContributionView,
+    | ChannelUnavailable
+    | TopicUnavailable
+    | ContributionUnavailable
+    | ContributionMutationForbidden
+    | TopicAccessFailure
+  >;
 }
 
 export class TopicAccess extends Context.Service<TopicAccess, TopicAccessService>()(

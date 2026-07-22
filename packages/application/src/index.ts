@@ -44,7 +44,12 @@ export {
   type ChannelAccessService,
 } from "./channels/index.ts";
 export {
+  AddContributionCommand,
+  ContributionMutationForbidden,
+  ContributionUnavailable,
   CreateTopicCommand,
+  DeleteContributionCommand,
+  EditContributionCommand,
   TopicAccess,
   TopicAccessFailure,
   TopicAccessLive,

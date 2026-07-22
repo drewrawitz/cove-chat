@@ -1,4 +1,10 @@
-import { CreateTopicCommand, TopicAccess } from "@cove/application";
+import {
+  AddContributionCommand,
+  CreateTopicCommand,
+  DeleteContributionCommand,
+  EditContributionCommand,
+  TopicAccess,
+} from "@cove/application";
 import {
   ContributionBody,
   makeChannelId,
@@ -19,7 +25,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
-import { topicListResponse, topicResponse } from "./topic-response.ts";
+import { topicListResponse, topicResponse, topicResponseContribution } from "./topic-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -49,6 +55,27 @@ const createTopicErrorResponse = (error: unknown) => {
   }
   return channelErrorResponse(error);
 };
+
+const contributionMutationErrorResponse = (error: unknown) => {
+  if (error === AuthErrorResponses.csrfValidationFailed) {
+    return AuthErrorResponses.csrfValidationFailed;
+  }
+  if (errorTag(error) === "Application.ContributionMutationForbidden") {
+    return TopicErrorResponses.contributionMutationForbidden;
+  }
+  if (
+    errorTag(error) === "Application.ContributionUnavailable" ||
+    invalidIdentifier(error) === "contribution"
+  ) {
+    return TopicErrorResponses.contributionUnavailable;
+  }
+  return topicErrorResponse(error);
+};
+
+const addContributionErrorResponse = (error: unknown) =>
+  error === AuthErrorResponses.csrfValidationFailed
+    ? AuthErrorResponses.csrfValidationFailed
+    : topicErrorResponse(error);
 
 const resolveActorAndChannel = Effect.fn("TopicApi.resolveActorAndChannel")(function* (params: {
   readonly workspaceId: string;
@@ -101,5 +128,67 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const topics = yield* TopicAccess;
         return topicResponse(yield* topics.getForActor(actorId, workspaceId, channelId, topicId));
       }).pipe(Effect.mapError(topicErrorResponse)),
+    )
+    .handle("addContribution", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const contributionId = yield* makeContributionId(randomUUID());
+        const topics = yield* TopicAccess;
+        return topicResponseContribution(
+          yield* topics.addContribution(
+            AddContributionCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              contributionId,
+              body: ContributionBody.make(payload.body),
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(addContributionErrorResponse)),
+    )
+    .handle("editContribution", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const contributionId = yield* makeContributionId(params.contributionId);
+        const topics = yield* TopicAccess;
+        return topicResponseContribution(
+          yield* topics.editContribution(
+            EditContributionCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              contributionId,
+              body: ContributionBody.make(payload.body),
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(contributionMutationErrorResponse)),
+    )
+    .handle("deleteContribution", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const contributionId = yield* makeContributionId(params.contributionId);
+        const topics = yield* TopicAccess;
+        return topicResponseContribution(
+          yield* topics.deleteContribution(
+            DeleteContributionCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              contributionId,
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(contributionMutationErrorResponse)),
     ),
 );

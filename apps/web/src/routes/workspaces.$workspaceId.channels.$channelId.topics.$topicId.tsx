@@ -1,14 +1,17 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import type { ReactElement } from "react";
 import {
   useAuthMe,
   useChannelsGetChannel,
+  getTopicsListTopicsQueryKey,
   useTopicsGetTopic,
   useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { TopicContributions } from "../components/topic-contributions.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
 
 export const Route = createFileRoute(
@@ -17,10 +20,19 @@ export const Route = createFileRoute(
 
 function TopicPage(): ReactElement {
   const { workspaceId, channelId, topicId } = Route.useParams();
+  const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetChannel(workspaceId, channelId, { query: { retry: false } });
   const topic = useTopicsGetTopic(workspaceId, channelId, topicId, { query: { retry: false } });
+  const refreshTopic = async (): Promise<void> => {
+    await Promise.all([
+      topic.refetch(),
+      queryClient.invalidateQueries({
+        queryKey: getTopicsListTopicsQueryKey(workspaceId, channelId),
+      }),
+    ]);
+  };
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -79,30 +91,15 @@ function TopicPage(): ReactElement {
           </h2>
         </header>
 
-        <ol className="divide-y" aria-label="Topic contributions">
-          {topic.data.contributions.map((contribution, index) => (
-            <li key={contribution.id} className="py-8">
-              <article aria-labelledby={`contribution-${contribution.id}`}>
-                <header className="flex items-center gap-3">
-                  <img
-                    className="size-10 rounded-full border border-border bg-muted object-cover"
-                    src={contribution.author.avatarUrl}
-                    alt=""
-                  />
-                  <div>
-                    <h3 id={`contribution-${contribution.id}`} className="font-semibold">
-                      {index === 0 ? "Opening Brief" : `Contribution ${index + 1}`}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{contribution.author.name}</p>
-                  </div>
-                </header>
-                <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-foreground/90">
-                  {contribution.body}
-                </p>
-              </article>
-            </li>
-          ))}
-        </ol>
+        <TopicContributions
+          canContribute={channel.data.hasChannelMembership}
+          channelId={channelId}
+          contributions={topic.data.contributions}
+          currentIdentityId={workspace.data.identity.id}
+          refresh={refreshTopic}
+          topicId={topicId}
+          workspaceId={workspaceId}
+        />
       </div>
     );
   }

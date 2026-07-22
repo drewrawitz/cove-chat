@@ -10,9 +10,11 @@ export interface TopicAuthorResponse extends Schema.Schema.Type<typeof TopicAuth
 
 export const TopicContributionResponse = Schema.Struct({
   id: Schema.String,
-  body: Schema.String,
+  body: Schema.optionalKey(Schema.String),
   position: Schema.Int.check(Schema.isGreaterThan(0)),
   createdAt: Schema.DateFromString,
+  edited: Schema.Boolean,
+  deleted: Schema.Boolean,
   author: TopicAuthorResponse,
 }).annotate({ identifier: "TopicContributionResponse" });
 export interface TopicContributionResponse extends Schema.Schema.Type<

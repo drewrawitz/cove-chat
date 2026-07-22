@@ -32,6 +32,32 @@ it.live(
       yield* browserAction(() =>
         page.getByText("Capture the remaining launch risks.", { exact: true }).waitFor(),
       );
+      yield* browserAction(() => page.getByRole("button", { name: "Edit Opening Brief" }).click());
+      yield* browserAction(() =>
+        page
+          .getByLabel("Edit Opening Brief")
+          .fill("Capture the remaining launch risks and owners."),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Save edit" }).click());
+      yield* browserAction(() =>
+        page.getByText("Capture the remaining launch risks and owners.", { exact: true }).waitFor(),
+      );
+      yield* browserAction(() => page.getByText("Edited", { exact: true }).waitFor());
+
+      yield* browserAction(() =>
+        page.getByLabel("Add a Contribution").fill("The release candidate passed smoke testing."),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Add contribution" }).click());
+      yield* browserAction(() =>
+        page.getByText("The release candidate passed smoke testing.", { exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Delete Contribution 2" }).click(),
+      );
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Confirm delete Contribution 2" }).click(),
+      );
+      yield* browserAction(() => page.getByText("Contribution removed", { exact: true }).waitFor());
       expect(new URL(page.url()).pathname).toMatch(
         /^\/workspaces\/demo-workspace\/channels\/general\/topics\/[^/]+$/,
       );
@@ -57,7 +83,13 @@ it.live(
         page.getByRole("heading", { name: "Release readiness", level: 2 }).waitFor(),
       );
       yield* browserAction(() =>
-        page.getByText("Capture the remaining launch risks.", { exact: true }).waitFor(),
+        page.getByText("Capture the remaining launch risks and owners.", { exact: true }).waitFor(),
+      );
+      yield* browserAction(() => page.getByText("Edited", { exact: true }).waitFor());
+      yield* browserAction(() => page.getByText("Contribution removed", { exact: true }).waitFor());
+      expect(yield* browserAction(() => page.getByLabel("Add a Contribution").count())).toBe(0);
+      expect(yield* browserAction(() => page.getByRole("button", { name: /^Edit / }).count())).toBe(
+        0,
       );
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,

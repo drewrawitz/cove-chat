@@ -15,7 +15,12 @@ import {
 } from "../channels/channel-access.ts";
 import { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
 import {
+  type AddContributionCommand,
   type CreateTopicCommand,
+  ContributionMutationForbidden,
+  ContributionUnavailable,
+  type DeleteContributionCommand,
+  type EditContributionCommand,
   TopicAccess,
   TopicAccessFailure,
   TopicContributionView,
@@ -66,6 +71,42 @@ const make = Effect.gen(function* () {
     channelId: CreateTopicCommand["channelId"],
   ): Effect.fn.Return<ChannelConversationContext, ChannelUnavailable | ChannelAccessFailure> {
     return yield* channels.getConversationContextForActor(actorAccountId, workspaceId, channelId);
+  });
+
+  const contributionMutationTarget = Effect.fn("TopicAccess.contributionMutationTarget")(function* (
+    command: EditContributionCommand | DeleteContributionCommand,
+  ) {
+    const context = yield* conversationContext(
+      command.actorAccountId,
+      command.workspaceId,
+      command.channelId,
+    );
+    if (!context.hasChannelMembership) {
+      return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
+    }
+
+    const topic = yield* repository.findById(
+      command.workspaceId,
+      command.channelId,
+      command.topicId,
+    );
+    if (topic === undefined) {
+      return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
+    }
+    const current = topic.contributions.find(
+      ({ contribution }) => contribution.id === command.contributionId,
+    );
+    if (current === undefined || current.contribution.deletedAt !== undefined) {
+      return yield* Effect.fail(
+        new ContributionUnavailable({ contributionId: command.contributionId }),
+      );
+    }
+    if (current.contribution.authorIdentityId !== context.actor.id) {
+      return yield* Effect.fail(
+        new ContributionMutationForbidden({ contributionId: command.contributionId }),
+      );
+    }
+    return current;
   });
 
   return TopicAccess.of({
@@ -136,6 +177,76 @@ const make = Effect.gen(function* () {
           }),
         ),
       (effect) => recoverFailure("TopicAccess.create", effect),
+    ),
+    addContribution: Effect.fn("TopicAccess.addContribution")(
+      (command: AddContributionCommand) =>
+        transactions.run(
+          Effect.gen(function* () {
+            const context = yield* conversationContext(
+              command.actorAccountId,
+              command.workspaceId,
+              command.channelId,
+            );
+            if (!context.hasChannelMembership) {
+              return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
+            }
+
+            const topic = yield* repository.findById(
+              command.workspaceId,
+              command.channelId,
+              command.topicId,
+            );
+            if (topic === undefined) {
+              return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
+            }
+
+            const contribution = yield* repository.appendContribution({
+              id: command.contributionId,
+              workspaceId: command.workspaceId,
+              topicId: command.topicId,
+              authorIdentityId: context.actor.id,
+              body: command.body,
+              createdAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            return TopicContributionView.make({ contribution, author: context.actor });
+          }),
+        ),
+      (effect) => recoverFailure("TopicAccess.addContribution", effect),
+    ),
+    editContribution: Effect.fn("TopicAccess.editContribution")(
+      (command: EditContributionCommand) =>
+        transactions.run(
+          Effect.gen(function* () {
+            const current = yield* contributionMutationTarget(command);
+
+            const contribution = yield* repository.editContribution({
+              workspaceId: command.workspaceId,
+              topicId: command.topicId,
+              contributionId: command.contributionId,
+              body: command.body,
+              editedAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            return TopicContributionView.make({ contribution, author: current.author });
+          }),
+        ),
+      (effect) => recoverFailure("TopicAccess.editContribution", effect),
+    ),
+    deleteContribution: Effect.fn("TopicAccess.deleteContribution")(
+      (command: DeleteContributionCommand) =>
+        transactions.run(
+          Effect.gen(function* () {
+            const current = yield* contributionMutationTarget(command);
+
+            const contribution = yield* repository.tombstoneContribution({
+              workspaceId: command.workspaceId,
+              topicId: command.topicId,
+              contributionId: command.contributionId,
+              deletedAt: new Date(yield* Clock.currentTimeMillis),
+            });
+            return TopicContributionView.make({ contribution, author: current.author });
+          }),
+        ),
+      (effect) => recoverFailure("TopicAccess.deleteContribution", effect),
     ),
   });
 });

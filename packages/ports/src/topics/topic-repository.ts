@@ -1,5 +1,7 @@
 import {
   Contribution,
+  ContributionBody,
+  ContributionId,
   Topic,
   TopicId,
   WorkspaceAvatarUrl,
@@ -39,6 +41,30 @@ export const TopicRecord = Schema.Struct({
 });
 export interface TopicRecord extends Schema.Schema.Type<typeof TopicRecord> {}
 
+export interface ContributionAppend {
+  readonly id: ContributionId;
+  readonly workspaceId: WorkspaceId;
+  readonly topicId: TopicId;
+  readonly authorIdentityId: WorkspaceIdentityId;
+  readonly body: ContributionBody;
+  readonly createdAt: Date;
+}
+
+export interface ContributionEdit {
+  readonly workspaceId: WorkspaceId;
+  readonly topicId: TopicId;
+  readonly contributionId: ContributionId;
+  readonly body: ContributionBody;
+  readonly editedAt: Date;
+}
+
+export interface ContributionTombstone {
+  readonly workspaceId: WorkspaceId;
+  readonly topicId: TopicId;
+  readonly contributionId: ContributionId;
+  readonly deletedAt: Date;
+}
+
 export interface TopicRepositoryService {
   readonly listSummariesInChannel: (
     workspaceId: WorkspaceId,
@@ -53,6 +79,15 @@ export interface TopicRepositoryService {
   readonly insertContribution: (
     contribution: Contribution,
   ) => Effect.Effect<void, PersistenceError>;
+  readonly appendContribution: (
+    contribution: ContributionAppend,
+  ) => Effect.Effect<Contribution, PersistenceError>;
+  readonly editContribution: (
+    edit: ContributionEdit,
+  ) => Effect.Effect<Contribution, PersistenceError>;
+  readonly tombstoneContribution: (
+    tombstone: ContributionTombstone,
+  ) => Effect.Effect<Contribution, PersistenceError>;
 }
 
 export class TopicRepository extends Context.Service<TopicRepository, TopicRepositoryService>()(

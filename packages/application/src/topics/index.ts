@@ -1,5 +1,10 @@
 export {
+  AddContributionCommand,
+  ContributionMutationForbidden,
+  ContributionUnavailable,
   CreateTopicCommand,
+  DeleteContributionCommand,
+  EditContributionCommand,
   TopicAccess,
   TopicAccessFailure,
   TopicContributionView,

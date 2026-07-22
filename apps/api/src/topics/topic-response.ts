@@ -6,12 +6,14 @@ import {
   TopicSummaryResponse,
 } from "@cove/protocol";
 
-const contributionResponse = (view: TopicContributionView): TopicContributionResponse =>
+export const topicResponseContribution = (view: TopicContributionView): TopicContributionResponse =>
   TopicContributionResponse.make({
     id: view.contribution.id,
-    body: view.contribution.body,
+    ...(view.contribution.body === undefined ? {} : { body: view.contribution.body }),
     position: view.contribution.position,
     createdAt: view.contribution.createdAt,
+    edited: view.contribution.editedAt !== undefined,
+    deleted: view.contribution.deletedAt !== undefined,
     author: {
       id: view.author.id,
       name: view.author.name,
@@ -31,13 +33,13 @@ const topicResponseFields = (view: TopicView | TopicSummaryView) => ({
 export const topicResponse = (view: TopicView): TopicResponse =>
   TopicResponse.make({
     ...topicResponseFields(view),
-    contributions: view.contributions.map(contributionResponse),
+    contributions: view.contributions.map(topicResponseContribution),
   });
 
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({
     ...topicResponseFields(view),
-    openingBrief: contributionResponse(view.openingBrief),
+    openingBrief: topicResponseContribution(view.openingBrief),
     contributionCount: view.contributionCount,
   });
 

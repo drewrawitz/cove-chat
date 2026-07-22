@@ -7,6 +7,8 @@ const openingBrief = {
   body: "Capture the remaining launch risks.",
   position: 1,
   createdAt: new Date("2026-07-22T12:00:00.000Z"),
+  edited: false,
+  deleted: false,
   author: {
     id: "identity-1",
     name: "Alice",
@@ -56,14 +58,28 @@ it.effect("encodes the complete Topic as a flat Contribution list", () =>
       workspaceId: "workspace-1",
       channelId: "channel-1",
       title: "Release readiness",
-      contributions: [openingBrief],
+      contributions: [
+        openingBrief,
+        {
+          id: "contribution-2",
+          position: 2,
+          createdAt: new Date("2026-07-22T12:05:00.000Z"),
+          edited: true,
+          deleted: true,
+          author: openingBrief.author,
+        },
+      ],
       createdAt: new Date("2026-07-22T12:00:00.000Z"),
     });
 
     expect(encoded).toMatchObject({
       id: "topic-1",
-      contributions: [{ id: "contribution-1", position: 1 }],
+      contributions: [
+        { id: "contribution-1", position: 1, edited: false, deleted: false },
+        { id: "contribution-2", position: 2, edited: true, deleted: true },
+      ],
     });
+    expect(encoded.contributions[1]).not.toHaveProperty("body");
     expect(encoded).not.toHaveProperty("intent");
   }),
 );

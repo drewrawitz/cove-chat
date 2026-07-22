@@ -46,9 +46,11 @@ interface TopicRequest extends Schema.Schema.Type<typeof TopicRequest> {}
 const TopicSummaryRow = Schema.Struct({
   ...TopicRow.fields,
   contributionId: ContributionId,
-  contributionBody: ContributionBody,
+  contributionBody: Schema.NullOr(ContributionBody),
   contributionPosition: ContributionPosition,
   contributionCreatedAt: Schema.Date,
+  contributionEditedAt: Schema.NullOr(Schema.Date),
+  contributionDeletedAt: Schema.NullOr(Schema.Date),
   authorIdentityId: WorkspaceIdentityId,
   authorName: WorkspaceIdentityName,
   authorAvatarUrl: WorkspaceAvatarUrl,
@@ -61,13 +63,39 @@ const ContributionRow = Schema.Struct({
   workspaceId: WorkspaceId,
   topicId: TopicId,
   authorIdentityId: WorkspaceIdentityId,
-  body: ContributionBody,
+  body: Schema.NullOr(ContributionBody),
   position: ContributionPosition,
   createdAt: Schema.Date,
+  editedAt: Schema.NullOr(Schema.Date),
+  deletedAt: Schema.NullOr(Schema.Date),
   authorName: WorkspaceIdentityName,
   authorAvatarUrl: WorkspaceAvatarUrl,
 });
 interface ContributionRow extends Schema.Schema.Type<typeof ContributionRow> {}
+
+const StoredContributionRow = Schema.Struct({
+  id: ContributionId,
+  workspaceId: WorkspaceId,
+  topicId: TopicId,
+  authorIdentityId: WorkspaceIdentityId,
+  body: Schema.NullOr(ContributionBody),
+  position: ContributionPosition,
+  createdAt: Schema.Date,
+  editedAt: Schema.NullOr(Schema.Date),
+  deletedAt: Schema.NullOr(Schema.Date),
+});
+interface StoredContributionRow extends Schema.Schema.Type<typeof StoredContributionRow> {}
+
+const ContributionRevisionOperation = Schema.Literals(["edit", "delete"]);
+
+const ReviseContributionRequest = Schema.Struct({
+  workspaceId: WorkspaceId,
+  topicId: TopicId,
+  contributionId: ContributionId,
+  body: Schema.NullOr(ContributionBody),
+  operation: ContributionRevisionOperation,
+  revisedAt: Schema.Date,
+});
 
 function topic(row: TopicRow): TopicType {
   const fields = {
@@ -81,17 +109,23 @@ function topic(row: TopicRow): TopicType {
   return row.intent === null ? Topic.make(fields) : Topic.make({ ...fields, intent: row.intent });
 }
 
+function contribution(row: StoredContributionRow): ContributionType {
+  return Contribution.make({
+    id: row.id,
+    workspaceId: row.workspaceId,
+    topicId: row.topicId,
+    authorIdentityId: row.authorIdentityId,
+    ...(row.body === null ? {} : { body: row.body }),
+    position: row.position,
+    createdAt: row.createdAt,
+    ...(row.editedAt === null ? {} : { editedAt: row.editedAt }),
+    ...(row.deletedAt === null ? {} : { deletedAt: row.deletedAt }),
+  });
+}
+
 function contributionRecord(row: ContributionRow): TopicContributionRecord {
   return TopicContributionRecord.make({
-    contribution: Contribution.make({
-      id: row.id,
-      workspaceId: row.workspaceId,
-      topicId: row.topicId,
-      authorIdentityId: row.authorIdentityId,
-      body: row.body,
-      position: row.position,
-      createdAt: row.createdAt,
-    }),
+    contribution: contribution(row),
     author: {
       id: row.authorIdentityId,
       name: row.authorName,
@@ -111,6 +145,8 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
       body: row.contributionBody,
       position: row.contributionPosition,
       createdAt: row.contributionCreatedAt,
+      editedAt: row.contributionEditedAt,
+      deletedAt: row.contributionDeletedAt,
       authorName: row.authorName,
       authorAvatarUrl: row.authorAvatarUrl,
     }),
@@ -137,6 +173,8 @@ const make = Effect.gen(function* () {
         opening.body AS "contributionBody",
         opening.position AS "contributionPosition",
         opening.created_at AS "contributionCreatedAt",
+        opening.edited_at AS "contributionEditedAt",
+        opening.deleted_at AS "contributionDeletedAt",
         opening.author_identity_id AS "authorIdentityId",
         author.name AS "authorName",
         author.avatar_url AS "authorAvatarUrl",
@@ -192,6 +230,8 @@ const make = Effect.gen(function* () {
         contribution.body,
         contribution.position,
         contribution.created_at AS "createdAt",
+        contribution.edited_at AS "editedAt",
+        contribution.deleted_at AS "deletedAt",
         author.name AS "authorName",
         author.avatar_url AS "authorAvatarUrl"
       FROM contributions AS contribution
@@ -248,6 +288,105 @@ const make = Effect.gen(function* () {
     `,
   });
 
+  const appendContribution = SqlSchema.findOne({
+    Request: Schema.Struct({
+      id: ContributionId,
+      workspaceId: WorkspaceId,
+      topicId: TopicId,
+      authorIdentityId: WorkspaceIdentityId,
+      body: ContributionBody,
+      createdAt: Schema.Date,
+    }),
+    Result: StoredContributionRow,
+    execute: (value) => sql<StoredContributionRow>`
+      WITH locked_topic AS (
+        SELECT id
+        FROM topics
+        WHERE workspace_id = ${value.workspaceId}
+          AND id = ${value.topicId}
+        FOR UPDATE
+      ), next_position AS (
+        SELECT coalesce(max(contribution.position), 0)::integer + 1 AS position
+        FROM locked_topic
+        LEFT JOIN contributions AS contribution
+          ON contribution.workspace_id = ${value.workspaceId}
+          AND contribution.topic_id = locked_topic.id
+        GROUP BY locked_topic.id
+      )
+      INSERT INTO contributions (
+        id, workspace_id, topic_id, author_identity_id, body, position, created_at
+      )
+      SELECT
+        ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
+        ${value.body}, next_position.position, ${value.createdAt}
+      FROM next_position
+      RETURNING
+        id,
+        workspace_id AS "workspaceId",
+        topic_id AS "topicId",
+        author_identity_id AS "authorIdentityId",
+        body,
+        position,
+        created_at AS "createdAt",
+        edited_at AS "editedAt",
+        deleted_at AS "deletedAt"
+    `,
+  });
+
+  const reviseContribution = SqlSchema.findOne({
+    Request: ReviseContributionRequest,
+    Result: StoredContributionRow,
+    execute: (value) => sql<StoredContributionRow>`
+      WITH previous AS (
+        SELECT workspace_id, topic_id, id, body
+        FROM contributions
+        WHERE workspace_id = ${value.workspaceId}
+          AND topic_id = ${value.topicId}
+          AND id = ${value.contributionId}
+          AND deleted_at IS NULL
+        FOR UPDATE
+      ), revision AS (
+        INSERT INTO contribution_revisions (
+          workspace_id, topic_id, contribution_id, body, operation, revised_at
+        )
+        SELECT
+          workspace_id,
+          topic_id,
+          id,
+          body,
+          CAST(${value.operation} AS "ContributionRevisionOperation"),
+          ${value.revisedAt}
+        FROM previous
+        RETURNING id
+      )
+      UPDATE contributions AS contribution
+      SET
+        body = ${value.body},
+        edited_at = CASE
+          WHEN ${value.operation} = 'edit' THEN ${value.revisedAt}
+          ELSE contribution.edited_at
+        END,
+        deleted_at = CASE
+          WHEN ${value.operation} = 'delete' THEN ${value.revisedAt}
+          ELSE contribution.deleted_at
+        END
+      FROM previous, revision
+      WHERE contribution.workspace_id = previous.workspace_id
+        AND contribution.topic_id = previous.topic_id
+        AND contribution.id = previous.id
+      RETURNING
+        contribution.id,
+        contribution.workspace_id AS "workspaceId",
+        contribution.topic_id AS "topicId",
+        contribution.author_identity_id AS "authorIdentityId",
+        contribution.body,
+        contribution.position,
+        contribution.created_at AS "createdAt",
+        contribution.edited_at AS "editedAt",
+        contribution.deleted_at AS "deletedAt"
+    `,
+  });
+
   const mapFailure = <A, E, R>(operation: string, effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.mapError((cause) => persistenceError(operation, cause)));
 
@@ -279,6 +418,34 @@ const make = Effect.gen(function* () {
     insertContribution: Effect.fn("PostgresTopicRepository.insertContribution")(
       (value) => insertContribution(value).pipe(Effect.asVoid),
       (effect) => mapFailure("TopicRepository.insertContribution", effect),
+    ),
+    appendContribution: Effect.fn("PostgresTopicRepository.appendContribution")(
+      (value) => appendContribution(value).pipe(Effect.map(contribution)),
+      (effect) => mapFailure("TopicRepository.appendContribution", effect),
+    ),
+    editContribution: Effect.fn("PostgresTopicRepository.editContribution")(
+      (value) =>
+        reviseContribution({
+          workspaceId: value.workspaceId,
+          topicId: value.topicId,
+          contributionId: value.contributionId,
+          body: value.body,
+          operation: "edit",
+          revisedAt: value.editedAt,
+        }).pipe(Effect.map(contribution)),
+      (effect) => mapFailure("TopicRepository.editContribution", effect),
+    ),
+    tombstoneContribution: Effect.fn("PostgresTopicRepository.tombstoneContribution")(
+      (value) =>
+        reviseContribution({
+          workspaceId: value.workspaceId,
+          topicId: value.topicId,
+          contributionId: value.contributionId,
+          body: null,
+          operation: "delete",
+          revisedAt: value.deletedAt,
+        }).pipe(Effect.map(contribution)),
+      (effect) => mapFailure("TopicRepository.tombstoneContribution", effect),
     ),
   });
 });

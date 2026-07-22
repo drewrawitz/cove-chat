@@ -1,7 +1,10 @@
 import { expect, layer } from "@effect/vitest";
 import {
+  AddContributionCommand,
   ChannelUnavailable,
   CreateTopicCommand,
+  DeleteContributionCommand,
+  EditContributionCommand,
   TopicAccess,
   TopicUnavailable,
 } from "@cove/application";
@@ -156,6 +159,145 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);
         expect(hiddenPrivateChannel).toBeInstanceOf(ChannelUnavailable);
         expect(wrongChannel).toBeInstanceOf(TopicUnavailable);
+      }),
+    ),
+  );
+
+  it.effect("appends concurrent flat Contributions in a stable Topic order", () =>
+    withFixtures((fixtures) =>
+      Effect.gen(function* () {
+        const topics = yield* TopicAccess;
+        yield* topics.create(
+          CreateTopicCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            openingBriefContributionId: fixtures.contributionId,
+            title: yield* makeTopicTitle("Release readiness"),
+            openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+          }),
+        );
+        const firstReplyId = yield* makeContributionId(`first-${fixtures.contributionId}`);
+        const secondReplyId = yield* makeContributionId(`second-${fixtures.contributionId}`);
+
+        yield* Effect.all(
+          [
+            topics.addContribution(
+              AddContributionCommand.make({
+                actorAccountId: fixtures.authorAccountId,
+                workspaceId: fixtures.workspaceId,
+                channelId: fixtures.publicChannelId,
+                topicId: fixtures.topicId,
+                contributionId: firstReplyId,
+                body: ContributionBody.make("The release candidate passed smoke testing."),
+              }),
+            ),
+            topics.addContribution(
+              AddContributionCommand.make({
+                actorAccountId: fixtures.authorAccountId,
+                workspaceId: fixtures.workspaceId,
+                channelId: fixtures.publicChannelId,
+                topicId: fixtures.topicId,
+                contributionId: secondReplyId,
+                body: ContributionBody.make("Documentation review is complete."),
+              }),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        );
+
+        const detail = yield* topics.getForActor(
+          fixtures.authorAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          fixtures.topicId,
+        );
+        expect(detail.contributions.map(({ contribution }) => contribution.position)).toEqual([
+          1, 2, 3,
+        ]);
+        expect(detail.contributions.slice(1).map(({ contribution }) => contribution.body)).toEqual(
+          expect.arrayContaining([
+            "The release candidate passed smoke testing.",
+            "Documentation review is complete.",
+          ]),
+        );
+      }),
+    ),
+  );
+
+  it.effect("retains edit and deletion revisions while returning a stable tombstone", () =>
+    withFixtures((fixtures) =>
+      Effect.gen(function* () {
+        const topics = yield* TopicAccess;
+        const sql = yield* SqlClient.SqlClient;
+        yield* topics.create(
+          CreateTopicCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            openingBriefContributionId: fixtures.contributionId,
+            title: yield* makeTopicTitle("Release readiness"),
+            openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+          }),
+        );
+        const replyId = yield* makeContributionId(`reply-${fixtures.contributionId}`);
+        yield* topics.addContribution(
+          AddContributionCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            contributionId: replyId,
+            body: ContributionBody.make("The release candidate passed smoke testng."),
+          }),
+        );
+        const edited = yield* topics.editContribution(
+          EditContributionCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            contributionId: replyId,
+            body: ContributionBody.make("The release candidate passed smoke testing."),
+          }),
+        );
+        const deleted = yield* topics.deleteContribution(
+          DeleteContributionCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            contributionId: replyId,
+          }),
+        );
+        const detail = yield* topics.getForActor(
+          fixtures.authorAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          fixtures.topicId,
+        );
+        const revisions = yield* sql<{ readonly body: string; readonly operation: string }>`
+          SELECT body, operation
+          FROM contribution_revisions
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND contribution_id = ${replyId}
+          ORDER BY id
+        `;
+
+        expect(edited.contribution.editedAt).toBeInstanceOf(Date);
+        expect(deleted.contribution).toMatchObject({ id: replyId, position: 2 });
+        expect(deleted.contribution).not.toHaveProperty("body");
+        expect(detail.contributions[1]?.contribution).toMatchObject({
+          id: replyId,
+          position: 2,
+        });
+        expect(detail.contributions[1]?.contribution).not.toHaveProperty("body");
+        expect(revisions).toEqual([
+          { body: "The release candidate passed smoke testng.", operation: "edit" },
+          { body: "The release candidate passed smoke testing.", operation: "delete" },
+        ]);
       }),
     ),
   );
