@@ -4,12 +4,14 @@ import { useWorkspacesListWorkspaces } from "../api/generated/cove-app.ts";
 import { roleLabel } from "../form-data.ts";
 
 interface WorkspaceSwitcherProps {
+  readonly activeChannelId: string;
   readonly identityName: string;
   readonly workspaceId: string;
   readonly workspaceName: string;
 }
 
 export function WorkspaceSwitcher({
+  activeChannelId,
   identityName,
   workspaceId,
   workspaceName,
@@ -57,7 +59,10 @@ export function WorkspaceSwitcher({
               <li key={item.id}>
                 <Link
                   to="/workspaces/$workspaceId/channels/$channelId"
-                  params={{ workspaceId: item.id, channelId: item.generalChannelId }}
+                  params={{
+                    workspaceId: item.id,
+                    channelId: item.id === workspaceId ? activeChannelId : item.generalChannelId,
+                  }}
                   aria-label={`Switch to ${item.name}`}
                   aria-current={item.id === workspaceId ? "page" : undefined}
                   className="flex items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none aria-[current=page]:bg-muted"

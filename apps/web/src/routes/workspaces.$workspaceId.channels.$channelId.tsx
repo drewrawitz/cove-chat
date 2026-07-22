@@ -68,19 +68,17 @@ function PublicChannel(): ReactElement {
     channelContent = <ChannelLoading />;
   } else if (channel.isError) {
     channelContent = (
-      <div className="flex min-h-svh items-center justify-center p-5 text-center">
-        <div>
-          <p className="text-muted-foreground" role="status">
-            This channel is not available in this workspace.
-          </p>
-          <Link
-            className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
-            to="/workspaces/$workspaceId"
-            params={{ workspaceId }}
-          >
-            Return to workspace management
-          </Link>
-        </div>
+      <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
+        <p className="text-muted-foreground" role="status">
+          This channel is not available in this workspace.
+        </p>
+        <Link
+          className="mt-4 inline-block text-sm font-medium text-primary hover:underline"
+          to="/workspaces/$workspaceId"
+          params={{ workspaceId }}
+        >
+          Return to workspace management
+        </Link>
       </div>
     );
   } else {
@@ -160,6 +158,7 @@ function PublicChannel(): ReactElement {
           <div className="p-4 lg:p-5">
             <header>
               <WorkspaceSwitcher
+                activeChannelId={channelId}
                 identityName={workspace.data.identity.name}
                 workspaceId={workspaceId}
                 workspaceName={workspace.data.workspace.name}

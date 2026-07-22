@@ -2,9 +2,6 @@ import {
   ChannelAccess,
   CreatePublicChannelCommand,
   JoinPublicChannelCommand,
-  makeCsrfToken,
-  makeSessionToken,
-  validateCsrf,
 } from "@cove/application";
 import {
   ChannelName,
@@ -16,14 +13,14 @@ import {
 import {
   AuthErrorResponses,
   AuthenticatedActor,
-  AuthenticatedSession,
   ChannelErrorResponses,
   CoveAppApi,
   WorkspaceErrorResponses,
 } from "@cove/protocol";
-import { Effect, Redacted } from "effect";
+import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
+import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
 import { publicChannelListResponse, publicChannelResponse } from "./channel-response.ts";
 
 const errorTag = (error: unknown): unknown =>
@@ -42,26 +39,6 @@ const channelErrorResponse = (error: unknown) =>
     : AuthErrorResponses.internalServerError;
 
 const createChannelErrorResponse = workspaceErrorResponse;
-
-const validateMutationCsrf = Effect.fn("ChannelApi.validateMutationCsrf")(function* (
-  csrfHeader: string | undefined,
-) {
-  if (csrfHeader === undefined) {
-    return yield* Effect.fail(AuthErrorResponses.csrfValidationFailed);
-  }
-
-  const session = yield* AuthenticatedSession;
-  yield* validateCsrf(
-    makeSessionToken(Redacted.value(session.token)),
-    makeCsrfToken(csrfHeader),
-  ).pipe(
-    Effect.mapError((error) =>
-      errorTag(error) === "Application.InvalidCsrfToken"
-        ? AuthErrorResponses.csrfValidationFailed
-        : AuthErrorResponses.internalServerError,
-    ),
-  );
-});
 
 export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (handlers) =>
   handlers

@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
+import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -9,7 +10,11 @@ it("loads workspace package sources during API development", () => {
   const packageJson = JSON.parse(
     readFileSync(new URL("../package.json", import.meta.url), "utf8"),
   ) as { readonly scripts: { readonly dev: string } };
-  const developmentConditions = packageJson.scripts.dev.match(/--conditions=\S+/g) ?? [];
+  const developmentConditions = packageJson.scripts.dev.match(/--conditions=\S+/g);
+  assert(
+    developmentConditions !== null && developmentConditions.length > 0,
+    "The API development command must include at least one --conditions argument.",
+  );
   const result = spawnSync(
     process.execPath,
     [

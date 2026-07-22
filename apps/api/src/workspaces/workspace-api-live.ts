@@ -13,9 +13,6 @@ import {
   redeemWorkspaceInvitation,
   makeEmailAddress,
   makeWorkspaceInvitationToken,
-  makeCsrfToken,
-  makeSessionToken,
-  validateCsrf,
 } from "@cove/application";
 import {
   DisplayName,
@@ -31,13 +28,13 @@ import {
 import {
   AuthErrorResponses,
   AuthenticatedActor,
-  AuthenticatedSession,
   CoveAppApi,
   WorkspaceErrorResponses,
 } from "@cove/protocol";
-import { Effect, Redacted } from "effect";
+import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { setAuthenticationCookies } from "../auth/index.ts";
+import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
 import {
   fullMemberListResponse,
   pendingWorkspaceInvitationListResponse,
@@ -142,26 +139,6 @@ const memberAdministrationErrorResponse = (error: unknown) => {
       return workspaceUnavailableErrorResponse(error);
   }
 };
-
-const validateMutationCsrf = Effect.fn("WorkspaceApi.validateMutationCsrf")(function* (
-  csrfHeader: string | undefined,
-) {
-  if (csrfHeader === undefined) {
-    return yield* Effect.fail(AuthErrorResponses.csrfValidationFailed);
-  }
-
-  const session = yield* AuthenticatedSession;
-  yield* validateCsrf(
-    makeSessionToken(Redacted.value(session.token)),
-    makeCsrfToken(csrfHeader),
-  ).pipe(
-    Effect.mapError((error) =>
-      errorTag(error) === "Application.InvalidCsrfToken"
-        ? AuthErrorResponses.csrfValidationFailed
-        : AuthErrorResponses.internalServerError,
-    ),
-  );
-});
 
 export const WorkspaceApiLive = HttpApiBuilder.group(CoveAppApi, "workspaces", (handlers) =>
   handlers

@@ -77,45 +77,27 @@ export function ChannelSidebar({
     <div className="mt-8">
       <nav aria-label="Your channels">
         <p className="px-3 text-xs font-semibold text-muted-foreground">Channels</p>
-        {channels.isPending ? (
-          <p className="mt-3 px-3 text-sm text-muted-foreground" role="status">
-            Loading channels…
-          </p>
-        ) : channels.isError ? (
-          <p className="mt-3 px-3 text-sm text-destructive" role="alert">
-            Channels are unavailable.
-          </p>
-        ) : joinedChannels.length === 0 ? (
-          <p className="mt-3 px-3 text-sm text-muted-foreground">No joined channels.</p>
-        ) : (
-          <ul className="mt-3 grid gap-0.5">
-            {joinedChannels.map((channel) => (
-              <li key={channel.id}>
-                <ChannelLink
-                  activeChannelId={activeChannelId}
-                  channel={channel}
-                  workspaceId={workspaceId}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
+        <ChannelList
+          activeChannelId={activeChannelId}
+          channels={joinedChannels}
+          emptyMessage="No joined channels."
+          isError={channels.isError}
+          isPending={channels.isPending}
+          workspaceId={workspaceId}
+        />
       </nav>
 
       {discoverableChannels.length === 0 ? null : (
         <section className="mt-7" aria-label="Discover public channels">
           <p className="px-3 text-xs font-semibold text-muted-foreground">Discover</p>
-          <ul className="mt-3 grid gap-0.5">
-            {discoverableChannels.map((channel) => (
-              <li key={channel.id}>
-                <ChannelLink
-                  activeChannelId={activeChannelId}
-                  channel={channel}
-                  workspaceId={workspaceId}
-                />
-              </li>
-            ))}
-          </ul>
+          <ChannelList
+            activeChannelId={activeChannelId}
+            channels={discoverableChannels}
+            emptyMessage="No public channels to discover."
+            isError={channels.isError}
+            isPending={channels.isPending}
+            workspaceId={workspaceId}
+          />
         </section>
       )}
 
@@ -213,6 +195,56 @@ interface ChannelLinkProps {
     readonly name: string;
   };
   readonly workspaceId: string;
+}
+
+interface ChannelListProps {
+  readonly activeChannelId: string;
+  readonly channels: ReadonlyArray<ChannelLinkProps["channel"]>;
+  readonly emptyMessage: string;
+  readonly isError: boolean;
+  readonly isPending: boolean;
+  readonly workspaceId: string;
+}
+
+function ChannelList({
+  activeChannelId,
+  channels,
+  emptyMessage,
+  isError,
+  isPending,
+  workspaceId,
+}: ChannelListProps): ReactElement {
+  if (isPending) {
+    return (
+      <p className="mt-3 px-3 text-sm text-muted-foreground" role="status">
+        Loading channels…
+      </p>
+    );
+  }
+  if (isError) {
+    return (
+      <p className="mt-3 px-3 text-sm text-destructive" role="alert">
+        Channels are unavailable.
+      </p>
+    );
+  }
+  if (channels.length === 0) {
+    return <p className="mt-3 px-3 text-sm text-muted-foreground">{emptyMessage}</p>;
+  }
+
+  return (
+    <ul className="mt-3 grid gap-0.5">
+      {channels.map((channel) => (
+        <li key={channel.id}>
+          <ChannelLink
+            activeChannelId={activeChannelId}
+            channel={channel}
+            workspaceId={workspaceId}
+          />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function ChannelLink({ activeChannelId, channel, workspaceId }: ChannelLinkProps): ReactElement {

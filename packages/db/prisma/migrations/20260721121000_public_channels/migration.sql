@@ -21,9 +21,20 @@ SET "maintainer_identity_id" = (
 );
 
 ALTER TABLE "channels"
+ADD CONSTRAINT "channels_maintainer_identity_id_not_null"
+CHECK ("maintainer_identity_id" IS NOT NULL)
+NOT VALID;
+
+ALTER TABLE "channels"
+VALIDATE CONSTRAINT "channels_maintainer_identity_id_not_null";
+
+ALTER TABLE "channels"
 ALTER COLUMN "maintainer_identity_id" SET NOT NULL;
 
-CREATE INDEX "channels_workspace_id_maintainer_identity_id_idx"
+ALTER TABLE "channels"
+DROP CONSTRAINT "channels_maintainer_identity_id_not_null";
+
+CREATE INDEX CONCURRENTLY "channels_workspace_id_maintainer_identity_id_idx"
 ON "channels" ("workspace_id", "maintainer_identity_id");
 
 ALTER TABLE "channels"
@@ -31,4 +42,8 @@ ADD CONSTRAINT "channels_workspace_id_maintainer_identity_id_fkey"
 FOREIGN KEY ("workspace_id", "maintainer_identity_id")
 REFERENCES "workspace_identities"("workspace_id", "id")
 ON DELETE RESTRICT
-ON UPDATE CASCADE;
+ON UPDATE CASCADE
+NOT VALID;
+
+ALTER TABLE "channels"
+VALIDATE CONSTRAINT "channels_workspace_id_maintainer_identity_id_fkey";
