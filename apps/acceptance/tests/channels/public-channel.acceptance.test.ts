@@ -74,9 +74,20 @@ it.live(
             .count(),
         ),
       ).toBe(0);
+      const channelRequestPattern = `**/api/app/v1/workspaces/demo-workspace/channels/${channelId}`;
+      yield* browserAction(() =>
+        page.route(channelRequestPattern, async (route) => {
+          await new Promise((resolve) => setTimeout(resolve, 750));
+          await route.continue();
+        }),
+      );
       yield* browserAction(() => discovery.getByRole("link", { name: "Product Lab" }).click());
+      yield* browserAction(() => page.getByRole("status", { name: "Opening channel…" }).waitFor());
+      expect(yield* browserAction(() => page.getByRole("complementary").count())).toBe(1);
+      expect(yield* browserAction(() => page.locator("main.dark").count())).toBe(1);
 
       yield* browserAction(() => page.getByRole("heading", { name: "Product Lab" }).waitFor());
+      yield* browserAction(() => page.unroute(channelRequestPattern));
       yield* browserAction(() =>
         page.getByText("A durable place to explore and maintain product experiments.").waitFor(),
       );
