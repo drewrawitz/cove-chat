@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { PgClient } from "@effect/sql-pg";
+import { ChannelAccessLive } from "@cove/application";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import {
   WorkspaceInvitationNotifier,
@@ -96,7 +97,12 @@ const TestWorkspaceInvitationNotifications = Layer.effectContext(
   }),
 );
 
-export const TestPostgres = PostgresRepositories.pipe(
+const TestPostgresRepositories = PostgresRepositories.pipe(
   Layer.provideMerge(TestDatabase),
   Layer.provideMerge(TestWorkspaceInvitationNotifications),
+);
+
+export const TestPostgres = Layer.mergeAll(
+  TestPostgresRepositories,
+  ChannelAccessLive.pipe(Layer.provide(TestPostgresRepositories)),
 );

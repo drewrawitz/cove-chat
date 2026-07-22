@@ -36,7 +36,12 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspaces",
       "/api/app/v1/workspaces/{workspaceId}",
       "/api/app/v1/workspaces/{workspaceId}/channels",
+      "/api/app/v1/workspaces/{workspaceId}/channels/private",
+      "/api/app/v1/workspaces/{workspaceId}/channels/private/administration",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/administration",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/member-candidates",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/members/{workspaceIdentityId}",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/membership",
       "/api/app/v1/workspaces/{workspaceId}/identity",
       "/api/app/v1/workspaces/{workspaceId}/invitations",
@@ -86,6 +91,7 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
     expect(document.components.schemas).toMatchObject({
       CoveAppErrorResponse: {
         anyOf: expect.arrayContaining([
+          { $ref: "#/components/schemas/ChannelAdministrationForbiddenResponse" },
           { $ref: "#/components/schemas/FullMemberUnavailableResponse" },
           { $ref: "#/components/schemas/InvalidMagicLinkResponse" },
           { $ref: "#/components/schemas/WorkspaceAdministrationForbiddenResponse" },

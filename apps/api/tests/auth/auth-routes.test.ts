@@ -1,5 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
+import { ChannelAccessLive } from "@cove/application";
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import {
@@ -25,6 +26,8 @@ const Server = HttpRouter.serve(makeHttpRoutes({ exposeAppApiDocs: false }), {
 const DatabaseServicesLive = Layer.mergeAll(PostgresDatabaseReadiness, PostgresRepositories).pipe(
   Layer.provideMerge(TestDatabase),
 );
+
+const ChannelApplicationLive = ChannelAccessLive.pipe(Layer.provide(DatabaseServicesLive));
 
 interface TestAuthenticationNotifierService extends AuthenticationNotifierService {
   readonly poll: () => Effect.Effect<Option.Option<MagicLinkNotification>>;
@@ -74,6 +77,7 @@ const AuthenticationNotifierTest = Layer.effectContext(
 
 const Api = Server.pipe(
   Layer.provideMerge(DatabaseServicesLive),
+  Layer.provideMerge(ChannelApplicationLive),
   Layer.provideMerge(AuthenticationNotifierTest),
   Layer.provideMerge(NodeHttpServer.layerTest),
 );
@@ -97,6 +101,7 @@ const AppRoutes = {
   workspace: "/api/app/v1/workspaces/demo-workspace",
   workspaceMembership: "/api/app/v1/workspaces/demo-workspace/membership",
   workspaceInvitations: "/api/app/v1/workspaces/demo-workspace/invitations",
+  channels: "/api/app/v1/workspaces/demo-workspace/channels",
   redeemWorkspaceInvitation: "/api/app/v1/workspace-invitations/redeem",
 };
 
@@ -398,6 +403,151 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         expect(remainingResponse.status).toBe(200);
         expect(yield* remainingResponse.json).toEqual({ invitations: [] });
         expect(replacementLinkResponse.status).toBe(404);
+      }),
+    );
+
+    it.effect("keeps Private Channel administration distinct from content access", () =>
+      Effect.gen(function* () {
+        const delivery = yield* TestAuthenticationNotifier;
+        const sql = yield* SqlClient.SqlClient;
+        const suffix = randomUUID();
+
+        yield* sql`
+          INSERT INTO workspace_identities (
+            id,
+            workspace_id,
+            account_id,
+            name,
+            avatar_url,
+            role
+          )
+          VALUES (
+            'demo-carol-identity',
+            'demo-workspace',
+            'demo-carol',
+            'Carol in Cove',
+            '/avatars/carol.svg',
+            'member'
+          )
+          ON CONFLICT (workspace_id, id) DO UPDATE
+          SET membership_ended_at = NULL, role = 'member'
+        `;
+
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "alice@cove.local" }),
+        });
+        const aliceMagicLink = yield* delivery.take();
+        const aliceSignIn = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(aliceMagicLink.token) }),
+        });
+        const aliceCookie = authenticatedCookies(aliceSignIn.cookies);
+        const aliceCsrf = cookieValue(aliceSignIn.cookies, "cove_csrf");
+        const createResponse = yield* HttpClient.post(`${AppRoutes.channels}/private`, {
+          headers: { cookie: aliceCookie, "x-csrf-token": aliceCsrf },
+          body: HttpBody.jsonUnsafe({
+            name: `private-${suffix}`,
+            purpose: "Exercise Private Channel HTTP authorization.",
+          }),
+        });
+        const created = yield* createResponse.json.pipe(
+          Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ id: Schema.String }))),
+        );
+        const creatorPrivateChannels = yield* HttpClient.get(`${AppRoutes.channels}/private`, {
+          headers: { cookie: aliceCookie },
+        });
+
+        expect(creatorPrivateChannels.status).toBe(200);
+        expect(yield* creatorPrivateChannels.json).toMatchObject({
+          channels: [{ id: created.id, visibility: "private", hasChannelMembership: true }],
+        });
+        const memberCandidates = yield* HttpClient.get(
+          `${AppRoutes.channels}/${created.id}/member-candidates`,
+          { headers: { cookie: aliceCookie } },
+        );
+        expect(memberCandidates.status).toBe(200);
+        expect(yield* memberCandidates.json).toMatchObject({
+          members: expect.arrayContaining([
+            { id: "demo-bob-identity", name: "Bob in Cove" },
+            { id: "demo-carol-identity", name: "Carol in Cove" },
+          ]),
+        });
+
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "carol@cove.local" }),
+        });
+        const carolMagicLink = yield* delivery.take();
+        const carolSignIn = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(carolMagicLink.token) }),
+        });
+        const carolCookie = authenticatedCookies(carolSignIn.cookies);
+        const carolCsrf = cookieValue(carolSignIn.cookies, "cove_csrf");
+        const missingChannelId = `missing-${suffix}`;
+        const hiddenContent = yield* HttpClient.get(`${AppRoutes.channels}/${created.id}`, {
+          headers: { cookie: carolCookie },
+        });
+        const missingContent = yield* HttpClient.get(`${AppRoutes.channels}/${missingChannelId}`, {
+          headers: { cookie: carolCookie },
+        });
+        const hiddenCandidates = yield* HttpClient.get(
+          `${AppRoutes.channels}/${created.id}/member-candidates`,
+          { headers: { cookie: carolCookie } },
+        );
+        const missingCandidates = yield* HttpClient.get(
+          `${AppRoutes.channels}/${missingChannelId}/member-candidates`,
+          { headers: { cookie: carolCookie } },
+        );
+        const hiddenMutation = yield* HttpClient.put(
+          `${AppRoutes.channels}/${created.id}/members/demo-carol-identity`,
+          { headers: { cookie: carolCookie, "x-csrf-token": carolCsrf } },
+        );
+        const missingMutation = yield* HttpClient.put(
+          `${AppRoutes.channels}/${missingChannelId}/members/demo-carol-identity`,
+          { headers: { cookie: carolCookie, "x-csrf-token": carolCsrf } },
+        );
+
+        expect(createResponse.status).toBe(200);
+        expect(hiddenContent.status).toBe(404);
+        expect(missingContent.status).toBe(404);
+        expect(yield* hiddenContent.json).toEqual(yield* missingContent.json);
+        expect(hiddenCandidates.status).toBe(404);
+        expect(missingCandidates.status).toBe(404);
+        expect(yield* hiddenCandidates.json).toEqual(yield* missingCandidates.json);
+        expect(hiddenMutation.status).toBe(404);
+        expect(missingMutation.status).toBe(404);
+        expect(yield* hiddenMutation.json).toEqual(yield* missingMutation.json);
+
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
+        });
+        const bobMagicLink = yield* delivery.take();
+        const bobSignIn = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(bobMagicLink.token) }),
+        });
+        const bobCookie = authenticatedCookies(bobSignIn.cookies);
+        const bobCsrf = cookieValue(bobSignIn.cookies, "cove_csrf");
+        const administration = yield* HttpClient.get(
+          `${AppRoutes.channels}/private/administration`,
+          { headers: { cookie: bobCookie } },
+        );
+        const ownerContentBeforeJoin = yield* HttpClient.get(
+          `${AppRoutes.channels}/${created.id}`,
+          { headers: { cookie: bobCookie } },
+        );
+        const join = yield* HttpClient.put(
+          `${AppRoutes.channels}/${created.id}/members/demo-bob-identity`,
+          { headers: { cookie: bobCookie, "x-csrf-token": bobCsrf } },
+        );
+        const ownerContentAfterJoin = yield* HttpClient.get(`${AppRoutes.channels}/${created.id}`, {
+          headers: { cookie: bobCookie },
+        });
+
+        expect(administration.status).toBe(200);
+        expect(yield* administration.json).toMatchObject({
+          channels: [{ id: created.id, actorHasChannelMembership: false }],
+        });
+        expect(ownerContentBeforeJoin.status).toBe(404);
+        expect(join.status).toBe(200);
+        expect(ownerContentAfterJoin.status).toBe(200);
       }),
     );
 

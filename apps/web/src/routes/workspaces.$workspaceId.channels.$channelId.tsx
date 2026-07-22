@@ -3,9 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactElement } from "react";
 import {
-  getChannelsGetPublicChannelQueryKey,
+  getChannelsGetChannelQueryKey,
   getChannelsListPublicChannelsQueryKey,
-  useChannelsGetPublicChannel,
+  useChannelsGetChannel,
   useChannelsJoinPublicChannel,
   useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
@@ -13,17 +13,19 @@ import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelLoading } from "../components/channel-loading.tsx";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { PrivateChannelMembership } from "../components/private-channel-membership.tsx";
 import { WorkspaceSwitcher } from "../components/workspace-switcher.tsx";
+import { isWorkspaceAdministrator } from "../workspace-role.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId")({
-  component: PublicChannel,
+  component: ChannelPage,
 });
 
-function PublicChannel(): ReactElement {
+function ChannelPage(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
   const queryClient = useQueryClient();
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
-  const channel = useChannelsGetPublicChannel(workspaceId, channelId, {
+  const channel = useChannelsGetChannel(workspaceId, channelId, {
     query: { retry: false },
   });
   const joinChannel = useChannelsJoinPublicChannel();
@@ -52,7 +54,7 @@ function PublicChannel(): ReactElement {
         onSuccess: async () => {
           await Promise.all([
             queryClient.invalidateQueries({
-              queryKey: getChannelsGetPublicChannelQueryKey(workspaceId, channelId),
+              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
             }),
             queryClient.invalidateQueries({
               queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
@@ -89,7 +91,8 @@ function PublicChannel(): ReactElement {
           <div className="min-w-0 flex-1">
             <h2 className="text-4xl font-semibold tracking-tight sm:text-5xl">{displayName}</h2>
             <p className="mt-3 max-w-3xl text-base text-muted-foreground sm:text-lg">
-              Public <span aria-hidden="true">·</span> {channel.data.purpose}
+              {channel.data.visibility === "private" ? "Private" : "Public"}{" "}
+              <span aria-hidden="true">·</span> {channel.data.purpose}
             </p>
             <p className="mt-3 text-sm text-muted-foreground">
               Maintained by {channel.data.maintainer.name}
@@ -97,6 +100,17 @@ function PublicChannel(): ReactElement {
           </div>
 
           <div className="flex items-center gap-3">
+            {channel.data.visibility === "private" ? (
+              <PrivateChannelMembership
+                canAdminister={
+                  isWorkspaceAdministrator(workspace.data.membership.role) ||
+                  channel.data.maintainer.id === workspace.data.identity.id
+                }
+                channelId={channelId}
+                channelName={displayName}
+                workspaceId={workspaceId}
+              />
+            ) : null}
             <img
               className="size-10 rounded-full border border-border bg-muted object-cover"
               src={channel.data.maintainer.avatarUrl}
@@ -106,20 +120,20 @@ function PublicChannel(): ReactElement {
               <span className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
                 Joined
               </span>
-            ) : (
+            ) : channel.data.visibility === "public" ? (
               <Button type="button" size="lg" disabled={joinChannel.isPending} onClick={join}>
                 {joinChannel.isPending ? "Joining…" : "Join channel"}
               </Button>
-            )}
+            ) : null}
           </div>
         </header>
 
-        {joinChannel.isSuccess ? (
+        {channel.data.visibility === "public" && joinChannel.isSuccess ? (
           <p className="-mt-6 mb-6 text-sm text-muted-foreground" role="status">
             You joined {displayName}.
           </p>
         ) : null}
-        {joinChannel.isError ? (
+        {channel.data.visibility === "public" && joinChannel.isError ? (
           <p className="-mt-6 mb-6 text-sm text-destructive" role="alert">
             Cove could not join this channel. Refresh and try again.
           </p>

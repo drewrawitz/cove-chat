@@ -3,10 +3,19 @@ export { CoveOperationsApi } from "./operations-api.ts";
 export { CovePublicApi } from "./public-api.ts";
 export {
   ChannelApiGroup,
+  ChannelAdministrationForbiddenResponse,
   ChannelErrorResponses,
+  ChannelMemberResponse,
   ChannelMaintainerResponse,
+  ChannelResponse,
   ChannelUnavailableResponse,
+  CreatePrivateChannelRequest,
   CreatePublicChannelRequest,
+  PrivateChannelAdministrationListResponse,
+  PrivateChannelAdministrationResponse,
+  PrivateChannelListResponse,
+  PrivateChannelMemberCandidateListResponse,
+  PrivateChannelResponse,
   PublicChannelListResponse,
   PublicChannelResponse,
 } from "./channels/index.ts";

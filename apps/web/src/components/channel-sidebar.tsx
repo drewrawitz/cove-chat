@@ -14,7 +14,10 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactElement, useRef, useState } from "react";
 import {
   getChannelsListPublicChannelsQueryKey,
+  getChannelsListPrivateChannelsQueryKey,
+  useChannelsCreatePrivateChannel,
   useChannelsCreatePublicChannel,
+  useChannelsListPrivateChannels,
   useChannelsListPublicChannels,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
@@ -33,43 +36,62 @@ export function ChannelSidebar({
   const channelNameInput = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const channels = useChannelsListPublicChannels(workspaceId, { query: { retry: false } });
-  const createChannel = useChannelsCreatePublicChannel();
+  const publicChannels = useChannelsListPublicChannels(workspaceId, { query: { retry: false } });
+  const privateChannels = useChannelsListPrivateChannels(workspaceId, { query: { retry: false } });
+  const createPublicChannel = useChannelsCreatePublicChannel();
+  const createPrivateChannel = useChannelsCreatePrivateChannel();
 
   const create = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    createChannel.mutate(
-      {
-        workspaceId,
-        data: {
-          name: requiredFormValue(form, "channelName"),
-          purpose: requiredFormValue(form, "channelPurpose"),
-        },
+    const visibility = requiredFormValue(form, "channelVisibility");
+    const command = {
+      workspaceId,
+      data: {
+        name: requiredFormValue(form, "channelName"),
+        purpose: requiredFormValue(form, "channelPurpose"),
       },
-      {
-        onSuccess: async (created) => {
-          formElement.reset();
-          setCreateDialogOpen(false);
-          await queryClient.invalidateQueries({
-            queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
-          });
-          await navigate({
-            to: "/workspaces/$workspaceId/channels/$channelId",
-            params: { workspaceId, channelId: created.id },
-          });
-        },
-      },
-    );
+    };
+    const onSuccess = async (created: { readonly id: string }): Promise<void> => {
+      formElement.reset();
+      setCreateDialogOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getChannelsListPrivateChannelsQueryKey(workspaceId),
+        }),
+      ]);
+      await navigate({
+        to: "/workspaces/$workspaceId/channels/$channelId",
+        params: { workspaceId, channelId: created.id },
+      });
+    };
+
+    if (visibility === "private") {
+      createPrivateChannel.mutate(command, { onSuccess });
+    } else {
+      createPublicChannel.mutate(command, { onSuccess });
+    }
   };
 
-  const joinedChannels =
-    channels.data?.channels.filter((channel) => channel.hasChannelMembership) ?? [];
+  const joinedChannels = [
+    ...(publicChannels.data?.channels.filter((channel) => channel.hasChannelMembership) ?? []),
+    ...(privateChannels.data?.channels ?? []),
+  ];
   const discoverableChannels =
-    channels.data?.channels.filter((channel) => !channel.hasChannelMembership) ?? [];
+    publicChannels.data?.channels.filter((channel) => !channel.hasChannelMembership) ?? [];
+  const joinedChannelsPending = publicChannels.isPending || privateChannels.isPending;
+  const joinedChannelsError = publicChannels.isError || privateChannels.isError;
+  const channelCreationPending = createPublicChannel.isPending || createPrivateChannel.isPending;
+  const channelCreationError = createPublicChannel.isError || createPrivateChannel.isError;
   const setDialogOpen = (open: boolean): void => {
-    if (open) createChannel.reset();
+    if (open) {
+      createPublicChannel.reset();
+      createPrivateChannel.reset();
+    }
     setCreateDialogOpen(open);
   };
 
@@ -81,8 +103,8 @@ export function ChannelSidebar({
           activeChannelId={activeChannelId}
           channels={joinedChannels}
           emptyMessage="No joined channels."
-          isError={channels.isError}
-          isPending={channels.isPending}
+          isError={joinedChannelsError}
+          isPending={joinedChannelsPending}
           workspaceId={workspaceId}
         />
       </nav>
@@ -94,8 +116,8 @@ export function ChannelSidebar({
             activeChannelId={activeChannelId}
             channels={discoverableChannels}
             emptyMessage="No public channels to discover."
-            isError={channels.isError}
-            isPending={channels.isPending}
+            isError={publicChannels.isError}
+            isPending={publicChannels.isPending}
             workspaceId={workspaceId}
           />
         </section>
@@ -119,7 +141,7 @@ export function ChannelSidebar({
                 <div>
                   <DialogTitle>Create a new channel</DialogTitle>
                   <DialogDescription className="mt-2">
-                    Give this public channel a clear name and purpose.
+                    Give the channel a clear name, purpose, and audience.
                   </DialogDescription>
                 </div>
                 <DialogClose
@@ -153,19 +175,41 @@ export function ChannelSidebar({
                     placeholder="What’s this channel about?"
                   />
                 </label>
-                <div>
-                  <p className="text-base font-semibold">Visibility</p>
-                  <div className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-                    <span className="text-lg text-primary" aria-hidden="true">
-                      #
-                    </span>
-                    <span>
-                      <strong className="font-medium text-foreground">Public</strong> — every Full
-                      Member can discover and read it
-                    </span>
+                <fieldset>
+                  <legend className="text-base font-semibold">Visibility</legend>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="flex cursor-pointer gap-3 rounded-lg border bg-muted/20 px-4 py-3 text-sm has-checked:border-primary has-checked:bg-primary/5">
+                      <input
+                        type="radio"
+                        name="channelVisibility"
+                        value="public"
+                        defaultChecked
+                        className="mt-1 accent-primary"
+                      />
+                      <span>
+                        <strong className="font-medium text-foreground">Public</strong>
+                        <span className="mt-1 block text-muted-foreground">
+                          Every Full Member can discover and read it.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-3 rounded-lg border bg-muted/20 px-4 py-3 text-sm has-checked:border-primary has-checked:bg-primary/5">
+                      <input
+                        type="radio"
+                        name="channelVisibility"
+                        value="private"
+                        className="mt-1 accent-primary"
+                      />
+                      <span>
+                        <strong className="font-medium text-foreground">Private</strong>
+                        <span className="mt-1 block text-muted-foreground">
+                          Only explicitly added Channel Members can read it.
+                        </span>
+                      </span>
+                    </label>
                   </div>
-                </div>
-                {createChannel.isError ? (
+                </fieldset>
+                {channelCreationError ? (
                   <p className="text-sm text-destructive" role="alert">
                     Cove could not create this channel. Try again.
                   </p>
@@ -176,8 +220,8 @@ export function ChannelSidebar({
                 <DialogClose className={buttonVariants({ variant: "secondary", size: "lg" })}>
                   Cancel
                 </DialogClose>
-                <Button type="submit" size="lg" disabled={createChannel.isPending}>
-                  {createChannel.isPending ? "Creating…" : "Create channel"}
+                <Button type="submit" size="lg" disabled={channelCreationPending}>
+                  {channelCreationPending ? "Creating…" : "Create channel"}
                 </Button>
               </footer>
             </form>

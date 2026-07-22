@@ -9,3 +9,11 @@ export const CreatePublicChannelRequest = Schema.Struct({
 export interface CreatePublicChannelRequest extends Schema.Schema.Type<
   typeof CreatePublicChannelRequest
 > {}
+
+export const CreatePrivateChannelRequest = Schema.Struct({
+  name: ChannelRequestValue,
+  purpose: ChannelRequestValue,
+}).annotate({ identifier: "CreatePrivateChannelRequest" });
+export interface CreatePrivateChannelRequest extends Schema.Schema.Type<
+  typeof CreatePrivateChannelRequest
+> {}

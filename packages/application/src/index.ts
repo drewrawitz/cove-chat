@@ -21,20 +21,21 @@ export {
   type SessionIdentityResolverService,
 } from "./auth/index.ts";
 export {
+  AddPrivateChannelMemberCommand,
   ChannelAccess,
   ChannelAccessFailure,
   ChannelAccessLive,
-  ChannelAccessPersistence,
-  ChannelAccessPersistenceFailure,
+  ChannelAdministrationForbidden,
+  ChannelMemberView,
   ChannelMaintainerView,
+  ChannelView,
+  CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
-  CreatePublicChannelPersistenceResult,
   JoinPublicChannelCommand,
-  PublicChannelView,
+  PrivateChannelAdministrationView,
   ChannelUnavailable,
   GetChannelForActorInput,
   getChannelForActor,
-  type ChannelAccessPersistenceService,
   type ChannelAccessService,
 } from "./channels/index.ts";
 export {
