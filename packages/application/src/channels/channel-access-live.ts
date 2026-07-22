@@ -169,6 +169,37 @@ const make = Effect.gen(function* () {
     );
   });
 
+  const lockMembershipParticipants = Effect.fn("ChannelAccess.lockMembershipParticipants")(
+    function* (command: AddPrivateChannelMemberCommand) {
+      const actorSnapshot = yield* repository.readActiveActor(
+        command.actorAccountId,
+        command.workspaceId,
+      );
+      if (actorSnapshot === undefined) {
+        return { actor: undefined, member: undefined };
+      }
+
+      if (actorSnapshot.id.localeCompare(command.workspaceIdentityId) <= 0) {
+        const actor = yield* repository.lockActiveActor(
+          command.actorAccountId,
+          command.workspaceId,
+        );
+        const member = yield* repository.lockActiveIdentity(
+          command.workspaceId,
+          command.workspaceIdentityId,
+        );
+        return { actor, member };
+      }
+
+      const member = yield* repository.lockActiveIdentity(
+        command.workspaceId,
+        command.workspaceIdentityId,
+      );
+      const actor = yield* repository.lockActiveActor(command.actorAccountId, command.workspaceId);
+      return { actor, member };
+    },
+  );
+
   return ChannelAccess.of({
     listPublicForActor: Effect.fn("ChannelAccess.listPublicForActor")(
       function* (actorAccountId, workspaceId) {
@@ -206,10 +237,7 @@ const make = Effect.gen(function* () {
       (command: AddPrivateChannelMemberCommand) =>
         transactions.run(
           Effect.gen(function* () {
-            const actor = yield* repository.lockActiveActor(
-              command.actorAccountId,
-              command.workspaceId,
-            );
+            const { actor, member } = yield* lockMembershipParticipants(command);
             if (actor === undefined || !isFullMember(actor.role)) {
               return yield* Effect.fail(
                 new WorkspaceUnavailable({ workspaceId: command.workspaceId }),
@@ -230,10 +258,6 @@ const make = Effect.gen(function* () {
               return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
             }
 
-            const member = yield* repository.lockActiveIdentity(
-              command.workspaceId,
-              command.workspaceIdentityId,
-            );
             if (member === undefined || !isFullMember(member.role)) {
               return yield* Effect.fail(
                 new FullMemberUnavailable({

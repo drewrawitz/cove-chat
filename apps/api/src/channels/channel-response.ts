@@ -31,14 +31,18 @@ const channelMemberResponse = (member: ChannelMemberView): ChannelMemberResponse
     avatarUrl: member.avatarUrl,
   });
 
+const channelViewFields = (view: Pick<ChannelView, "channel" | "maintainer">) => ({
+  id: view.channel.id,
+  workspaceId: view.channel.workspaceId,
+  name: view.channel.name,
+  purpose: view.channel.purpose,
+  maintainer: channelMaintainerResponse(view.maintainer),
+});
+
 export const publicChannelResponse = (view: ChannelView): PublicChannelResponse =>
   PublicChannelResponse.make({
-    id: view.channel.id,
-    workspaceId: view.channel.workspaceId,
-    name: view.channel.name,
-    purpose: view.channel.purpose,
+    ...channelViewFields(view),
     visibility: "public",
-    maintainer: channelMaintainerResponse(view.maintainer),
     hasChannelMembership: view.hasChannelMembership,
   });
 
@@ -49,12 +53,8 @@ export const publicChannelListResponse = (
 
 export const channelResponse = (view: ChannelView): ChannelResponse =>
   ChannelResponse.make({
-    id: view.channel.id,
-    workspaceId: view.channel.workspaceId,
-    name: view.channel.name,
-    purpose: view.channel.purpose,
+    ...channelViewFields(view),
     visibility: view.channel.visibility,
-    maintainer: channelMaintainerResponse(view.maintainer),
     hasChannelMembership: view.hasChannelMembership,
   });
 
@@ -64,12 +64,8 @@ export const privateChannelListResponse = (
   PrivateChannelListResponse.make({
     channels: channels.map((view) =>
       PrivateChannelResponse.make({
-        id: view.channel.id,
-        workspaceId: view.channel.workspaceId,
-        name: view.channel.name,
-        purpose: view.channel.purpose,
+        ...channelViewFields(view),
         visibility: "private",
-        maintainer: channelMaintainerResponse(view.maintainer),
         hasChannelMembership: view.hasChannelMembership,
       }),
     ),
@@ -86,12 +82,8 @@ export const privateChannelAdministrationResponse = (
   view: PrivateChannelAdministrationView,
 ): PrivateChannelAdministrationResponse =>
   PrivateChannelAdministrationResponse.make({
-    id: view.channel.id,
-    workspaceId: view.channel.workspaceId,
-    name: view.channel.name,
-    purpose: view.channel.purpose,
+    ...channelViewFields(view),
     visibility: "private",
-    maintainer: channelMaintainerResponse(view.maintainer),
     members: view.members.map(channelMemberResponse),
     actorHasChannelMembership: view.actorHasChannelMembership,
   });

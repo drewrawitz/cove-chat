@@ -19,13 +19,13 @@
     "test:integration": "vp test run"
   },
   "dependencies": {
+    "@cove/application": "workspace:*",
     "@cove/domain": "workspace:*",
     "@cove/ports": "workspace:*",
     "@effect/sql-pg": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@cove/application": "workspace:*",
     "@effect/vitest": "catalog:",
     "@testcontainers/postgresql": "catalog:",
     "@types/node": "catalog:",

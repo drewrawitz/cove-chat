@@ -83,8 +83,8 @@ export function ChannelSidebar({
   ];
   const discoverableChannels =
     publicChannels.data?.channels.filter((channel) => !channel.hasChannelMembership) ?? [];
-  const channelsPending = publicChannels.isPending || privateChannels.isPending;
-  const channelsError = publicChannels.isError || privateChannels.isError;
+  const joinedChannelsPending = publicChannels.isPending || privateChannels.isPending;
+  const joinedChannelsError = publicChannels.isError || privateChannels.isError;
   const channelCreationPending = createPublicChannel.isPending || createPrivateChannel.isPending;
   const channelCreationError = createPublicChannel.isError || createPrivateChannel.isError;
   const setDialogOpen = (open: boolean): void => {
@@ -103,8 +103,8 @@ export function ChannelSidebar({
           activeChannelId={activeChannelId}
           channels={joinedChannels}
           emptyMessage="No joined channels."
-          isError={channelsError}
-          isPending={channelsPending}
+          isError={joinedChannelsError}
+          isPending={joinedChannelsPending}
           workspaceId={workspaceId}
         />
       </nav>
@@ -116,8 +116,8 @@ export function ChannelSidebar({
             activeChannelId={activeChannelId}
             channels={discoverableChannels}
             emptyMessage="No public channels to discover."
-            isError={channelsError}
-            isPending={channelsPending}
+            isError={publicChannels.isError}
+            isPending={publicChannels.isPending}
             workspaceId={workspaceId}
           />
         </section>
