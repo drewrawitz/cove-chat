@@ -5,10 +5,17 @@ export {
   ChannelAccessFacts,
   ChannelMembershipFacts,
   ChannelName,
+  ChannelPurpose,
   ChannelVisibility,
+  GENERAL_CHANNEL_ID,
+  GENERAL_CHANNEL_NAME,
+  GENERAL_CHANNEL_PURPOSE,
   InvalidChannelName,
+  InvalidChannelPurpose,
   canViewChannel,
   makeChannelName,
+  makeChannelPurpose,
+  makeGeneralChannel,
 } from "./channels/index.ts";
 
 export {

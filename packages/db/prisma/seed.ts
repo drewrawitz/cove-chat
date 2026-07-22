@@ -34,6 +34,35 @@ const seed = Effect.gen(function* () {
       avatar_url = EXCLUDED.avatar_url,
       membership_ended_at = NULL
   `;
+  yield* sql`
+    INSERT INTO channels (
+      id,
+      workspace_id,
+      name,
+      purpose,
+      visibility,
+      maintainer_identity_id
+    )
+    VALUES (
+      'general',
+      'demo-workspace',
+      'general',
+      'A shared place for workspace-wide topics.',
+      'public',
+      'demo-bob-identity'
+    )
+    ON CONFLICT (workspace_id, id) DO UPDATE
+    SET
+      name = EXCLUDED.name,
+      purpose = EXCLUDED.purpose,
+      visibility = EXCLUDED.visibility,
+      maintainer_identity_id = EXCLUDED.maintainer_identity_id
+  `;
+  yield* sql`
+    INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
+    VALUES ('demo-workspace', 'general', 'demo-bob-identity')
+    ON CONFLICT DO NOTHING
+  `;
 });
 
 const program = Effect.gen(function* () {

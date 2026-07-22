@@ -4,8 +4,10 @@ import {
   ChannelMembershipFacts,
   makeChannelId,
   makeChannelName,
+  makeChannelPurpose,
   makeUserId,
   makeWorkspaceId,
+  makeWorkspaceIdentityId,
   type ChannelId,
   type UserId,
   type WorkspaceId,
@@ -40,24 +42,32 @@ const makeFixtures = Effect.gen(function* () {
   const publicChannelName = yield* makeChannelName("general");
   const privateChannelName = yield* makeChannelName("leadership");
   const otherWorkspaceChannelName = yield* makeChannelName("other-team");
+  const channelPurpose = yield* makeChannelPurpose("A test channel purpose.");
+  const maintainerIdentityId = yield* makeWorkspaceIdentityId("channel-maintainer");
 
   const publicChannel = Channel.make({
     id: publicChannelId,
     workspaceId,
     name: publicChannelName,
+    purpose: channelPurpose,
     visibility: "public",
+    maintainerIdentityId,
   });
   const privateChannel = Channel.make({
     id: privateChannelId,
     workspaceId,
     name: privateChannelName,
+    purpose: channelPurpose,
     visibility: "private",
+    maintainerIdentityId,
   });
   const otherWorkspaceChannel = Channel.make({
     id: otherWorkspaceChannelId,
     workspaceId: otherWorkspaceId,
     name: otherWorkspaceChannelName,
+    purpose: channelPurpose,
     visibility: "public",
+    maintainerIdentityId,
   });
 
   const channels = [publicChannel, privateChannel, otherWorkspaceChannel];

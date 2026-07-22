@@ -650,16 +650,56 @@ const make = Effect.gen(function* () {
       endedAt: Date,
     ) =>
       sql`
-        WITH ended_membership AS (
-          UPDATE workspace_identities
-          SET membership_ended_at = ${endedAt}
+        WITH selected_membership AS (
+          SELECT workspace_id, id
+          FROM workspace_identities
           WHERE workspace_id = ${workspaceId}
             AND membership_ended_at IS NULL
             AND (
               (${selector.kind} = 'account' AND account_id = ${selector.id})
               OR (${selector.kind} = 'identity' AND id = ${selector.id})
             )
-          RETURNING workspace_id, id
+          FOR UPDATE
+        ),
+        replacement_maintainer AS (
+          SELECT
+            selected_membership.workspace_id,
+            selected_membership.id AS departing_identity_id,
+            (
+              SELECT replacement.id
+              FROM workspace_identities AS replacement
+              WHERE replacement.workspace_id = selected_membership.workspace_id
+                AND replacement.id <> selected_membership.id
+                AND replacement.membership_ended_at IS NULL
+                AND replacement.role IN ('owner', 'admin', 'member')
+              ORDER BY
+                CASE replacement.role
+                  WHEN 'owner' THEN 0
+                  WHEN 'admin' THEN 1
+                  ELSE 2
+                END,
+                replacement.membership_started_at,
+                replacement.id
+              LIMIT 1
+            ) AS replacement_identity_id
+          FROM selected_membership
+        ),
+        reassigned_channels AS (
+          UPDATE channels AS channel
+          SET maintainer_identity_id = replacement_maintainer.replacement_identity_id
+          FROM replacement_maintainer
+          WHERE channel.workspace_id = replacement_maintainer.workspace_id
+            AND channel.maintainer_identity_id = replacement_maintainer.departing_identity_id
+            AND replacement_maintainer.replacement_identity_id IS NOT NULL
+          RETURNING channel.workspace_id
+        ),
+        ended_membership AS (
+          UPDATE workspace_identities AS identity
+          SET membership_ended_at = ${endedAt}
+          FROM selected_membership
+          WHERE identity.workspace_id = selected_membership.workspace_id
+            AND identity.id = selected_membership.id
+          RETURNING identity.workspace_id, identity.id
         )
         DELETE FROM channel_memberships AS channel_membership
         USING ended_membership
@@ -1020,32 +1060,60 @@ const make = Effect.gen(function* () {
       };
     }),
     createWorkspaceWithOwner: Effect.fn("PostgresWorkspaceAccess.createWorkspaceWithOwner")(
-      (access) =>
+      (access, generalChannel) =>
         sql`
           WITH created_workspace AS (
             INSERT INTO workspaces (id, name)
             VALUES (${access.workspace.id}, ${access.workspace.name})
+            RETURNING id
+          ),
+          created_owner AS (
+            INSERT INTO workspace_identities (
+              id,
+              workspace_id,
+              account_id,
+              name,
+              avatar_url,
+              role,
+              membership_started_at,
+              membership_ended_at
+            )
+            SELECT
+              ${access.identity.id},
+              created_workspace.id,
+              ${access.identity.accountId},
+              ${access.identity.name},
+              ${access.identity.avatarUrl},
+              ${access.membership.role},
+              ${access.membership.startedAt},
+              NULL
+            FROM created_workspace
+            RETURNING id, workspace_id
+          ),
+          created_general AS (
+            INSERT INTO channels (
+              id,
+              workspace_id,
+              name,
+              purpose,
+              visibility,
+              maintainer_identity_id
+            )
+            SELECT
+              ${generalChannel.id},
+              created_owner.workspace_id,
+              ${generalChannel.name},
+              ${generalChannel.purpose},
+              ${generalChannel.visibility},
+              created_owner.id
+            FROM created_owner
+            RETURNING id, workspace_id
           )
-          INSERT INTO workspace_identities (
-            id,
-            workspace_id,
-            account_id,
-            name,
-            avatar_url,
-            role,
-            membership_started_at,
-            membership_ended_at
-          )
-          VALUES (
-            ${access.identity.id},
-            ${access.workspace.id},
-            ${access.identity.accountId},
-            ${access.identity.name},
-            ${access.identity.avatarUrl},
-            ${access.membership.role},
-            ${access.membership.startedAt},
-            NULL
-          )
+          INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
+          SELECT created_general.workspace_id, created_general.id, created_owner.id
+          FROM created_general
+          INNER JOIN created_owner
+            ON created_owner.workspace_id = created_general.workspace_id
         `.pipe(
           Effect.asVoid,
           Effect.mapError((cause) =>

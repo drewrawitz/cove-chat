@@ -21,9 +21,21 @@ export {
   type SessionIdentityResolverService,
 } from "./auth/index.ts";
 export {
+  ChannelAccess,
+  ChannelAccessFailure,
+  ChannelAccessLive,
+  ChannelAccessPersistence,
+  ChannelAccessPersistenceFailure,
+  ChannelMaintainerView,
+  CreatePublicChannelCommand,
+  CreatePublicChannelPersistenceResult,
+  JoinPublicChannelCommand,
+  PublicChannelView,
   ChannelUnavailable,
   GetChannelForActorInput,
   getChannelForActor,
+  type ChannelAccessPersistenceService,
+  type ChannelAccessService,
 } from "./channels/index.ts";
 export {
   AcceptWorkspaceInvitationCommand,

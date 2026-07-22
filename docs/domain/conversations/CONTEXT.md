@@ -11,6 +11,10 @@ _Avoid_: Message stream, room type
 **Public Channel**:
 A channel that every full member can discover and read. Guests access it only through explicit channel membership.
 
+**General Channel**:
+The Public Channel that every Workspace begins with. The Workspace creator is its initial Channel Maintainer and Channel Member.
+_Avoid_: Mandatory channel, system channel
+
 **Private Channel**:
 A channel whose topics are accessible only to its channel members.
 

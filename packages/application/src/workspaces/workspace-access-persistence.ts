@@ -1,4 +1,6 @@
 import type {
+  Channel,
+  ChannelId,
   EmailAddress,
   User,
   UserId,
@@ -83,7 +85,9 @@ export type WorkspaceAccessAuditEvent =
       readonly version: 1;
       readonly actorAccountId: UserId;
       readonly occurredAt: Date;
-      readonly metadata: WorkspaceAuditMetadata;
+      readonly metadata: WorkspaceAuditMetadata & {
+        readonly generalChannelId: ChannelId;
+      };
     }
   | {
       readonly id: string;
@@ -186,6 +190,7 @@ export interface WorkspaceAccessTransaction {
   ) => Effect.Effect<FullMemberAdministrationFacts, WorkspaceAccessPersistenceFailure>;
   readonly createWorkspaceWithOwner: (
     access: WorkspaceAccessView,
+    generalChannel: Channel,
   ) => Effect.Effect<void, WorkspaceAccessPersistenceFailure>;
   readonly startFirstMembership: (
     access: WorkspaceAccessView,

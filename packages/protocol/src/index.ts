@@ -2,6 +2,15 @@ export { CoveAppApi, CoveAppErrorResponse } from "./app-api.ts";
 export { CoveOperationsApi } from "./operations-api.ts";
 export { CovePublicApi } from "./public-api.ts";
 export {
+  ChannelApiGroup,
+  ChannelErrorResponses,
+  ChannelMaintainerResponse,
+  ChannelUnavailableResponse,
+  CreatePublicChannelRequest,
+  PublicChannelListResponse,
+  PublicChannelResponse,
+} from "./channels/index.ts";
+export {
   AuthenticatedActor,
   AuthenticatedActorId,
   AuthenticatedSession,

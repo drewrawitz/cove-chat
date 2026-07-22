@@ -1,6 +1,36 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit } from "effect";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ApiConfiguration, ApiConfigurationLive } from "../src/api-configuration.ts";
+
+it("loads workspace package sources during API development", () => {
+  const packageJson = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ) as { readonly scripts: { readonly dev: string } };
+  const developmentConditions = packageJson.scripts.dev.match(/--conditions=\S+/g);
+  assert(
+    developmentConditions !== null && developmentConditions.length > 0,
+    "The API development command must include at least one --conditions argument.",
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      ...developmentConditions,
+      "--input-type=module",
+      "--eval",
+      "import { PublicChannelListResponse } from '@cove/protocol'; void PublicChannelListResponse;",
+    ],
+    {
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      encoding: "utf8",
+    },
+  );
+
+  expect(result.status, result.stderr).toBe(0);
+});
 
 it.effect("uses the browser-facing web origin for public links", () =>
   Effect.gen(function* () {

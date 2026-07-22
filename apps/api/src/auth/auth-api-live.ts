@@ -3,7 +3,6 @@ import {
   VerifyMagicLinkInput,
   getCurrentUser,
   logout,
-  makeCsrfToken,
   makeEmailAddress,
   makeMagicLinkToken,
   makeSessionToken,
@@ -21,6 +20,7 @@ import {
 import { Effect, Redacted } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
 import { setAuthenticationCookies } from "./authentication-cookies.ts";
 import { currentUserResponse } from "./current-user-response.ts";
 
@@ -80,23 +80,7 @@ export const AuthApiLive = HttpApiBuilder.group(CoveAppApi, "auth", (handlers) =
     )
     .handle("logout", ({ headers }) =>
       Effect.gen(function* () {
-        const session = yield* AuthenticatedSession;
-        const csrfHeader = headers["x-csrf-token"];
-
-        if (csrfHeader === undefined) {
-          return yield* Effect.fail(AuthErrorResponses.csrfValidationFailed);
-        }
-
-        yield* logout(
-          makeSessionToken(Redacted.value(session.token)),
-          makeCsrfToken(csrfHeader),
-        ).pipe(
-          Effect.mapError((error) =>
-            error._tag === "Application.InvalidCsrfToken"
-              ? AuthErrorResponses.csrfValidationFailed
-              : AuthErrorResponses.internalServerError,
-          ),
-        );
+        yield* validateMutationCsrf(headers["x-csrf-token"], logout);
         yield* expireAuthenticationCookies;
       }),
     )

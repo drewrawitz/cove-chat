@@ -25,6 +25,7 @@ export const WorkspaceSummaryResponse = Schema.Struct({
   name: Schema.String,
   identity: WorkspaceIdentityResponse,
   membership: WorkspaceMembershipResponse,
+  generalChannelId: Schema.String,
 }).annotate({ identifier: "WorkspaceSummaryResponse" });
 export interface WorkspaceSummaryResponse extends Schema.Schema.Type<
   typeof WorkspaceSummaryResponse
@@ -42,6 +43,7 @@ export const WorkspaceAccessResponse = Schema.Struct({
   }),
   identity: WorkspaceIdentityResponse,
   membership: WorkspaceMembershipResponse,
+  generalChannelId: Schema.String,
 }).annotate({ identifier: "WorkspaceAccessResponse" });
 export interface WorkspaceAccessResponse extends Schema.Schema.Type<
   typeof WorkspaceAccessResponse
@@ -106,6 +108,7 @@ const workspaceMutationResponseFields = {
 export const WorkspaceCreatedResponse = Schema.Struct({
   outcome: Schema.Literals(["WorkspaceCreated"]),
   ...workspaceMutationResponseFields,
+  generalChannelId: Schema.String,
 }).annotate({ identifier: "WorkspaceCreatedResponse" });
 export interface WorkspaceCreatedResponse extends Schema.Schema.Type<
   typeof WorkspaceCreatedResponse

@@ -1,6 +1,7 @@
 import { expect, layer } from "@effect/vitest";
 import {
   AcceptWorkspaceInvitationCommand,
+  ChannelAccess,
   ChangeWorkspaceRoleCommand,
   CreateWorkspaceCommand,
   GetChannelForActorInput,
@@ -38,6 +39,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       const suffix = randomUUID();
       const accountId = yield* makeUserId(`workspace-create-account-${suffix}`);
       const sql = yield* SqlClient.SqlClient;
+      const channels = yield* ChannelAccess;
       const workspaces = yield* WorkspaceAccess;
 
       yield* sql`
@@ -56,6 +58,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         }),
       );
       const found = yield* workspaces.getForActor(accountId, created.workspaceId);
+      const general = yield* channels.getPublicForActor(
+        accountId,
+        created.workspaceId,
+        created.generalChannelId,
+      );
       const auditEvents = yield* sql<{
         eventType: string;
         occurredAt: Date;
@@ -72,6 +79,16 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
       `;
 
       expect(found.membership.role).toBe("owner");
+      expect(general).toMatchObject({
+        channel: {
+          id: created.generalChannelId,
+          name: "general",
+          purpose: "A shared place for workspace-wide topics.",
+          visibility: "public",
+        },
+        maintainer: { id: created.workspaceIdentityId },
+        hasChannelMembership: true,
+      });
       expect(auditEvents).toEqual([
         {
           eventType: "workspace.created",
@@ -79,6 +96,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           metadata: {
             workspaceId: created.workspaceId,
             workspaceIdentityId: created.workspaceIdentityId,
+            generalChannelId: created.generalChannelId,
           },
         },
       ]);
@@ -311,8 +329,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           (${adminIdentityId}, ${workspaceId}, ${adminAccountId}, 'Boundary Admin', '/avatars/admin.svg', 'admin')
       `;
       yield* sql`
-        INSERT INTO channels (id, workspace_id, name, visibility)
-        VALUES (${channelId}, ${workspaceId}, 'boundary', 'private')
+        INSERT INTO channels (id, workspace_id, name, purpose, visibility, maintainer_identity_id)
+        VALUES (${channelId}, ${workspaceId}, 'boundary', 'Boundary access checks.', 'public', ${adminIdentityId})
       `;
       yield* sql`
         INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
@@ -410,6 +428,13 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           channelId,
         }),
       ).pipe(Effect.flip);
+      const transferredChannel = yield* getChannelForActor(
+        GetChannelForActorInput.make({
+          actorId: ownerAccountId,
+          workspaceId,
+          channelId,
+        }),
+      );
 
       expect(yield* workspaces.listForActor(adminAccountId)).toEqual([]);
       for (const failure of [
@@ -427,6 +452,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
         expect(failure).toBeInstanceOf(WorkspaceUnavailable);
       }
       expect(channelFailure._tag).toBe("Application.ChannelUnavailable");
+      expect(transferredChannel.maintainerIdentityId).toBe(ownerIdentityId);
     }),
   );
 
@@ -915,10 +941,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Access lifecycle", (it)
           (${ownerIdentityId}, ${workspaceId}, ${ownerId}, 'Channel Owner', '/avatars/owner.svg', 'owner')
       `;
       yield* sql`
-        INSERT INTO channels (id, workspace_id, name, visibility)
+        INSERT INTO channels (id, workspace_id, name, purpose, visibility, maintainer_identity_id)
         VALUES
-          (${publicChannelId}, ${workspaceId}, 'general', 'public'),
-          (${privateChannelId}, ${workspaceId}, 'leadership', 'private')
+          (${publicChannelId}, ${workspaceId}, 'general', 'General coordination.', 'public', ${ownerIdentityId}),
+          (${privateChannelId}, ${workspaceId}, 'leadership', 'Leadership coordination.', 'private', ${ownerIdentityId})
       `;
       yield* sql`
         INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
