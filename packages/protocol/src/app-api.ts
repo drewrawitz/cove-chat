@@ -26,6 +26,7 @@ import {
   WorkspaceInvitationUnavailableResponse,
   WorkspaceUnavailableResponse,
 } from "./workspaces/index.ts";
+import { TopicApiGroup, TopicUnavailableResponse } from "./topics/index.ts";
 
 export const CoveAppErrorResponse = Schema.Union([
   CsrfValidationFailedResponse,
@@ -45,12 +46,14 @@ export const CoveAppErrorResponse = Schema.Union([
   PrivateChannelMaintainerCannotLeaveResponse,
   ChannelMemberUnavailableResponse,
   ChannelUnavailableResponse,
+  TopicUnavailableResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 
 export const CoveAppApi = HttpApi.make("CoveAppApi")
   .add(AuthApiGroup)
   .add(WorkspaceApiGroup)
   .add(ChannelApiGroup)
+  .add(TopicApiGroup)
   .annotate(HttpApi.AdditionalSchemas, [CoveAppErrorResponse])
   .annotate(OpenApi.Title, "Cove App API")
   .annotate(OpenApi.Description, "The first-party HTTP interface used by Cove applications.")

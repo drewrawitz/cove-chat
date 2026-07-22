@@ -47,6 +47,19 @@ export {
 } from "./auth/index.ts";
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
 export {
+  CreateTopicRequest,
+  TopicApiGroup,
+  TopicAuthorResponse,
+  TopicContributionResponse,
+  TopicErrorResponses,
+  TopicIntentRequest,
+  TopicIntentValue,
+  TopicListResponse,
+  TopicResponse,
+  TopicSummaryResponse,
+  TopicUnavailableResponse,
+} from "./topics/index.ts";
+export {
   AcceptWorkspaceInvitationRequest,
   AlreadyWorkspaceMemberResponse,
   ChangeWorkspaceRoleRequest,

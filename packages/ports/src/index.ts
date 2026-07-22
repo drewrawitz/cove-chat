@@ -49,6 +49,15 @@ export {
 export { MembershipRepository, type MembershipRepositoryService } from "./memberships/index.ts";
 export { PersistenceError } from "./persistence-error.ts";
 export { TransactionManager, type TransactionManagerService } from "./transaction-manager.ts";
+
+export {
+  TopicAuthorRecord,
+  TopicContributionRecord,
+  TopicRecord,
+  TopicRepository,
+  TopicSummaryRecord,
+  type TopicRepositoryService,
+} from "./topics/index.ts";
 export {
   WorkspaceInvitationNotifier,
   WorkspaceInvitationNotificationError,

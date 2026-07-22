@@ -23,9 +23,11 @@ import {
   ChannelAccess,
   ChannelAccessFailure,
   ChannelAdministrationForbidden,
+  ChannelConversationContext,
   PrivateChannelMaintainerCannotLeave,
   ChannelMaintainerView,
   ChannelMemberView,
+  WorkspaceIdentityView,
   ChannelView,
   ChannelMembershipRosterView,
   ChannelMemberUnavailable,
@@ -137,7 +139,7 @@ const make = Effect.gen(function* () {
     if (record === undefined || !canActorViewChannel(actor, record)) {
       return yield* Effect.fail(new ChannelUnavailable({ channelId }));
     }
-    return record;
+    return { actor, record };
   });
 
   const membershipRosterView = Effect.fn("ChannelAccess.membershipRosterView")(function* (
@@ -246,7 +248,7 @@ const make = Effect.gen(function* () {
     ),
     getPublicForActor: Effect.fn("ChannelAccess.getPublicForActor")(
       function* (actorAccountId, workspaceId, channelId) {
-        const record = yield* findVisibleChannel(actorAccountId, workspaceId, channelId);
+        const { record } = yield* findVisibleChannel(actorAccountId, workspaceId, channelId);
         if (record.channel.visibility !== "public") {
           return yield* Effect.fail(new ChannelUnavailable({ channelId }));
         }
@@ -256,9 +258,25 @@ const make = Effect.gen(function* () {
     ),
     getForActor: Effect.fn("ChannelAccess.getForActor")(
       function* (actorAccountId, workspaceId, channelId) {
-        return channelView(yield* findVisibleChannel(actorAccountId, workspaceId, channelId));
+        const { record } = yield* findVisibleChannel(actorAccountId, workspaceId, channelId);
+        return channelView(record);
       },
       (effect) => recoverPersistence("ChannelAccess.getForActor", effect),
+    ),
+    getConversationContextForActor: Effect.fn("ChannelAccess.getConversationContextForActor")(
+      function* (actorAccountId, workspaceId, channelId) {
+        const { actor, record } = yield* findVisibleChannel(actorAccountId, workspaceId, channelId);
+        return ChannelConversationContext.make({
+          channel: record.channel,
+          actor: WorkspaceIdentityView.make({
+            id: actor.id,
+            name: actor.name,
+            avatarUrl: actor.avatarUrl,
+          }),
+          hasChannelMembership: record.hasChannelMembership,
+        });
+      },
+      (effect) => recoverPersistence("ChannelAccess.getConversationContextForActor", effect),
     ),
     createPublic: Effect.fn("ChannelAccess.createPublic")(
       (command) => create(command, "public"),

@@ -3,7 +3,7 @@ import {
   ConsoleEmailSender,
   WorkspaceInvitationEmailNotifier,
 } from "@cove/infrastructure-email";
-import { ChannelAccessLive } from "@cove/application";
+import { ChannelAccessLive, TopicAccessLive } from "@cove/application";
 import { PostgresClientLive, PostgresRepositories } from "@cove/infrastructure-postgres";
 import { Effect, Layer } from "effect";
 import { ApiConfiguration, ApiConfigurationLive } from "./api-configuration.ts";
@@ -27,12 +27,17 @@ const PostgresAuthLive = PostgresRepositories.pipe(
 );
 
 const ChannelApplicationLive = ChannelAccessLive.pipe(Layer.provide(PostgresAuthLive));
+const TopicApplicationLive = TopicAccessLive.pipe(
+  Layer.provide(ChannelApplicationLive),
+  Layer.provide(PostgresAuthLive),
+);
 
 const InfrastructureLive = Layer.mergeAll(
   NodeServerLive,
   PostgresHealthLive,
   PostgresAuthLive,
   ChannelApplicationLive,
+  TopicApplicationLive,
   EmailLive,
 ).pipe(Layer.provideMerge(ApiConfigurationLive));
 

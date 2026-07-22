@@ -15,6 +15,8 @@ import { Route as WorkspaceInvitationsRedeemRouteImport } from './routes/workspa
 import { Route as AuthVerifyRouteImport } from './routes/auth.verify'
 import { Route as WorkspacesWorkspaceIdIndexRouteImport } from './routes/workspaces.$workspaceId.index'
 import { Route as WorkspacesWorkspaceIdChannelsChannelIdRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId'
+import { Route as WorkspacesWorkspaceIdChannelsChannelIdIndexRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId.index'
+import { Route as WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId.topics.$topicId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -49,6 +51,18 @@ const WorkspacesWorkspaceIdChannelsChannelIdRoute =
     path: '/channels/$channelId',
     getParentRoute: () => WorkspacesWorkspaceIdRoute,
   } as any)
+const WorkspacesWorkspaceIdChannelsChannelIdIndexRoute =
+  WorkspacesWorkspaceIdChannelsChannelIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => WorkspacesWorkspaceIdChannelsChannelIdRoute,
+  } as any)
+const WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute =
+  WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRouteImport.update({
+    id: '/topics/$topicId',
+    path: '/topics/$topicId',
+    getParentRoute: () => WorkspacesWorkspaceIdChannelsChannelIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -56,14 +70,17 @@ export interface FileRoutesByFullPath {
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
   '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
-  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRouteWithChildren
+  '/workspaces/$workspaceId/channels/$channelId/': typeof WorkspacesWorkspaceIdChannelsChannelIdIndexRoute
+  '/workspaces/$workspaceId/channels/$channelId/topics/$topicId': typeof WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth/verify': typeof AuthVerifyRoute
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdIndexRoute
-  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdIndexRoute
+  '/workspaces/$workspaceId/channels/$channelId/topics/$topicId': typeof WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -72,7 +89,9 @@ export interface FileRoutesById {
   '/workspace-invitations/redeem': typeof WorkspaceInvitationsRedeemRoute
   '/workspaces/$workspaceId': typeof WorkspacesWorkspaceIdRouteWithChildren
   '/workspaces/$workspaceId/': typeof WorkspacesWorkspaceIdIndexRoute
-  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+  '/workspaces/$workspaceId/channels/$channelId': typeof WorkspacesWorkspaceIdChannelsChannelIdRouteWithChildren
+  '/workspaces/$workspaceId/channels/$channelId/': typeof WorkspacesWorkspaceIdChannelsChannelIdIndexRoute
+  '/workspaces/$workspaceId/channels/$channelId/topics/$topicId': typeof WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -83,6 +102,8 @@ export interface FileRouteTypes {
     | '/workspaces/$workspaceId'
     | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/channels/$channelId'
+    | '/workspaces/$workspaceId/channels/$channelId/'
+    | '/workspaces/$workspaceId/channels/$channelId/topics/$topicId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -90,6 +111,7 @@ export interface FileRouteTypes {
     | '/workspace-invitations/redeem'
     | '/workspaces/$workspaceId'
     | '/workspaces/$workspaceId/channels/$channelId'
+    | '/workspaces/$workspaceId/channels/$channelId/topics/$topicId'
   id:
     | '__root__'
     | '/'
@@ -98,6 +120,8 @@ export interface FileRouteTypes {
     | '/workspaces/$workspaceId'
     | '/workspaces/$workspaceId/'
     | '/workspaces/$workspaceId/channels/$channelId'
+    | '/workspaces/$workspaceId/channels/$channelId/'
+    | '/workspaces/$workspaceId/channels/$channelId/topics/$topicId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -151,18 +175,50 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRouteImport
       parentRoute: typeof WorkspacesWorkspaceIdRoute
     }
+    '/workspaces/$workspaceId/channels/$channelId/': {
+      id: '/workspaces/$workspaceId/channels/$channelId/'
+      path: '/'
+      fullPath: '/workspaces/$workspaceId/channels/$channelId/'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdIndexRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+    }
+    '/workspaces/$workspaceId/channels/$channelId/topics/$topicId': {
+      id: '/workspaces/$workspaceId/channels/$channelId/topics/$topicId'
+      path: '/topics/$topicId'
+      fullPath: '/workspaces/$workspaceId/channels/$channelId/topics/$topicId'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRouteImport
+      parentRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+    }
   }
 }
 
+interface WorkspacesWorkspaceIdChannelsChannelIdRouteChildren {
+  WorkspacesWorkspaceIdChannelsChannelIdIndexRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdIndexRoute
+  WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute
+}
+
+const WorkspacesWorkspaceIdChannelsChannelIdRouteChildren: WorkspacesWorkspaceIdChannelsChannelIdRouteChildren =
+  {
+    WorkspacesWorkspaceIdChannelsChannelIdIndexRoute:
+      WorkspacesWorkspaceIdChannelsChannelIdIndexRoute,
+    WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute:
+      WorkspacesWorkspaceIdChannelsChannelIdTopicsTopicIdRoute,
+  }
+
+const WorkspacesWorkspaceIdChannelsChannelIdRouteWithChildren =
+  WorkspacesWorkspaceIdChannelsChannelIdRoute._addFileChildren(
+    WorkspacesWorkspaceIdChannelsChannelIdRouteChildren,
+  )
+
 interface WorkspacesWorkspaceIdRouteChildren {
   WorkspacesWorkspaceIdIndexRoute: typeof WorkspacesWorkspaceIdIndexRoute
-  WorkspacesWorkspaceIdChannelsChannelIdRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRoute
+  WorkspacesWorkspaceIdChannelsChannelIdRoute: typeof WorkspacesWorkspaceIdChannelsChannelIdRouteWithChildren
 }
 
 const WorkspacesWorkspaceIdRouteChildren: WorkspacesWorkspaceIdRouteChildren = {
   WorkspacesWorkspaceIdIndexRoute: WorkspacesWorkspaceIdIndexRoute,
   WorkspacesWorkspaceIdChannelsChannelIdRoute:
-    WorkspacesWorkspaceIdChannelsChannelIdRoute,
+    WorkspacesWorkspaceIdChannelsChannelIdRouteWithChildren,
 }
 
 const WorkspacesWorkspaceIdRouteWithChildren =

@@ -17,6 +17,12 @@ export type UserId = typeof UserId.Type;
 export const ChannelId = Identifier.pipe(Schema.brand("ChannelId"));
 export type ChannelId = typeof ChannelId.Type;
 
+export const TopicId = Identifier.pipe(Schema.brand("TopicId"));
+export type TopicId = typeof TopicId.Type;
+
+export const ContributionId = Identifier.pipe(Schema.brand("ContributionId"));
+export type ContributionId = typeof ContributionId.Type;
+
 export class InvalidIdentifier extends Schema.TaggedErrorClass<InvalidIdentifier>()(
   "Domain.InvalidIdentifier",
   {
@@ -26,6 +32,8 @@ export class InvalidIdentifier extends Schema.TaggedErrorClass<InvalidIdentifier
       "workspace-invitation",
       "user",
       "channel",
+      "topic",
+      "contribution",
     ]),
     reason: Schema.Literals(["empty", "not-trimmed"]),
   },
@@ -66,5 +74,15 @@ export function makeUserId(value: string) {
 export function makeChannelId(value: string) {
   return ChannelId.makeEffect(value).pipe(
     Effect.mapError(() => invalidIdentifier("channel", value)),
+  );
+}
+
+export function makeTopicId(value: string) {
+  return TopicId.makeEffect(value).pipe(Effect.mapError(() => invalidIdentifier("topic", value)));
+}
+
+export function makeContributionId(value: string) {
+  return ContributionId.makeEffect(value).pipe(
+    Effect.mapError(() => invalidIdentifier("contribution", value)),
   );
 }
