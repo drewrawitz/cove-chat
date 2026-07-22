@@ -9,30 +9,35 @@ import {
   DialogTrigger,
 } from "@cove/ui/components/dialog";
 import { type ReactElement } from "react";
-import { useChannelsGetPrivateChannelAdministration } from "../api/generated/cove-app.ts";
-import { PrivateChannelMemberForm } from "./private-channel-member-form.tsx";
+import { useChannelsGetChannelMembershipRoster } from "../api/generated/cove-app.ts";
+import { ChannelMemberForm } from "./channel-member-form.tsx";
 
-interface PrivateChannelMembershipProps {
+interface ChannelMembershipProps {
   readonly canAdminister: boolean;
   readonly channelId: string;
   readonly channelName: string;
+  readonly currentIdentityId: string;
+  readonly visibility: "private" | "public";
   readonly workspaceId: string;
 }
 
-export function PrivateChannelMembership({
+export function ChannelMembership({
   canAdminister,
   channelId,
   channelName,
+  currentIdentityId,
+  visibility,
   workspaceId,
-}: PrivateChannelMembershipProps): ReactElement {
-  const administration = useChannelsGetPrivateChannelAdministration(workspaceId, channelId, {
+}: ChannelMembershipProps): ReactElement {
+  const membershipRoster = useChannelsGetChannelMembershipRoster(workspaceId, channelId, {
     query: { retry: false },
   });
-  const memberCount = administration.data?.members.length;
+  const memberCount = membershipRoster.data?.members.length;
+  const memberAction = canAdminister ? "Manage" : "View";
   const memberCountLabel =
     memberCount === undefined
-      ? "Manage channel members"
-      : `Manage channel members, ${memberCount} ${memberCount === 1 ? "member" : "members"}`;
+      ? `${memberAction} channel members`
+      : `${memberAction} channel members, ${memberCount} ${memberCount === 1 ? "member" : "members"}`;
 
   return (
     <DialogRoot>
@@ -63,9 +68,11 @@ export function PrivateChannelMembership({
         <DialogPopup className="dark bg-card">
           <header className="flex items-start justify-between gap-6 border-b p-6 sm:p-8">
             <div>
-              <DialogTitle>Manage members</DialogTitle>
+              <DialogTitle>{canAdminister ? "Manage members" : "Channel members"}</DialogTitle>
               <DialogDescription className="mt-2">
-                Private Channel content is visible only to these people.
+                {visibility === "private"
+                  ? "Private Channel content is visible only to these people."
+                  : "These people have explicitly joined this Public Channel."}
               </DialogDescription>
             </div>
             <DialogClose
@@ -89,17 +96,17 @@ export function PrivateChannelMembership({
                 )}
               </div>
 
-              {administration.isPending ? (
+              {membershipRoster.isPending ? (
                 <p className="mt-4 text-sm text-muted-foreground" role="status">
                   Loading Channel Members…
                 </p>
-              ) : administration.isError ? (
+              ) : membershipRoster.isError ? (
                 <p className="mt-4 text-sm text-destructive" role="alert">
-                  Cove could not load this Private Channel's members.
+                  Cove could not load this Channel&apos;s members.
                 </p>
               ) : (
                 <ul className="mt-4 grid max-h-72 gap-2 overflow-y-auto rounded-xl border p-2">
-                  {administration.data.members.map((member) => (
+                  {membershipRoster.data.members.map((member) => (
                     <li
                       className="flex min-w-0 items-center gap-3 rounded-lg bg-background/40 p-3"
                       key={member.id}
@@ -121,12 +128,13 @@ export function PrivateChannelMembership({
                 <h3 id="add-channel-members-heading" className="text-lg font-semibold">
                   Add members
                 </h3>
-                <PrivateChannelMemberForm
+                <ChannelMemberForm
                   channelId={channelId}
                   channelName={channelName}
                   className="mt-4"
+                  excludedIdentityId={currentIdentityId}
                   label="Member to add"
-                  onMembershipChanged={() => administration.refetch()}
+                  onMembershipChanged={() => membershipRoster.refetch()}
                   workspaceId={workspaceId}
                 />
               </section>

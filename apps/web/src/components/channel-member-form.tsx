@@ -1,12 +1,12 @@
 import { Button } from "@cove/ui/components/button";
 import { type FormEvent, type ReactElement, useState } from "react";
 import {
-  useChannelsAddPrivateChannelMember,
-  useChannelsListPrivateChannelMemberCandidates,
+  useChannelsAddChannelMember,
+  useChannelsListChannelMemberCandidates,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
 
-interface PrivateChannelMemberFormProps {
+interface ChannelMemberFormProps {
   readonly channelId: string;
   readonly channelName: string;
   readonly className?: string;
@@ -16,7 +16,7 @@ interface PrivateChannelMemberFormProps {
   readonly workspaceId: string;
 }
 
-export function PrivateChannelMemberForm({
+export function ChannelMemberForm({
   channelId,
   channelName,
   className,
@@ -24,11 +24,11 @@ export function PrivateChannelMemberForm({
   label,
   onMembershipChanged,
   workspaceId,
-}: PrivateChannelMemberFormProps): ReactElement {
-  const candidates = useChannelsListPrivateChannelMemberCandidates(workspaceId, channelId, {
+}: ChannelMemberFormProps): ReactElement {
+  const candidates = useChannelsListChannelMemberCandidates(workspaceId, channelId, {
     query: { retry: false },
   });
-  const addMember = useChannelsAddPrivateChannelMember();
+  const addMember = useChannelsAddChannelMember();
   const [membershipMessage, setMembershipMessage] = useState<string>();
   const availableMembers =
     candidates.data?.members.filter((candidate) => candidate.id !== excludedIdentityId) ?? [];
@@ -57,14 +57,14 @@ export function PrivateChannelMemberForm({
     <div className={className}>
       {candidates.isPending ? (
         <p className="text-sm text-muted-foreground" role="status">
-          Loading available Full Members…
+          Loading available members…
         </p>
       ) : candidates.isError ? (
         <p className="text-sm text-destructive" role="alert">
-          Cove could not load eligible Full Members for this Private Channel.
+          Cove could not load eligible members for this Channel.
         </p>
       ) : availableMembers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No other Full Members are available to add.</p>
+        <p className="text-sm text-muted-foreground">No other members are available to add.</p>
       ) : (
         <form className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" onSubmit={add}>
           <label className="text-sm font-medium">
@@ -76,7 +76,7 @@ export function PrivateChannelMemberForm({
               className="mt-2 h-11 w-full rounded-xl border bg-background px-3 font-normal outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <option value="" disabled>
-                Choose a Full Member
+                Choose a member
               </option>
               {availableMembers.map((member) => (
                 <option key={member.id} value={member.id}>

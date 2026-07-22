@@ -56,6 +56,7 @@ const ChannelRow = Schema.Struct({
 interface ChannelRow extends Schema.Schema.Type<typeof ChannelRow> {}
 
 const MembershipInsertResult = Schema.Struct({ inserted: Schema.Boolean });
+const MembershipDeleteResult = Schema.Struct({ deleted: Schema.Boolean });
 
 function accessRecord(row: ChannelRow): ChannelAccessRecord {
   return ChannelAccessRecord.make({
@@ -256,7 +257,6 @@ const make = Effect.gen(function* () {
         AND membership.channel_id = ${channelId}
       WHERE identity.workspace_id = ${workspaceId}
         AND identity.membership_ended_at IS NULL
-        AND identity.role <> 'guest'
         AND membership.identity_id IS NULL
       ORDER BY lower(identity.name), identity.id
     `,
@@ -307,6 +307,25 @@ const make = Effect.gen(function* () {
         RETURNING 1
       )
       SELECT EXISTS (SELECT 1 FROM inserted) AS inserted
+    `,
+  });
+
+  const removeMembership = SqlSchema.findOne({
+    Request: Schema.Struct({
+      workspaceId: WorkspaceId,
+      channelId: ChannelId,
+      workspaceIdentityId: WorkspaceIdentityId,
+    }),
+    Result: MembershipDeleteResult,
+    execute: ({ workspaceId, channelId, workspaceIdentityId }) => sql`
+      WITH deleted AS (
+        DELETE FROM channel_memberships
+        WHERE workspace_id = ${workspaceId}
+          AND channel_id = ${channelId}
+          AND identity_id = ${workspaceIdentityId}
+        RETURNING 1
+      )
+      SELECT EXISTS (SELECT 1 FROM deleted) AS deleted
     `,
   });
 
@@ -371,6 +390,13 @@ const make = Effect.gen(function* () {
           Effect.map((result) => result.inserted),
         ),
       (effect) => mapFailure("ChannelAccessRepository.addMembership", effect),
+    ),
+    removeMembership: Effect.fn("PostgresChannelAccessRepository.removeMembership")(
+      (workspaceId, channelId, workspaceIdentityId) =>
+        removeMembership({ workspaceId, channelId, workspaceIdentityId }).pipe(
+          Effect.map((result) => result.deleted),
+        ),
+      (effect) => mapFailure("ChannelAccessRepository.removeMembership", effect),
     ),
   });
 });

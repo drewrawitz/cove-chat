@@ -1,17 +1,18 @@
 import type {
+  ChannelMembershipRosterView,
   ChannelMaintainerView,
   ChannelMemberView,
   ChannelView,
-  PrivateChannelAdministrationView,
 } from "@cove/application";
 import {
+  ChannelMembershipRosterResponse,
+  ChannelMemberCandidateListResponse,
   ChannelMemberResponse,
   ChannelMaintainerResponse,
   ChannelResponse,
   PrivateChannelAdministrationListResponse,
   PrivateChannelAdministrationResponse,
   PrivateChannelListResponse,
-  PrivateChannelMemberCandidateListResponse,
   PrivateChannelResponse,
   PublicChannelListResponse,
   PublicChannelResponse,
@@ -71,25 +72,37 @@ export const privateChannelListResponse = (
     ),
   });
 
-export const privateChannelMemberCandidateListResponse = (
+export const channelMemberCandidateListResponse = (
   members: ReadonlyArray<ChannelMemberView>,
-): PrivateChannelMemberCandidateListResponse =>
-  PrivateChannelMemberCandidateListResponse.make({
+): ChannelMemberCandidateListResponse =>
+  ChannelMemberCandidateListResponse.make({
     members: members.map(channelMemberResponse),
   });
 
-export const privateChannelAdministrationResponse = (
-  view: PrivateChannelAdministrationView,
+const channelMembershipRosterResponseFields = (view: ChannelMembershipRosterView) => ({
+  ...channelViewFields(view),
+  members: view.members.map(channelMemberResponse),
+  actorHasChannelMembership: view.actorHasChannelMembership,
+});
+
+export const channelMembershipRosterResponse = (
+  view: ChannelMembershipRosterView,
+): ChannelMembershipRosterResponse =>
+  ChannelMembershipRosterResponse.make({
+    ...channelMembershipRosterResponseFields(view),
+    visibility: view.channel.visibility,
+  });
+
+const privateChannelAdministrationResponse = (
+  view: ChannelMembershipRosterView,
 ): PrivateChannelAdministrationResponse =>
   PrivateChannelAdministrationResponse.make({
-    ...channelViewFields(view),
+    ...channelMembershipRosterResponseFields(view),
     visibility: "private",
-    members: view.members.map(channelMemberResponse),
-    actorHasChannelMembership: view.actorHasChannelMembership,
   });
 
 export const privateChannelAdministrationListResponse = (
-  channels: ReadonlyArray<PrivateChannelAdministrationView>,
+  channels: ReadonlyArray<ChannelMembershipRosterView>,
 ): PrivateChannelAdministrationListResponse =>
   PrivateChannelAdministrationListResponse.make({
     channels: channels.map(privateChannelAdministrationResponse),

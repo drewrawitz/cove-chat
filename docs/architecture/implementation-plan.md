@@ -279,7 +279,7 @@ Contains complete use cases such as:
 
 - `SignIn` and `SignOut`.
 - `CreateWorkspace` and `InviteMember`.
-- `CreateChannel`, `JoinChannel`, and `AddPrivateChannelMember`.
+- `CreateChannel`, `JoinChannel`, `AddChannelMember`, and `LeaveChannel`.
 - `SendMessage`, `EditMessage`, and `DeleteMessage`.
 - `ReplyToThread` and `AddReaction`.
 - `UploadFile`, `AttachFile`, and `AuthorizeFileDownload`.

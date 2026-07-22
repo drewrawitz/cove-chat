@@ -30,7 +30,21 @@ it.live(
       );
       yield* browserAction(() => page.getByRole("button", { name: "Create channel" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "Product Lab" }).waitFor());
-      yield* browserAction(() => page.getByText("Joined", { exact: true }).waitFor());
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "Manage channel members, 1 member" }).click(),
+      );
+      const channelMembers = page.getByRole("dialog", { name: "Manage members" });
+      yield* browserAction(() =>
+        channelMembers.getByLabel("Member to add").selectOption({ label: "Carol in Cove" }),
+      );
+      yield* browserAction(() =>
+        channelMembers.getByRole("button", { name: "Add member" }).click(),
+      );
+      yield* browserAction(() => page.getByText("Carol in Cove joined Product Lab.").waitFor());
+      yield* browserAction(() =>
+        channelMembers.getByRole("button", { name: "Close member manager" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).waitFor());
       yield* browserAction(() =>
         page
           .getByRole("navigation", { name: "Your channels" })
@@ -77,6 +91,17 @@ it.live(
         page.getByText("A durable place to explore and maintain product experiments.").waitFor(),
       );
       yield* browserAction(() => page.getByText("Maintained by Bob in Cove").waitFor());
+      yield* browserAction(() =>
+        page.getByRole("button", { name: "View channel members, 2 members" }).click(),
+      );
+      const publicChannelMembers = page.getByRole("dialog", { name: "Channel members" });
+      yield* browserAction(() => publicChannelMembers.getByText("Carol in Cove").waitFor());
+      expect(
+        yield* browserAction(() => publicChannelMembers.getByLabel("Member to add").count()),
+      ).toBe(0);
+      yield* browserAction(() =>
+        publicChannelMembers.getByRole("button", { name: "Close member manager" }).click(),
+      );
       expect(
         yield* browserAction(() =>
           page
@@ -94,6 +119,21 @@ it.live(
           .getByRole("link", { name: "Product Lab" })
           .waitFor(),
       );
+
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).click());
+      const leaveDialog = page.getByRole("dialog", { name: "Leave Product Lab?" });
+      yield* browserAction(() =>
+        leaveDialog.getByRole("button", { name: "Leave channel" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Join channel" }).waitFor());
+      expect(
+        yield* browserAction(() =>
+          page
+            .getByRole("navigation", { name: "Your channels" })
+            .getByRole("link", { name: "Product Lab" })
+            .count(),
+        ),
+      ).toBe(0);
 
       yield* browserAction(() => page.goto(acceptance.webUrl));
       yield* waitForWorkspaceChooser(page);
@@ -126,6 +166,16 @@ it.live(
       );
       yield* browserAction(() =>
         page.getByText("This channel is not available in this workspace.").waitFor(),
+      );
+
+      yield* browserAction(() => page.context().clearCookies());
+      yield* signIn(acceptance, "carol@cove.local");
+      yield* openConversations(page);
+      yield* browserAction(() =>
+        page
+          .getByRole("navigation", { name: "Your channels" })
+          .getByRole("link", { name: "Product Lab" })
+          .waitFor(),
       );
     }).pipe(Effect.provide(BrowserAcceptanceLive)),
   120_000,

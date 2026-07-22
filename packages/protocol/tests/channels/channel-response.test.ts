@@ -1,9 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import {
+  ChannelMembershipRosterResponse,
+  ChannelMemberCandidateListResponse,
   ChannelResponse,
   PrivateChannelAdministrationResponse,
   PrivateChannelListResponse,
-  PrivateChannelMemberCandidateListResponse,
 } from "../../src/index.ts";
 import { Effect, Schema } from "effect";
 
@@ -62,6 +63,37 @@ it.effect("encodes Private Channel administration metadata with visible membersh
   }),
 );
 
+it.effect("encodes Public Channel administration metadata with visible membership", () =>
+  Effect.gen(function* () {
+    const encoded = yield* Schema.encodeUnknownEffect(ChannelMembershipRosterResponse)({
+      id: "channel-1",
+      workspaceId: "workspace-1",
+      name: "general",
+      purpose: "Coordinate public work.",
+      visibility: "public",
+      maintainer: {
+        id: "identity-1",
+        name: "Alice",
+        avatarUrl: "/avatars/alice.svg",
+      },
+      members: [
+        {
+          id: "identity-1",
+          name: "Alice",
+          avatarUrl: "/avatars/alice.svg",
+        },
+      ],
+      actorHasChannelMembership: true,
+    });
+
+    expect(encoded).toMatchObject({
+      visibility: "public",
+      members: [{ id: "identity-1" }],
+      actorHasChannelMembership: true,
+    });
+  }),
+);
+
 it.effect("encodes the actor's joined Private Channels", () =>
   Effect.gen(function* () {
     const encoded = yield* Schema.encodeUnknownEffect(PrivateChannelListResponse)({
@@ -88,9 +120,9 @@ it.effect("encodes the actor's joined Private Channels", () =>
   }),
 );
 
-it.effect("encodes eligible Private Channel member candidates", () =>
+it.effect("encodes eligible Channel Member candidates", () =>
   Effect.gen(function* () {
-    const encoded = yield* Schema.encodeUnknownEffect(PrivateChannelMemberCandidateListResponse)({
+    const encoded = yield* Schema.encodeUnknownEffect(ChannelMemberCandidateListResponse)({
       members: [{ id: "identity-2", name: "Bob", avatarUrl: "/avatars/bob.svg" }],
     });
 

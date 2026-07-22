@@ -14,7 +14,8 @@ import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelLoading } from "../components/channel-loading.tsx";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
-import { PrivateChannelMembership } from "../components/private-channel-membership.tsx";
+import { ChannelMembership } from "../components/channel-membership.tsx";
+import { LeaveChannel } from "../components/leave-channel.tsx";
 import { WorkspaceSwitcher } from "../components/workspace-switcher.tsx";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 
@@ -90,6 +91,9 @@ function ChannelPage(): ReactElement {
     );
   } else {
     const displayName = channelDisplayName(channel.data.name);
+    const isPrivateMaintainer =
+      channel.data.visibility === "private" &&
+      channel.data.maintainer.id === workspace.data.identity.id;
     channelContent = (
       <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
         <header className="flex flex-wrap items-start justify-between gap-6 pb-10">
@@ -105,23 +109,35 @@ function ChannelPage(): ReactElement {
           </div>
 
           <div className="flex items-center gap-3">
-            {channel.data.visibility === "private" ? (
-              <PrivateChannelMembership
-                canAdminister={
-                  isWorkspaceAdministrator(workspace.data.membership.role) ||
-                  channel.data.maintainer.id === workspace.data.identity.id
-                }
-                channelId={channelId}
-                channelName={displayName}
-                workspaceId={workspaceId}
-              />
-            ) : null}
+            <ChannelMembership
+              canAdminister={
+                isWorkspaceAdministrator(workspace.data.membership.role) ||
+                channel.data.maintainer.id === workspace.data.identity.id
+              }
+              channelId={channelId}
+              channelName={displayName}
+              currentIdentityId={workspace.data.identity.id}
+              visibility={channel.data.visibility}
+              workspaceId={workspaceId}
+            />
             <img
               className="size-10 rounded-full border border-border bg-muted object-cover"
               src={channel.data.maintainer.avatarUrl}
               alt=""
             />
-            {channel.data.hasChannelMembership ? (
+            {channel.data.hasChannelMembership && !isPrivateMaintainer ? (
+              <LeaveChannel
+                channelId={channelId}
+                channelName={displayName}
+                generalChannelId={workspace.data.generalChannelId}
+                visibility={channel.data.visibility}
+                willLoseAccess={
+                  channel.data.visibility === "private" ||
+                  workspace.data.membership.role === "guest"
+                }
+                workspaceId={workspaceId}
+              />
+            ) : channel.data.hasChannelMembership ? (
               <span className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
                 Joined
               </span>

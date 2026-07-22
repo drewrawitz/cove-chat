@@ -10,15 +10,17 @@ import { WorkspaceUnavailableResponse } from "../workspaces/workspace-error-resp
 import { FullMemberUnavailableResponse } from "../workspaces/workspace-error-response.ts";
 import {
   ChannelAdministrationForbiddenResponse,
+  PrivateChannelMaintainerCannotLeaveResponse,
+  ChannelMemberUnavailableResponse,
   ChannelUnavailableResponse,
 } from "./channel-error-response.ts";
 import { CreatePrivateChannelRequest, CreatePublicChannelRequest } from "./channel-request.ts";
 import {
+  ChannelMembershipRosterResponse,
+  ChannelMemberCandidateListResponse,
   ChannelResponse,
   PrivateChannelAdministrationListResponse,
-  PrivateChannelAdministrationResponse,
   PrivateChannelListResponse,
-  PrivateChannelMemberCandidateListResponse,
   PublicChannelListResponse,
   PublicChannelResponse,
 } from "./channel-response.ts";
@@ -82,12 +84,12 @@ const ListPrivateChannelsEndpoint = HttpApiEndpoint.get(
   },
 ).middleware(SessionAuth);
 
-const ListPrivateChannelMemberCandidatesEndpoint = HttpApiEndpoint.get(
-  "listPrivateChannelMemberCandidates",
+const ListChannelMemberCandidatesEndpoint = HttpApiEndpoint.get(
+  "listChannelMemberCandidates",
   "/api/app/v1/workspaces/:workspaceId/channels/:channelId/member-candidates",
   {
     params: ChannelParams,
-    success: PrivateChannelMemberCandidateListResponse,
+    success: ChannelMemberCandidateListResponse,
     error: [ChannelUnavailableResponse, InternalServerErrorResponse],
   },
 ).middleware(SessionAuth);
@@ -116,16 +118,17 @@ const GetChannelEndpoint = HttpApiEndpoint.get(
   },
 ).middleware(SessionAuth);
 
-const AddPrivateChannelMemberEndpoint = HttpApiEndpoint.put(
-  "addPrivateChannelMember",
+const AddChannelMemberEndpoint = HttpApiEndpoint.put(
+  "addChannelMember",
   "/api/app/v1/workspaces/:workspaceId/channels/:channelId/members/:workspaceIdentityId",
   {
     params: ChannelMemberParams,
     headers: CsrfHeaders,
-    success: PrivateChannelAdministrationResponse,
+    success: ChannelMembershipRosterResponse,
     error: [
       CsrfValidationFailedResponse,
       ChannelUnavailableResponse,
+      ChannelMemberUnavailableResponse,
       FullMemberUnavailableResponse,
       WorkspaceUnavailableResponse,
       InternalServerErrorResponse,
@@ -133,12 +136,12 @@ const AddPrivateChannelMemberEndpoint = HttpApiEndpoint.put(
   },
 ).middleware(SessionAuth);
 
-const GetPrivateChannelAdministrationEndpoint = HttpApiEndpoint.get(
-  "getPrivateChannelAdministration",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/administration",
+const GetChannelMembershipRosterEndpoint = HttpApiEndpoint.get(
+  "getChannelMembershipRoster",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/members",
   {
     params: ChannelParams,
-    success: PrivateChannelAdministrationResponse,
+    success: ChannelMembershipRosterResponse,
     error: [ChannelUnavailableResponse, InternalServerErrorResponse],
   },
 ).middleware(SessionAuth);
@@ -154,15 +157,31 @@ const JoinPublicChannelEndpoint = HttpApiEndpoint.post(
   },
 ).middleware(SessionAuth);
 
+const LeaveChannelEndpoint = HttpApiEndpoint.delete(
+  "leaveChannel",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/membership",
+  {
+    params: ChannelParams,
+    headers: CsrfHeaders,
+    error: [
+      CsrfValidationFailedResponse,
+      PrivateChannelMaintainerCannotLeaveResponse,
+      ChannelUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
 export const ChannelApiGroup = HttpApiGroup.make("channels").add(
   ListPublicChannelsEndpoint,
   CreatePublicChannelEndpoint,
   CreatePrivateChannelEndpoint,
   ListPrivateChannelsEndpoint,
-  ListPrivateChannelMemberCandidatesEndpoint,
+  ListChannelMemberCandidatesEndpoint,
   ListPrivateChannelsForAdministrationEndpoint,
   GetChannelEndpoint,
-  GetPrivateChannelAdministrationEndpoint,
+  GetChannelMembershipRosterEndpoint,
   JoinPublicChannelEndpoint,
-  AddPrivateChannelMemberEndpoint,
+  LeaveChannelEndpoint,
+  AddChannelMemberEndpoint,
 );

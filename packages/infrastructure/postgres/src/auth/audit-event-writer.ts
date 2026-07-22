@@ -37,6 +37,9 @@ const make = Effect.gen(function* () {
       AuditEvent.match(event, {
         "authentication.sign_in": appendEvent,
         "channel.private_membership_added": appendEvent,
+        "channel.private_membership_removed": appendEvent,
+        "channel.public_membership_added": appendEvent,
+        "channel.public_membership_removed": appendEvent,
       }),
     ),
   });

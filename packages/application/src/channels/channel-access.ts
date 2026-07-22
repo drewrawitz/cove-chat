@@ -33,14 +33,14 @@ export const ChannelView = Schema.Struct({
 });
 export interface ChannelView extends Schema.Schema.Type<typeof ChannelView> {}
 
-export const PrivateChannelAdministrationView = Schema.Struct({
+export const ChannelMembershipRosterView = Schema.Struct({
   channel: Channel,
   maintainer: ChannelMaintainerView,
   members: Schema.Array(ChannelMemberView),
   actorHasChannelMembership: Schema.Boolean,
 });
-export interface PrivateChannelAdministrationView extends Schema.Schema.Type<
-  typeof PrivateChannelAdministrationView
+export interface ChannelMembershipRosterView extends Schema.Schema.Type<
+  typeof ChannelMembershipRosterView
 > {}
 
 const CreateChannelCommandFields = {
@@ -61,14 +61,14 @@ export interface CreatePrivateChannelCommand extends Schema.Schema.Type<
   typeof CreatePrivateChannelCommand
 > {}
 
-export const AddPrivateChannelMemberCommand = Schema.Struct({
+export const AddChannelMemberCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   workspaceIdentityId: WorkspaceIdentityId,
 });
-export interface AddPrivateChannelMemberCommand extends Schema.Schema.Type<
-  typeof AddPrivateChannelMemberCommand
+export interface AddChannelMemberCommand extends Schema.Schema.Type<
+  typeof AddChannelMemberCommand
 > {}
 
 export const JoinPublicChannelCommand = Schema.Struct({
@@ -80,6 +80,13 @@ export interface JoinPublicChannelCommand extends Schema.Schema.Type<
   typeof JoinPublicChannelCommand
 > {}
 
+export const LeaveChannelCommand = Schema.Struct({
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+});
+export interface LeaveChannelCommand extends Schema.Schema.Type<typeof LeaveChannelCommand> {}
+
 export class ChannelAccessFailure extends Schema.TaggedErrorClass<ChannelAccessFailure>()(
   "Application.ChannelAccessFailure",
   { operation: Schema.String },
@@ -88,6 +95,23 @@ export class ChannelAccessFailure extends Schema.TaggedErrorClass<ChannelAccessF
 export class ChannelAdministrationForbidden extends Schema.TaggedErrorClass<ChannelAdministrationForbidden>()(
   "Application.ChannelAdministrationForbidden",
   { workspaceId: WorkspaceId },
+) {}
+
+export class ChannelMemberUnavailable extends Schema.TaggedErrorClass<ChannelMemberUnavailable>()(
+  "Application.ChannelMemberUnavailable",
+  {
+    workspaceId: WorkspaceId,
+    channelId: ChannelId,
+    workspaceIdentityId: WorkspaceIdentityId,
+  },
+) {}
+
+export class PrivateChannelMaintainerCannotLeave extends Schema.TaggedErrorClass<PrivateChannelMaintainerCannotLeave>()(
+  "Application.PrivateChannelMaintainerCannotLeave",
+  {
+    workspaceId: WorkspaceId,
+    channelId: ChannelId,
+  },
 ) {}
 
 export interface ChannelAccessService {
@@ -111,17 +135,21 @@ export interface ChannelAccessService {
   readonly createPrivate: (
     command: CreatePrivateChannelCommand,
   ) => Effect.Effect<ChannelView, WorkspaceUnavailable | ChannelAccessFailure>;
-  readonly addPrivateMember: (
-    command: AddPrivateChannelMemberCommand,
+  readonly addMember: (
+    command: AddChannelMemberCommand,
   ) => Effect.Effect<
-    PrivateChannelAdministrationView,
-    ChannelAccessFailure | ChannelUnavailable | FullMemberUnavailable | WorkspaceUnavailable
+    ChannelMembershipRosterView,
+    | ChannelAccessFailure
+    | ChannelMemberUnavailable
+    | ChannelUnavailable
+    | FullMemberUnavailable
+    | WorkspaceUnavailable
   >;
   readonly listPrivateForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<ReadonlyArray<ChannelView>, ChannelAccessFailure | WorkspaceUnavailable>;
-  readonly listPrivateMemberCandidatesForActor: (
+  readonly listMemberCandidatesForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
     channelId: ChannelId,
@@ -130,17 +158,23 @@ export interface ChannelAccessService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
   ) => Effect.Effect<
-    ReadonlyArray<PrivateChannelAdministrationView>,
+    ReadonlyArray<ChannelMembershipRosterView>,
     ChannelAccessFailure | ChannelAdministrationForbidden | WorkspaceUnavailable
   >;
-  readonly getPrivateAdministrationForActor: (
+  readonly getMembershipRosterForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
     channelId: ChannelId,
-  ) => Effect.Effect<PrivateChannelAdministrationView, ChannelAccessFailure | ChannelUnavailable>;
+  ) => Effect.Effect<ChannelMembershipRosterView, ChannelAccessFailure | ChannelUnavailable>;
   readonly joinPublic: (
     command: JoinPublicChannelCommand,
   ) => Effect.Effect<ChannelView, ChannelUnavailable | ChannelAccessFailure>;
+  readonly leave: (
+    command: LeaveChannelCommand,
+  ) => Effect.Effect<
+    void,
+    PrivateChannelMaintainerCannotLeave | ChannelUnavailable | ChannelAccessFailure
+  >;
 }
 
 export class ChannelAccess extends Context.Service<ChannelAccess, ChannelAccessService>()(

@@ -26,11 +26,14 @@ it.live(
       yield* signIn(acceptance, "bob@cove.local");
       yield* openConversations(page);
       yield* createPrivateChannel(page, "Leadership", "Coordinate sensitive leadership work.");
+      const channelNavigation = page.getByRole("navigation", { name: "Your channels" });
       yield* browserAction(() =>
-        page
-          .getByRole("navigation", { name: "Your channels" })
-          .getByRole("link", { name: "Leadership" })
+        channelNavigation
+          .getByRole("link", { name: "Leadership, Private Channel", exact: true })
           .waitFor(),
+      );
+      yield* browserAction(() =>
+        channelNavigation.getByRole("link", { name: "General", exact: true }).waitFor(),
       );
       expect(
         yield* browserAction(() => page.getByRole("dialog", { name: "Manage members" }).count()),
@@ -60,6 +63,21 @@ it.live(
           .click(),
       );
       yield* browserAction(() => page.getByRole("heading", { name: "Leadership" }).waitFor());
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).click());
+      const leaveDialog = page.getByRole("dialog", { name: "Leave Leadership?" });
+      yield* browserAction(() =>
+        leaveDialog.getByRole("button", { name: "Leave channel" }).click(),
+      );
+      yield* browserAction(() => page.waitForURL("**/workspaces/demo-workspace/channels/general"));
+      yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
+      expect(
+        yield* browserAction(() =>
+          page
+            .getByRole("navigation", { name: "Your channels" })
+            .getByRole("link", { name: "Leadership" })
+            .count(),
+        ),
+      ).toBe(0);
       yield* createPrivateChannel(page, "Project Zebra", "Coordinate a private project.");
       yield* browserAction(() =>
         page.getByRole("button", { name: "Manage channel members, 1 member" }).click(),
