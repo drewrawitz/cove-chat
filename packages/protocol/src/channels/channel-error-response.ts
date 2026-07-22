@@ -16,6 +16,11 @@ const memberUnavailableDefinition = {
   message: "Channel member is unavailable.",
 } as const;
 
+const privateMaintainerCannotLeaveDefinition = {
+  code: "PRIVATE_CHANNEL_MAINTAINER_CANNOT_LEAVE",
+  message: "A Private Channel Maintainer cannot leave the Channel.",
+} as const;
+
 export const ChannelUnavailableResponse = Schema.Struct({
   code: Schema.Literals([unavailableDefinition.code]),
   message: Schema.Literals([unavailableDefinition.message]),
@@ -37,10 +42,20 @@ export const ChannelMemberUnavailableResponse = Schema.Struct({
   .annotate({ identifier: "ChannelMemberUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
+export const PrivateChannelMaintainerCannotLeaveResponse = Schema.Struct({
+  code: Schema.Literals([privateMaintainerCannotLeaveDefinition.code]),
+  message: Schema.Literals([privateMaintainerCannotLeaveDefinition.message]),
+})
+  .annotate({ identifier: "PrivateChannelMaintainerCannotLeaveResponse" })
+  .pipe(HttpApiSchema.status("Conflict"));
+
 export const ChannelErrorResponses = {
   administrationForbidden: ChannelAdministrationForbiddenResponse.make(
     administrationForbiddenDefinition,
   ),
   memberUnavailable: ChannelMemberUnavailableResponse.make(memberUnavailableDefinition),
+  privateMaintainerCannotLeave: PrivateChannelMaintainerCannotLeaveResponse.make(
+    privateMaintainerCannotLeaveDefinition,
+  ),
   unavailable: ChannelUnavailableResponse.make(unavailableDefinition),
 } as const;

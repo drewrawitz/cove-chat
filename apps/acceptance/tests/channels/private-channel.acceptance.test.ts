@@ -60,6 +60,21 @@ it.live(
           .click(),
       );
       yield* browserAction(() => page.getByRole("heading", { name: "Leadership" }).waitFor());
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).click());
+      const leaveDialog = page.getByRole("dialog", { name: "Leave Leadership?" });
+      yield* browserAction(() =>
+        leaveDialog.getByRole("button", { name: "Leave channel" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
+      yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
+      expect(
+        yield* browserAction(() =>
+          page
+            .getByRole("navigation", { name: "Your channels" })
+            .getByRole("link", { name: "Leadership" })
+            .count(),
+        ),
+      ).toBe(0);
       yield* createPrivateChannel(page, "Project Zebra", "Coordinate a private project.");
       yield* browserAction(() =>
         page.getByRole("button", { name: "Manage channel members, 1 member" }).click(),

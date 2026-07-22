@@ -4,6 +4,7 @@ import {
   CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
   JoinPublicChannelCommand,
+  LeaveChannelCommand,
 } from "@cove/application";
 import {
   ChannelName,
@@ -65,6 +66,18 @@ const channelMemberMutationErrorResponse = (error: unknown) => {
     default:
       return AuthErrorResponses.internalServerError;
   }
+};
+
+const leaveChannelErrorResponse = (error: unknown) => {
+  if (error === AuthErrorResponses.csrfValidationFailed) {
+    return AuthErrorResponses.csrfValidationFailed;
+  }
+  if (error === AuthErrorResponses.internalServerError) {
+    return AuthErrorResponses.internalServerError;
+  }
+  return errorTag(error) === "Application.PrivateChannelMaintainerCannotLeave"
+    ? ChannelErrorResponses.privateMaintainerCannotLeave
+    : channelErrorResponse(error);
 };
 
 const privateChannelAdministrationListErrorResponse = (error: unknown) =>
@@ -190,6 +203,16 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
           ),
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
+    )
+    .handle("leaveChannel", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorWorkspaceAndChannel(params);
+        const channels = yield* ChannelAccess;
+        yield* channels.leave(
+          LeaveChannelCommand.make({ actorAccountId: actorId, workspaceId, channelId }),
+        );
+      }).pipe(Effect.mapError(leaveChannelErrorResponse)),
     )
     .handle("addChannelMember", ({ headers, params }) =>
       Effect.gen(function* () {

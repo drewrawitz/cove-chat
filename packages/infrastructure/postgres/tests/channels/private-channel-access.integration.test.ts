@@ -4,6 +4,7 @@ import {
   ChannelAccess,
   CreatePrivateChannelCommand,
   CreateWorkspaceCommand,
+  LeaveChannelCommand,
   WorkspaceAccess,
 } from "@cove/application";
 import {
@@ -78,6 +79,19 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
           hasChannelMembership: true,
         },
       ]);
+
+      const leaveError = yield* channels
+        .leave(
+          LeaveChannelCommand.make({
+            actorAccountId: accountId,
+            workspaceId: workspace.workspaceId,
+            channelId,
+          }),
+        )
+        .pipe(Effect.flip);
+      expect(leaveError).toMatchObject({
+        _tag: "Application.PrivateChannelMaintainerCannotLeave",
+      });
 
       const memberships = yield* sql<{ identityId: string }>`
         SELECT identity_id AS "identityId"
@@ -275,6 +289,42 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
           },
         ]),
       );
+
+      yield* channels.leave(
+        LeaveChannelCommand.make({
+          actorAccountId: memberAccountId,
+          workspaceId: workspace.workspaceId,
+          channelId,
+        }),
+      );
+      const afterLeaving = yield* channels
+        .getForActor(memberAccountId, workspace.workspaceId, channelId)
+        .pipe(Effect.flip);
+      const membershipsAfterLeaving = yield* sql<{ identityId: string }>`
+        SELECT identity_id AS "identityId"
+        FROM channel_memberships
+        WHERE workspace_id = ${workspace.workspaceId}
+          AND channel_id = ${channelId}
+        ORDER BY identity_id
+      `;
+      const leaveAuditEvents = yield* sql<{ metadata: unknown }>`
+        SELECT metadata
+        FROM audit_events
+        WHERE actor_user_id = ${memberAccountId}
+          AND event_type = 'channel.private_membership_removed'
+      `;
+
+      expect(afterLeaving).toMatchObject({ _tag: "Application.ChannelUnavailable" });
+      expect(membershipsAfterLeaving).toEqual([{ identityId: workspace.workspaceIdentityId }]);
+      expect(leaveAuditEvents).toEqual([
+        {
+          metadata: {
+            workspaceId: workspace.workspaceId,
+            channelId,
+            workspaceIdentityId: memberIdentityId,
+          },
+        },
+      ]);
     }),
   );
 

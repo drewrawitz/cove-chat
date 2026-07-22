@@ -44,7 +44,7 @@ it.live(
       yield* browserAction(() =>
         channelMembers.getByRole("button", { name: "Close member manager" }).click(),
       );
-      yield* browserAction(() => page.getByText("Joined", { exact: true }).waitFor());
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).waitFor());
       yield* browserAction(() =>
         page
           .getByRole("navigation", { name: "Your channels" })
@@ -119,6 +119,21 @@ it.live(
           .getByRole("link", { name: "Product Lab" })
           .waitFor(),
       );
+
+      yield* browserAction(() => page.getByRole("button", { name: "Leave channel" }).click());
+      const leaveDialog = page.getByRole("dialog", { name: "Leave Product Lab?" });
+      yield* browserAction(() =>
+        leaveDialog.getByRole("button", { name: "Leave channel" }).click(),
+      );
+      yield* browserAction(() => page.getByRole("button", { name: "Join channel" }).waitFor());
+      expect(
+        yield* browserAction(() =>
+          page
+            .getByRole("navigation", { name: "Your channels" })
+            .getByRole("link", { name: "Product Lab" })
+            .count(),
+        ),
+      ).toBe(0);
 
       yield* browserAction(() => page.goto(acceptance.webUrl));
       yield* waitForWorkspaceChooser(page);

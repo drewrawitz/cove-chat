@@ -1,8 +1,10 @@
 import {
   Channel,
   type ChannelId,
+  type ChannelVisibility,
   type UserId,
   type WorkspaceId,
+  type WorkspaceIdentityId,
   type WorkspaceRole,
   canViewChannel,
 } from "@cove/domain";
@@ -21,6 +23,7 @@ import {
   ChannelAccess,
   ChannelAccessFailure,
   ChannelAdministrationForbidden,
+  PrivateChannelMaintainerCannotLeave,
   ChannelMaintainerView,
   ChannelMemberView,
   ChannelView,
@@ -29,6 +32,7 @@ import {
   type AddChannelMemberCommand,
   type CreatePrivateChannelCommand,
   type CreatePublicChannelCommand,
+  type LeaveChannelCommand,
 } from "./channel-access.ts";
 import { ChannelUnavailable } from "./get-channel-for-actor.ts";
 
@@ -62,6 +66,37 @@ function channelView(record: ChannelAccessRecord): ChannelView {
     maintainer: maintainerView(record.maintainer),
     hasChannelMembership: record.hasChannelMembership,
   });
+}
+
+interface ChannelMembershipAuditEventInput {
+  readonly action: "added" | "removed";
+  readonly actorId: UserId;
+  readonly channelId: ChannelId;
+  readonly occurredAt: Date;
+  readonly visibility: ChannelVisibility;
+  readonly workspaceId: WorkspaceId;
+  readonly workspaceIdentityId: WorkspaceIdentityId;
+}
+
+function channelMembershipAuditEvent(input: ChannelMembershipAuditEventInput): AuditEvent {
+  const fields = {
+    actorId: input.actorId,
+    occurredAt: input.occurredAt,
+    version: 1 as const,
+    metadata: {
+      workspaceId: input.workspaceId,
+      channelId: input.channelId,
+      workspaceIdentityId: input.workspaceIdentityId,
+    },
+  };
+  if (input.action === "added") {
+    return input.visibility === "private"
+      ? AuditEvent.cases["channel.private_membership_added"].make(fields)
+      : AuditEvent.cases["channel.public_membership_added"].make(fields);
+  }
+  return input.visibility === "private"
+    ? AuditEvent.cases["channel.private_membership_removed"].make(fields)
+    : AuditEvent.cases["channel.public_membership_removed"].make(fields);
 }
 
 const make = Effect.gen(function* () {
@@ -126,7 +161,7 @@ const make = Effect.gen(function* () {
 
   const create = Effect.fn("ChannelAccess.create")(function* (
     command: CreatePublicChannelCommand | CreatePrivateChannelCommand,
-    visibility: "public" | "private",
+    visibility: ChannelVisibility,
   ) {
     return yield* transactions.run(
       Effect.gen(function* () {
@@ -152,15 +187,14 @@ const make = Effect.gen(function* () {
         if (visibility === "private") {
           const now = yield* Clock.currentTimeMillis;
           yield* auditEvents.append(
-            AuditEvent.cases["channel.private_membership_added"].make({
+            channelMembershipAuditEvent({
+              action: "added",
               actorId: command.actorAccountId,
+              channelId: command.channelId,
               occurredAt: new Date(now),
-              version: 1,
-              metadata: {
-                workspaceId: command.workspaceId,
-                channelId: command.channelId,
-                workspaceIdentityId: actor.id,
-              },
+              visibility,
+              workspaceId: command.workspaceId,
+              workspaceIdentityId: actor.id,
             }),
           );
         }
@@ -283,20 +317,16 @@ const make = Effect.gen(function* () {
             );
             if (added) {
               const now = yield* Clock.currentTimeMillis;
-              const auditEventFields = {
-                actorId: command.actorAccountId,
-                occurredAt: new Date(now),
-                version: 1 as const,
-                metadata: {
-                  workspaceId: command.workspaceId,
-                  channelId: command.channelId,
-                  workspaceIdentityId: member.id,
-                },
-              };
               yield* auditEvents.append(
-                record.channel.visibility === "private"
-                  ? AuditEvent.cases["channel.private_membership_added"].make(auditEventFields)
-                  : AuditEvent.cases["channel.public_membership_added"].make(auditEventFields),
+                channelMembershipAuditEvent({
+                  action: "added",
+                  actorId: command.actorAccountId,
+                  channelId: command.channelId,
+                  occurredAt: new Date(now),
+                  visibility: record.channel.visibility,
+                  workspaceId: command.workspaceId,
+                  workspaceIdentityId: member.id,
+                }),
               );
             }
 
@@ -403,6 +433,61 @@ const make = Effect.gen(function* () {
           }),
         ),
       (effect) => recoverPersistence("ChannelAccess.joinPublic", effect),
+    ),
+    leave: Effect.fn("ChannelAccess.leave")(
+      (command: LeaveChannelCommand) =>
+        transactions.run(
+          Effect.gen(function* () {
+            const actor = yield* repository.lockActiveActor(
+              command.actorAccountId,
+              command.workspaceId,
+            );
+            if (actor === undefined) {
+              return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
+            }
+            const record = yield* repository.findById(
+              command.workspaceId,
+              actor.id,
+              command.channelId,
+            );
+            if (record === undefined || !canActorViewChannel(actor, record)) {
+              return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
+            }
+            if (
+              record.hasChannelMembership &&
+              record.channel.visibility === "private" &&
+              record.channel.maintainerIdentityId === actor.id
+            ) {
+              return yield* Effect.fail(
+                new PrivateChannelMaintainerCannotLeave({
+                  workspaceId: command.workspaceId,
+                  channelId: command.channelId,
+                }),
+              );
+            }
+
+            const removed = yield* repository.removeMembership(
+              command.workspaceId,
+              command.channelId,
+              actor.id,
+            );
+            if (removed) {
+              const now = yield* Clock.currentTimeMillis;
+              yield* auditEvents.append(
+                channelMembershipAuditEvent({
+                  action: "removed",
+                  actorId: command.actorAccountId,
+                  channelId: command.channelId,
+                  occurredAt: new Date(now),
+                  visibility: record.channel.visibility,
+                  workspaceId: command.workspaceId,
+                  workspaceIdentityId: actor.id,
+                }),
+              );
+            }
+          }),
+        ),
+      (effect) => recoverPersistence("ChannelAccess.leave", effect),
     ),
   });
 });

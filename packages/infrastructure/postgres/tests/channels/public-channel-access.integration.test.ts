@@ -4,6 +4,7 @@ import {
   ChannelAccess,
   CreatePublicChannelCommand,
   CreateWorkspaceCommand,
+  LeaveChannelCommand,
   WorkspaceAccess,
 } from "@cove/application";
 import {
@@ -69,6 +70,43 @@ layer(TestPostgres, { timeout: "2 minutes" })("Public Channel access", (it) => {
           AND channel_id = ${created.channel.id}
       `;
       expect(memberships).toEqual([{ identityId: workspace.workspaceIdentityId }]);
+
+      yield* channels.leave(
+        LeaveChannelCommand.make({
+          actorAccountId: accountId,
+          workspaceId: workspace.workspaceId,
+          channelId: created.channel.id,
+        }),
+      );
+      const afterLeaving = yield* channels.getForActor(
+        accountId,
+        workspace.workspaceId,
+        created.channel.id,
+      );
+      const membershipsAfterLeaving = yield* sql<{ identityId: string }>`
+        SELECT identity_id AS "identityId"
+        FROM channel_memberships
+        WHERE workspace_id = ${workspace.workspaceId}
+          AND channel_id = ${created.channel.id}
+      `;
+      const leaveAuditEvents = yield* sql<{ metadata: unknown }>`
+        SELECT metadata
+        FROM audit_events
+        WHERE actor_user_id = ${accountId}
+          AND event_type = 'channel.public_membership_removed'
+      `;
+
+      expect(afterLeaving.hasChannelMembership).toBe(false);
+      expect(membershipsAfterLeaving).toEqual([]);
+      expect(leaveAuditEvents).toEqual([
+        {
+          metadata: {
+            workspaceId: workspace.workspaceId,
+            channelId: created.channel.id,
+            workspaceIdentityId: workspace.workspaceIdentityId,
+          },
+        },
+      ]);
     }),
   );
 

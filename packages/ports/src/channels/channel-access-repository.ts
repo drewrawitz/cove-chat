@@ -66,6 +66,11 @@ export interface ChannelAccessRepositoryService {
     channelId: ChannelId,
     workspaceIdentityId: WorkspaceIdentityId,
   ) => Effect.Effect<boolean, PersistenceError>;
+  readonly removeMembership: (
+    workspaceId: WorkspaceId,
+    channelId: ChannelId,
+    workspaceIdentityId: WorkspaceIdentityId,
+  ) => Effect.Effect<boolean, PersistenceError>;
 }
 
 export class ChannelAccessRepository extends Context.Service<

@@ -61,6 +61,7 @@ const AuthPortsTest = Layer.mergeAll(
       joinPublic: Effect.fn("ChannelAccess.Test.joinPublic")(() =>
         unmockedChannelAccess("joinPublic"),
       ),
+      leave: Effect.fn("ChannelAccess.Test.leave")(() => unmockedChannelAccess("leave")),
     }),
   ),
   Layer.succeed(

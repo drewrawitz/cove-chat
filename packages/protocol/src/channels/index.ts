@@ -1,6 +1,7 @@
 export { ChannelApiGroup } from "./channel-api.ts";
 export {
   ChannelAdministrationForbiddenResponse,
+  PrivateChannelMaintainerCannotLeaveResponse,
   ChannelMemberUnavailableResponse,
   ChannelErrorResponses,
   ChannelUnavailableResponse,

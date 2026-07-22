@@ -80,6 +80,13 @@ export interface JoinPublicChannelCommand extends Schema.Schema.Type<
   typeof JoinPublicChannelCommand
 > {}
 
+export const LeaveChannelCommand = Schema.Struct({
+  actorAccountId: UserId,
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+});
+export interface LeaveChannelCommand extends Schema.Schema.Type<typeof LeaveChannelCommand> {}
+
 export class ChannelAccessFailure extends Schema.TaggedErrorClass<ChannelAccessFailure>()(
   "Application.ChannelAccessFailure",
   { operation: Schema.String },
@@ -96,6 +103,14 @@ export class ChannelMemberUnavailable extends Schema.TaggedErrorClass<ChannelMem
     workspaceId: WorkspaceId,
     channelId: ChannelId,
     workspaceIdentityId: WorkspaceIdentityId,
+  },
+) {}
+
+export class PrivateChannelMaintainerCannotLeave extends Schema.TaggedErrorClass<PrivateChannelMaintainerCannotLeave>()(
+  "Application.PrivateChannelMaintainerCannotLeave",
+  {
+    workspaceId: WorkspaceId,
+    channelId: ChannelId,
   },
 ) {}
 
@@ -154,6 +169,12 @@ export interface ChannelAccessService {
   readonly joinPublic: (
     command: JoinPublicChannelCommand,
   ) => Effect.Effect<ChannelView, ChannelUnavailable | ChannelAccessFailure>;
+  readonly leave: (
+    command: LeaveChannelCommand,
+  ) => Effect.Effect<
+    void,
+    PrivateChannelMaintainerCannotLeave | ChannelUnavailable | ChannelAccessFailure
+  >;
 }
 
 export class ChannelAccess extends Context.Service<ChannelAccess, ChannelAccessService>()(

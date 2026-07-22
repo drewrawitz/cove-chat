@@ -15,6 +15,7 @@ import { ChannelLoading } from "../components/channel-loading.tsx";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
 import { ChannelMembership } from "../components/channel-membership.tsx";
+import { LeaveChannel } from "../components/leave-channel.tsx";
 import { WorkspaceSwitcher } from "../components/workspace-switcher.tsx";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 
@@ -90,6 +91,9 @@ function ChannelPage(): ReactElement {
     );
   } else {
     const displayName = channelDisplayName(channel.data.name);
+    const isPrivateMaintainer =
+      channel.data.visibility === "private" &&
+      channel.data.maintainer.id === workspace.data.identity.id;
     channelContent = (
       <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
         <header className="flex flex-wrap items-start justify-between gap-6 pb-10">
@@ -121,7 +125,18 @@ function ChannelPage(): ReactElement {
               src={channel.data.maintainer.avatarUrl}
               alt=""
             />
-            {channel.data.hasChannelMembership ? (
+            {channel.data.hasChannelMembership && !isPrivateMaintainer ? (
+              <LeaveChannel
+                channelId={channelId}
+                channelName={displayName}
+                visibility={channel.data.visibility}
+                willLoseAccess={
+                  channel.data.visibility === "private" ||
+                  workspace.data.membership.role === "guest"
+                }
+                workspaceId={workspaceId}
+              />
+            ) : channel.data.hasChannelMembership ? (
               <span className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
                 Joined
               </span>

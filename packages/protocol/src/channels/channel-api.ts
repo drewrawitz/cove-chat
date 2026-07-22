@@ -10,6 +10,7 @@ import { WorkspaceUnavailableResponse } from "../workspaces/workspace-error-resp
 import { FullMemberUnavailableResponse } from "../workspaces/workspace-error-response.ts";
 import {
   ChannelAdministrationForbiddenResponse,
+  PrivateChannelMaintainerCannotLeaveResponse,
   ChannelMemberUnavailableResponse,
   ChannelUnavailableResponse,
 } from "./channel-error-response.ts";
@@ -156,6 +157,21 @@ const JoinPublicChannelEndpoint = HttpApiEndpoint.post(
   },
 ).middleware(SessionAuth);
 
+const LeaveChannelEndpoint = HttpApiEndpoint.delete(
+  "leaveChannel",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/membership",
+  {
+    params: ChannelParams,
+    headers: CsrfHeaders,
+    error: [
+      CsrfValidationFailedResponse,
+      PrivateChannelMaintainerCannotLeaveResponse,
+      ChannelUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
+  },
+).middleware(SessionAuth);
+
 export const ChannelApiGroup = HttpApiGroup.make("channels").add(
   ListPublicChannelsEndpoint,
   CreatePublicChannelEndpoint,
@@ -166,5 +182,6 @@ export const ChannelApiGroup = HttpApiGroup.make("channels").add(
   GetChannelEndpoint,
   GetChannelMembershipRosterEndpoint,
   JoinPublicChannelEndpoint,
+  LeaveChannelEndpoint,
   AddChannelMemberEndpoint,
 );
