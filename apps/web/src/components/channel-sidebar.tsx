@@ -237,6 +237,7 @@ interface ChannelLinkProps {
   readonly channel: {
     readonly id: string;
     readonly name: string;
+    readonly visibility: "private" | "public";
   };
   readonly workspaceId: string;
 }
@@ -298,14 +299,33 @@ function ChannelLink({ activeChannelId, channel, workspaceId }: ChannelLinkProps
     <Link
       to="/workspaces/$workspaceId/channels/$channelId"
       params={{ workspaceId, channelId: channel.id }}
-      aria-label={displayName}
+      aria-label={
+        channel.visibility === "private" ? `${displayName}, Private Channel` : displayName
+      }
       aria-current={channel.id === activeChannelId ? "page" : undefined}
       className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground"
     >
       <span className="text-base leading-none text-primary" aria-hidden="true">
         #
       </span>
-      <span className="truncate">{displayName}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate">{displayName}</span>
+        {channel.visibility === "private" ? (
+          <svg
+            aria-hidden="true"
+            className="size-3.5 shrink-0 text-muted-foreground"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="5" y="10" width="14" height="10" rx="2" />
+            <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          </svg>
+        ) : null}
+      </span>
     </Link>
   );
 }

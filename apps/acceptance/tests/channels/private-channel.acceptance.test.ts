@@ -26,11 +26,14 @@ it.live(
       yield* signIn(acceptance, "bob@cove.local");
       yield* openConversations(page);
       yield* createPrivateChannel(page, "Leadership", "Coordinate sensitive leadership work.");
+      const channelNavigation = page.getByRole("navigation", { name: "Your channels" });
       yield* browserAction(() =>
-        page
-          .getByRole("navigation", { name: "Your channels" })
-          .getByRole("link", { name: "Leadership" })
+        channelNavigation
+          .getByRole("link", { name: "Leadership, Private Channel", exact: true })
           .waitFor(),
+      );
+      yield* browserAction(() =>
+        channelNavigation.getByRole("link", { name: "General", exact: true }).waitFor(),
       );
       expect(
         yield* browserAction(() => page.getByRole("dialog", { name: "Manage members" }).count()),
