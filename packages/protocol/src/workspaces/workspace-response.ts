@@ -25,6 +25,7 @@ export const WorkspaceSummaryResponse = Schema.Struct({
   name: Schema.String,
   identity: WorkspaceIdentityResponse,
   membership: WorkspaceMembershipResponse,
+  generalChannelId: Schema.String,
 }).annotate({ identifier: "WorkspaceSummaryResponse" });
 export interface WorkspaceSummaryResponse extends Schema.Schema.Type<
   typeof WorkspaceSummaryResponse

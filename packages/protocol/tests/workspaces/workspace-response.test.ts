@@ -8,6 +8,7 @@ import {
   WorkspaceAccessResponse,
   WorkspaceCreatedResponse,
   WorkspaceIdentityUpdateResponse,
+  WorkspaceListResponse,
   FullMemberListResponse,
 } from "../../src/index.ts";
 
@@ -61,6 +62,26 @@ it.effect("includes the General Channel in Workspace access", () =>
       identity: { id: "identity-1", name: "Alice", avatarUrl: "/alice.svg" },
       membership: { role: "owner" },
       generalChannelId: "general",
+    });
+  }),
+);
+
+it.effect("includes each General Channel in the Workspace list", () =>
+  Effect.gen(function* () {
+    expect(
+      yield* Schema.encodeUnknownEffect(WorkspaceListResponse)({
+        workspaces: [
+          {
+            id: "workspace-1",
+            name: "Product Studio",
+            identity: { id: "identity-1", name: "Alice", avatarUrl: "/alice.svg" },
+            membership: { role: "owner" },
+            generalChannelId: "general",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      workspaces: [{ id: "workspace-1", generalChannelId: "general" }],
     });
   }),
 );

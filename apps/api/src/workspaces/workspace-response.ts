@@ -73,6 +73,7 @@ export function workspaceListResponse(
         name: access.workspace.name,
         identity: workspaceIdentityResponse(access.identity),
         membership: { role: access.membership.role },
+        generalChannelId: GENERAL_CHANNEL_ID,
       }),
     ),
   });

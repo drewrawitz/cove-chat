@@ -12,6 +12,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { WorkspaceSwitcher } from "../components/workspace-switcher.tsx";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId")({
   component: PublicChannel,
@@ -69,41 +70,11 @@ function PublicChannel(): ReactElement {
         <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-r lg:border-b-0">
           <div className="p-4 lg:p-5">
             <header>
-              <div className="flex items-center gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-semibold text-primary-foreground">
-                  {workspace.data.workspace.name.slice(0, 1).toLocaleUpperCase()}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h1 className="truncate text-base font-semibold">
-                    {workspace.data.workspace.name}
-                  </h1>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {workspace.data.identity.name}
-                  </p>
-                </div>
-              </div>
-
-              <nav className="mt-7 grid gap-1" aria-label="Workspace navigation">
-                <Link
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none"
-                  to="/"
-                >
-                  <span className="text-muted-foreground" aria-hidden="true">
-                    ←
-                  </span>
-                  All workspaces
-                </Link>
-                <Link
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none"
-                  to="/workspaces/$workspaceId"
-                  params={{ workspaceId }}
-                >
-                  <span className="text-muted-foreground" aria-hidden="true">
-                    ⚙
-                  </span>
-                  Workspace settings
-                </Link>
-              </nav>
+              <WorkspaceSwitcher
+                identityName={workspace.data.identity.name}
+                workspaceId={workspaceId}
+                workspaceName={workspace.data.workspace.name}
+              />
             </header>
 
             <ChannelSidebar activeChannelId={channelId} workspaceId={workspaceId} />

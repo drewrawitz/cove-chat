@@ -38,8 +38,10 @@ it.live(
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
       yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
+      yield* browserAction(() => page.getByRole("button", { name: "New channel" }).click());
+      const createDialog = page.getByRole("dialog");
       yield* browserAction(() =>
-        page.locator("summary").filter({ hasText: "New channel" }).click(),
+        createDialog.getByRole("heading", { name: "Create a new channel" }).waitFor(),
       );
       yield* browserAction(() => page.getByLabel("Channel name").fill("Product Lab"));
       yield* browserAction(() =>
@@ -107,6 +109,21 @@ it.live(
       yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
       yield* browserAction(() => page.getByText("Maintained by Alice in Cove").waitFor());
+
+      yield* browserAction(() => page.locator("summary").filter({ hasText: "Elsewhere" }).click());
+      yield* browserAction(() =>
+        Promise.all([
+          page.waitForURL("**/workspaces/demo-workspace/channels/general"),
+          page.getByRole("link", { name: "Switch to Cove Demo" }).click(),
+        ]),
+      );
+      yield* browserAction(() => page.locator("summary").filter({ hasText: "Cove Demo" }).click());
+      yield* browserAction(() =>
+        Promise.all([
+          page.waitForURL(`**/workspaces/${otherWorkspaceId}/channels/general`),
+          page.getByRole("link", { name: "Switch to Elsewhere" }).click(),
+        ]),
+      );
 
       yield* browserAction(() =>
         page.goto(`${acceptance.webUrl}/workspaces/${otherWorkspaceId}/channels/${channelId}`),
