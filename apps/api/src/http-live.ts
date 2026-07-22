@@ -9,9 +9,10 @@ import { AuthApiLive, SessionAuthLive } from "./auth/index.ts";
 import { ChannelApiLive } from "./channels/index.ts";
 import { HealthApiLive } from "./health/index.ts";
 import { WorkspaceApiLive } from "./workspaces/index.ts";
+import { TopicApiLive } from "./topics/index.ts";
 
 const AppApiRoutes = HttpApiBuilder.layer(CoveAppApi).pipe(
-  Layer.provide(Layer.mergeAll(AuthApiLive, WorkspaceApiLive, ChannelApiLive)),
+  Layer.provide(Layer.mergeAll(AuthApiLive, WorkspaceApiLive, ChannelApiLive, TopicApiLive)),
   Layer.provide(SessionAuthLive),
 );
 

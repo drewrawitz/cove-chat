@@ -26,10 +26,12 @@ export {
   ChannelAccessFailure,
   ChannelAccessLive,
   ChannelAdministrationForbidden,
+  ChannelConversationContext,
   PrivateChannelMaintainerCannotLeave,
   ChannelMemberView,
   ChannelMemberUnavailable,
   ChannelMaintainerView,
+  WorkspaceIdentityView,
   ChannelView,
   CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
@@ -41,6 +43,17 @@ export {
   getChannelForActor,
   type ChannelAccessService,
 } from "./channels/index.ts";
+export {
+  CreateTopicCommand,
+  TopicAccess,
+  TopicAccessFailure,
+  TopicAccessLive,
+  TopicContributionView,
+  TopicSummaryView,
+  TopicUnavailable,
+  TopicView,
+  type TopicAccessService,
+} from "./topics/index.ts";
 export {
   AcceptWorkspaceInvitationCommand,
   FullMemberMembership,

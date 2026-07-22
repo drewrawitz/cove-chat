@@ -16,14 +16,17 @@ import type {
   WorkspaceUnavailable,
 } from "../workspaces/workspace-access.ts";
 
-export const ChannelMaintainerView = Schema.Struct({
+export const WorkspaceIdentityView = Schema.Struct({
   id: WorkspaceIdentityId,
   name: WorkspaceIdentityName,
   avatarUrl: WorkspaceAvatarUrl,
 });
+export interface WorkspaceIdentityView extends Schema.Schema.Type<typeof WorkspaceIdentityView> {}
+
+export const ChannelMaintainerView = WorkspaceIdentityView;
 export interface ChannelMaintainerView extends Schema.Schema.Type<typeof ChannelMaintainerView> {}
 
-export const ChannelMemberView = ChannelMaintainerView;
+export const ChannelMemberView = WorkspaceIdentityView;
 export interface ChannelMemberView extends Schema.Schema.Type<typeof ChannelMemberView> {}
 
 export const ChannelView = Schema.Struct({
@@ -32,6 +35,15 @@ export const ChannelView = Schema.Struct({
   hasChannelMembership: Schema.Boolean,
 });
 export interface ChannelView extends Schema.Schema.Type<typeof ChannelView> {}
+
+export const ChannelConversationContext = Schema.Struct({
+  channel: Channel,
+  actor: WorkspaceIdentityView,
+  hasChannelMembership: Schema.Boolean,
+});
+export interface ChannelConversationContext extends Schema.Schema.Type<
+  typeof ChannelConversationContext
+> {}
 
 export const ChannelMembershipRosterView = Schema.Struct({
   channel: Channel,
@@ -129,6 +141,11 @@ export interface ChannelAccessService {
     workspaceId: WorkspaceId,
     channelId: ChannelId,
   ) => Effect.Effect<ChannelView, ChannelUnavailable | ChannelAccessFailure>;
+  readonly getConversationContextForActor: (
+    actorAccountId: UserId,
+    workspaceId: WorkspaceId,
+    channelId: ChannelId,
+  ) => Effect.Effect<ChannelConversationContext, ChannelUnavailable | ChannelAccessFailure>;
   readonly createPublic: (
     command: CreatePublicChannelCommand,
   ) => Effect.Effect<ChannelView, WorkspaceUnavailable | ChannelAccessFailure>;

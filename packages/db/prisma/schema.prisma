@@ -14,17 +14,25 @@ enum ChannelVisibility {
   PRIVATE @map("private")
 }
 
+enum TopicIntent {
+  QUESTION   @map("question")
+  PROPOSAL   @map("proposal")
+  DECISION   @map("decision")
+  UPDATE     @map("update")
+  DISCUSSION @map("discussion")
+}
+
 model User {
-  id                  String              @id
-  email               String              @unique
-  displayName         String              @map("display_name")
+  id                  String                @id
+  email               String                @unique
+  displayName         String                @map("display_name")
   workspaceIdentities WorkspaceIdentity[]
   magicLinks          MagicLink[]
   sessions            Session[]
   auditEvents         AuditEvent[]
   invitationsSent     WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
   invitationsAccepted WorkspaceInvitation[] @relation("WorkspaceInvitationAccepter")
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
 }
@@ -69,12 +77,12 @@ model AuditEvent {
 }
 
 model Workspace {
-  id         String              @id
-  name       String
-  identities WorkspaceIdentity[]
-  channels   Channel[]
+  id          String                @id
+  name        String
+  identities  WorkspaceIdentity[]
+  channels    Channel[]
   invitations WorkspaceInvitation[]
-  createdAt  DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("workspaces")
 }
@@ -85,8 +93,8 @@ model WorkspaceInvitation {
   inviteeEmail        String        @map("invitee_email")
   invitedByAccountId  String        @map("invited_by_account_id")
   acceptedByAccountId String?       @map("accepted_by_account_id")
-  tokenHash            String        @unique @map("token_hash")
-  tokenExpiresAt       DateTime      @map("token_expires_at") @db.Timestamptz(6)
+  tokenHash           String        @unique @map("token_hash")
+  tokenExpiresAt      DateTime      @map("token_expires_at") @db.Timestamptz(6)
   role                WorkspaceRole @default(MEMBER)
   invitedAt           DateTime      @default(now()) @map("invited_at") @db.Timestamptz(6)
   acceptedAt          DateTime?     @map("accepted_at") @db.Timestamptz(6)
@@ -114,6 +122,8 @@ model WorkspaceIdentity {
   account             User                @relation(fields: [accountId], references: [id], onDelete: Restrict)
   channelMemberships  ChannelMembership[]
   maintainedChannels  Channel[]           @relation("ChannelMaintainer")
+  openedTopics        Topic[]             @relation("TopicOpener")
+  contributions       Contribution[]      @relation("ContributionAuthor")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -124,16 +134,17 @@ model WorkspaceIdentity {
 }
 
 model Channel {
-  id                String
-  workspaceId       String              @map("workspace_id")
-  name              String
-  purpose           String              @default("Purpose not recorded.")
-  visibility        ChannelVisibility   @default(PUBLIC)
-  maintainerIdentityId String           @map("maintainer_identity_id")
-  workspace         Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  maintainer        WorkspaceIdentity   @relation("ChannelMaintainer", fields: [workspaceId, maintainerIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  memberships       ChannelMembership[]
-  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                   String
+  workspaceId          String              @map("workspace_id")
+  name                 String
+  purpose              String              @default("Purpose not recorded.")
+  visibility           ChannelVisibility   @default(PUBLIC)
+  maintainerIdentityId String              @map("maintainer_identity_id")
+  workspace            Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  maintainer           WorkspaceIdentity   @relation("ChannelMaintainer", fields: [workspaceId, maintainerIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  memberships          ChannelMembership[]
+  topics               Topic[]
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
   @@index([workspaceId, visibility])
@@ -152,4 +163,39 @@ model ChannelMembership {
   @@id([workspaceId, channelId, identityId])
   @@index([workspaceId, identityId])
   @@map("channel_memberships")
+}
+
+model Topic {
+  id                 String
+  workspaceId        String            @map("workspace_id")
+  channelId          String            @map("channel_id")
+  title              String
+  intent             TopicIntent?
+  openedByIdentityId String            @map("opened_by_identity_id")
+  channel            Channel           @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
+  openedBy           WorkspaceIdentity @relation("TopicOpener", fields: [workspaceId, openedByIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  contributions      Contribution[]
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, id])
+  @@index([workspaceId, channelId, createdAt])
+  @@index([workspaceId, openedByIdentityId])
+  @@map("topics")
+}
+
+model Contribution {
+  id               String
+  workspaceId      String            @map("workspace_id")
+  topicId          String            @map("topic_id")
+  authorIdentityId String            @map("author_identity_id")
+  body             String
+  position         Int
+  topic            Topic             @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade)
+  author           WorkspaceIdentity @relation("ContributionAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, topicId, id])
+  @@unique([workspaceId, topicId, position])
+  @@index([workspaceId, authorIdentityId])
+  @@map("contributions")
 }

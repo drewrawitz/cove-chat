@@ -1,6 +1,6 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import { expect, layer } from "@effect/vitest";
-import { ChannelAccessLive } from "@cove/application";
+import { ChannelAccessLive, TopicAccessLive } from "@cove/application";
 import { PostgresRepositories } from "@cove/infrastructure-postgres";
 import { TestDatabase } from "@cove/infrastructure-postgres/test";
 import {
@@ -28,6 +28,10 @@ const DatabaseServicesLive = Layer.mergeAll(PostgresDatabaseReadiness, PostgresR
 );
 
 const ChannelApplicationLive = ChannelAccessLive.pipe(Layer.provide(DatabaseServicesLive));
+const TopicApplicationLive = TopicAccessLive.pipe(
+  Layer.provide(ChannelApplicationLive),
+  Layer.provide(DatabaseServicesLive),
+);
 
 interface TestAuthenticationNotifierService extends AuthenticationNotifierService {
   readonly poll: () => Effect.Effect<Option.Option<MagicLinkNotification>>;
@@ -78,6 +82,7 @@ const AuthenticationNotifierTest = Layer.effectContext(
 const Api = Server.pipe(
   Layer.provideMerge(DatabaseServicesLive),
   Layer.provideMerge(ChannelApplicationLive),
+  Layer.provideMerge(TopicApplicationLive),
   Layer.provideMerge(AuthenticationNotifierTest),
   Layer.provideMerge(NodeHttpServer.layerTest),
 );

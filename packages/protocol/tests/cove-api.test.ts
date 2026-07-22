@@ -43,6 +43,8 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/members",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/members/{workspaceIdentityId}",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/membership",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}",
       "/api/app/v1/workspaces/{workspaceId}/identity",
       "/api/app/v1/workspaces/{workspaceId}/invitations",
       "/api/app/v1/workspaces/{workspaceId}/invitations/{invitationId}",
@@ -53,6 +55,9 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspaces/{workspaceId}/membership",
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
+    expect(document.paths).not.toHaveProperty(
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/contributions",
+    );
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("202");
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("500");
     expect(document.paths["/api/app/v1/auth/login/verify"]?.post?.responses).toHaveProperty("200");
@@ -95,6 +100,7 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
           { $ref: "#/components/schemas/ChannelMemberUnavailableResponse" },
           { $ref: "#/components/schemas/FullMemberUnavailableResponse" },
           { $ref: "#/components/schemas/InvalidMagicLinkResponse" },
+          { $ref: "#/components/schemas/TopicUnavailableResponse" },
           { $ref: "#/components/schemas/WorkspaceAdministrationForbiddenResponse" },
           { $ref: "#/components/schemas/WorkspaceInvitationUnavailableResponse" },
           { $ref: "#/components/schemas/WorkspaceUnavailableResponse" },

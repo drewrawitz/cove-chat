@@ -8,4 +8,5 @@ export { PostgresChannelAccessRepository, PostgresChannelRepository } from "./ch
 export { PostgresMembershipRepository } from "./memberships/index.ts";
 export { PostgresClientLive, PostgresLive, PostgresRepositories } from "./postgres-live.ts";
 export { PostgresTransactionManager } from "./transaction-manager.ts";
+export { PostgresTopicRepository } from "./topics/index.ts";
 export { PostgresWorkspaceAccess } from "./workspaces/index.ts";

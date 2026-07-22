@@ -1,6 +1,7 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ChannelAccess,
+  TopicAccess,
   WorkspaceAccess,
   makeCsrfToken,
   makeMagicLinkToken,
@@ -23,8 +24,22 @@ const unmockedWorkspaceAccess = (operation: string) =>
   Effect.die(new Error(`WorkspaceAccess.${operation} not mocked for this test`));
 const unmockedChannelAccess = (operation: string) =>
   Effect.die(new Error(`ChannelAccess.${operation} not mocked for this test`));
+const unmockedTopicAccess = (operation: string) =>
+  Effect.die(new Error(`TopicAccess.${operation} not mocked for this test`));
 
 const AuthPortsTest = Layer.mergeAll(
+  Layer.succeed(
+    TopicAccess,
+    TopicAccess.of({
+      listForActor: Effect.fn("TopicAccess.Test.listForActor")(() =>
+        unmockedTopicAccess("listForActor"),
+      ),
+      getForActor: Effect.fn("TopicAccess.Test.getForActor")(() =>
+        unmockedTopicAccess("getForActor"),
+      ),
+      create: Effect.fn("TopicAccess.Test.create")(() => unmockedTopicAccess("create")),
+    }),
+  ),
   Layer.succeed(
     ChannelAccess,
     ChannelAccess.of({
@@ -37,6 +52,9 @@ const AuthPortsTest = Layer.mergeAll(
       getForActor: Effect.fn("ChannelAccess.Test.getForActor")(() =>
         unmockedChannelAccess("getForActor"),
       ),
+      getConversationContextForActor: Effect.fn(
+        "ChannelAccess.Test.getConversationContextForActor",
+      )(() => unmockedChannelAccess("getConversationContextForActor")),
       createPublic: Effect.fn("ChannelAccess.Test.createPublic")(() =>
         unmockedChannelAccess("createPublic"),
       ),
