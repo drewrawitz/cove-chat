@@ -129,6 +129,7 @@ function ChannelPage(): ReactElement {
               <LeaveChannel
                 channelId={channelId}
                 channelName={displayName}
+                generalChannelId={workspace.data.generalChannelId}
                 visibility={channel.data.visibility}
                 willLoseAccess={
                   channel.data.visibility === "private" ||

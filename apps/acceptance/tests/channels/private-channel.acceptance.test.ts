@@ -65,7 +65,7 @@ it.live(
       yield* browserAction(() =>
         leaveDialog.getByRole("button", { name: "Leave channel" }).click(),
       );
-      yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
+      yield* browserAction(() => page.waitForURL("**/workspaces/demo-workspace/channels/general"));
       yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
       expect(
         yield* browserAction(() =>

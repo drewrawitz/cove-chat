@@ -24,6 +24,7 @@ import {
 interface LeaveChannelProps {
   readonly channelId: string;
   readonly channelName: string;
+  readonly generalChannelId: string;
   readonly visibility: "private" | "public";
   readonly willLoseAccess: boolean;
   readonly workspaceId: string;
@@ -32,6 +33,7 @@ interface LeaveChannelProps {
 export function LeaveChannel({
   channelId,
   channelName,
+  generalChannelId,
   visibility,
   willLoseAccess,
   workspaceId,
@@ -64,6 +66,17 @@ export function LeaveChannel({
               queryKey: getChannelsGetChannelMembershipRosterQueryKey(workspaceId, channelId),
             }),
           ]);
+
+          if (visibility === "private") {
+            await navigate({
+              to: "/workspaces/$workspaceId/channels/$channelId",
+              params: { workspaceId, channelId: generalChannelId },
+            });
+            queryClient.removeQueries({
+              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
+            });
+            return;
+          }
 
           if (willLoseAccess) {
             await navigate({
