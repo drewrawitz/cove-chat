@@ -679,6 +679,31 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
       }),
     );
 
+    it.effect("rejects Channel Member mutation without a CSRF token", () =>
+      Effect.gen(function* () {
+        const delivery = yield* TestAuthenticationNotifier;
+        yield* HttpClient.post(AppRoutes.login, {
+          body: HttpBody.jsonUnsafe({ email: "bob@cove.local" }),
+        });
+        const message = yield* delivery.take();
+        const verifyResponse = yield* HttpClient.post(AppRoutes.verifyMagicLink, {
+          body: HttpBody.jsonUnsafe({ token: Redacted.value(message.token) }),
+        });
+        const cookie = authenticatedCookies(verifyResponse.cookies);
+
+        const response = yield* HttpClient.put(
+          `${AppRoutes.channels}/general/members/demo-alice-identity`,
+          { headers: { cookie } },
+        );
+
+        expect(response.status).toBe(403);
+        expect(yield* response.json).toEqual({
+          code: "CSRF_VALIDATION_FAILED",
+          message: "CSRF validation failed.",
+        });
+      }),
+    );
+
     it.effect("keeps the final owner in the workspace", () =>
       Effect.gen(function* () {
         const delivery = yield* TestAuthenticationNotifier;

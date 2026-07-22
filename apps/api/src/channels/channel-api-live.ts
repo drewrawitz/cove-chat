@@ -53,6 +53,13 @@ const channelErrorResponse = (error: unknown) =>
 const createChannelErrorResponse = workspaceErrorResponse;
 
 const channelMemberMutationErrorResponse = (error: unknown) => {
+  if (error === AuthErrorResponses.csrfValidationFailed) {
+    return AuthErrorResponses.csrfValidationFailed;
+  }
+  if (error === AuthErrorResponses.internalServerError) {
+    return AuthErrorResponses.internalServerError;
+  }
+
   switch (errorTag(error)) {
     case "Application.ChannelUnavailable":
     case "Domain.InvalidIdentifier":
