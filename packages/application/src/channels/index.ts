@@ -1,15 +1,16 @@
 export {
-  AddPrivateChannelMemberCommand,
+  AddChannelMemberCommand,
   ChannelAccess,
   ChannelAccessFailure,
   ChannelAdministrationForbidden,
   ChannelMemberView,
+  ChannelMemberUnavailable,
   ChannelMaintainerView,
   ChannelView,
   CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
   JoinPublicChannelCommand,
-  PrivateChannelAdministrationView,
+  ChannelMembershipRosterView,
   type ChannelAccessService,
 } from "./channel-access.ts";
 export { ChannelAccessLive } from "./channel-access-live.ts";

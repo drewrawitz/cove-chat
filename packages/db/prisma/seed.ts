@@ -25,7 +25,8 @@ const seed = Effect.gen(function* () {
     INSERT INTO workspace_identities (id, workspace_id, account_id, name, avatar_url, role)
     VALUES
       ('demo-alice-identity', 'demo-workspace', 'demo-alice', 'Alice in Cove', '/avatars/alice.svg', 'member'),
-      ('demo-bob-identity', 'demo-workspace', 'demo-bob', 'Bob in Cove', '/avatars/bob.svg', 'owner')
+      ('demo-bob-identity', 'demo-workspace', 'demo-bob', 'Bob in Cove', '/avatars/bob.svg', 'owner'),
+      ('demo-carol-identity', 'demo-workspace', 'demo-carol', 'Carol in Cove', '/avatars/carol.svg', 'member')
     ON CONFLICT (workspace_id, id) DO UPDATE
     SET
       account_id = EXCLUDED.account_id,

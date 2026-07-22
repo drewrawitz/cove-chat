@@ -1,5 +1,5 @@
 import {
-  AddPrivateChannelMemberCommand,
+  AddChannelMemberCommand,
   ChannelAccess,
   CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
@@ -25,11 +25,11 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
 import {
+  channelMembershipRosterResponse,
+  channelMemberCandidateListResponse,
   channelResponse,
   privateChannelAdministrationListResponse,
-  privateChannelAdministrationResponse,
   privateChannelListResponse,
-  privateChannelMemberCandidateListResponse,
   publicChannelListResponse,
   publicChannelResponse,
 } from "./channel-response.ts";
@@ -51,11 +51,13 @@ const channelErrorResponse = (error: unknown) =>
 
 const createChannelErrorResponse = workspaceErrorResponse;
 
-const channelAdministrationErrorResponse = (error: unknown) => {
+const channelMemberMutationErrorResponse = (error: unknown) => {
   switch (errorTag(error)) {
     case "Application.ChannelUnavailable":
     case "Domain.InvalidIdentifier":
       return ChannelErrorResponses.unavailable;
+    case "Application.ChannelMemberUnavailable":
+      return ChannelErrorResponses.memberUnavailable;
     case "Application.FullMemberUnavailable":
       return WorkspaceErrorResponses.fullMemberUnavailable;
     case "Application.WorkspaceUnavailable":
@@ -143,12 +145,12 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         );
       }).pipe(Effect.mapError(workspaceErrorResponse)),
     )
-    .handle("listPrivateChannelMemberCandidates", ({ params }) =>
+    .handle("listChannelMemberCandidates", ({ params }) =>
       Effect.gen(function* () {
         const { actorId, workspaceId, channelId } = yield* resolveActorWorkspaceAndChannel(params);
         const channels = yield* ChannelAccess;
-        return privateChannelMemberCandidateListResponse(
-          yield* channels.listPrivateMemberCandidatesForActor(actorId, workspaceId, channelId),
+        return channelMemberCandidateListResponse(
+          yield* channels.listMemberCandidatesForActor(actorId, workspaceId, channelId),
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
     )
@@ -168,12 +170,12 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         return channelResponse(yield* channels.getForActor(actorId, workspaceId, channelId));
       }).pipe(Effect.mapError(channelErrorResponse)),
     )
-    .handle("getPrivateChannelAdministration", ({ params }) =>
+    .handle("getChannelMembershipRoster", ({ params }) =>
       Effect.gen(function* () {
         const { actorId, workspaceId, channelId } = yield* resolveActorWorkspaceAndChannel(params);
         const channels = yield* ChannelAccess;
-        return privateChannelAdministrationResponse(
-          yield* channels.getPrivateAdministrationForActor(actorId, workspaceId, channelId),
+        return channelMembershipRosterResponse(
+          yield* channels.getMembershipRosterForActor(actorId, workspaceId, channelId),
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
     )
@@ -189,15 +191,15 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
     )
-    .handle("addPrivateChannelMember", ({ headers, params }) =>
+    .handle("addChannelMember", ({ headers, params }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const { actorId, workspaceId, channelId } = yield* resolveActorWorkspaceAndChannel(params);
         const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId);
         const channels = yield* ChannelAccess;
-        return privateChannelAdministrationResponse(
-          yield* channels.addPrivateMember(
-            AddPrivateChannelMemberCommand.make({
+        return channelMembershipRosterResponse(
+          yield* channels.addMember(
+            AddChannelMemberCommand.make({
               actorAccountId: actorId,
               workspaceId,
               channelId,
@@ -205,6 +207,6 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
             }),
           ),
         );
-      }).pipe(Effect.mapError(channelAdministrationErrorResponse)),
+      }).pipe(Effect.mapError(channelMemberMutationErrorResponse)),
     ),
 );

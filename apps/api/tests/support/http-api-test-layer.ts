@@ -43,21 +43,21 @@ const AuthPortsTest = Layer.mergeAll(
       createPrivate: Effect.fn("ChannelAccess.Test.createPrivate")(() =>
         unmockedChannelAccess("createPrivate"),
       ),
-      addPrivateMember: Effect.fn("ChannelAccess.Test.addPrivateMember")(() =>
-        unmockedChannelAccess("addPrivateMember"),
+      addMember: Effect.fn("ChannelAccess.Test.addMember")(() =>
+        unmockedChannelAccess("addMember"),
       ),
       listPrivateForActor: Effect.fn("ChannelAccess.Test.listPrivateForActor")(() =>
         unmockedChannelAccess("listPrivateForActor"),
       ),
-      listPrivateMemberCandidatesForActor: Effect.fn(
-        "ChannelAccess.Test.listPrivateMemberCandidatesForActor",
-      )(() => unmockedChannelAccess("listPrivateMemberCandidatesForActor")),
+      listMemberCandidatesForActor: Effect.fn("ChannelAccess.Test.listMemberCandidatesForActor")(
+        () => unmockedChannelAccess("listMemberCandidatesForActor"),
+      ),
       listPrivateForAdministrator: Effect.fn("ChannelAccess.Test.listPrivateForAdministrator")(() =>
         unmockedChannelAccess("listPrivateForAdministrator"),
       ),
-      getPrivateAdministrationForActor: Effect.fn(
-        "ChannelAccess.Test.getPrivateAdministrationForActor",
-      )(() => unmockedChannelAccess("getPrivateAdministrationForActor")),
+      getMembershipRosterForActor: Effect.fn("ChannelAccess.Test.getMembershipRosterForActor")(() =>
+        unmockedChannelAccess("getMembershipRosterForActor"),
+      ),
       joinPublic: Effect.fn("ChannelAccess.Test.joinPublic")(() =>
         unmockedChannelAccess("joinPublic"),
       ),

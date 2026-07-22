@@ -4,11 +4,11 @@ import { Link } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
 import {
   getChannelsListPrivateChannelsQueryKey,
-  useChannelsAddPrivateChannelMember,
+  useChannelsAddChannelMember,
   useChannelsListPrivateChannelsForAdministration,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
-import { PrivateChannelMemberForm } from "./private-channel-member-form.tsx";
+import { ChannelMemberForm } from "./channel-member-form.tsx";
 
 interface PrivateChannelAdministrationProps {
   readonly currentIdentityId: string;
@@ -23,7 +23,7 @@ export function PrivateChannelAdministration({
   const channels = useChannelsListPrivateChannelsForAdministration(workspaceId, {
     query: { retry: false },
   });
-  const joinChannel = useChannelsAddPrivateChannelMember();
+  const joinChannel = useChannelsAddChannelMember();
   const [joiningChannelId, setJoiningChannelId] = useState<string>();
   const [joinedChannelName, setJoinedChannelName] = useState<string>();
 
@@ -108,7 +108,7 @@ export function PrivateChannelAdministration({
                     {isJoining ? "Joining…" : "Join channel"}
                   </Button>
                 )}
-                <PrivateChannelMemberForm
+                <ChannelMemberForm
                   channelId={channel.id}
                   channelName={displayName}
                   className="border-t pt-4 sm:col-span-2"

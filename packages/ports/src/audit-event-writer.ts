@@ -28,11 +28,15 @@ export interface AuthenticationSignInAuditEvent extends Schema.Schema.Type<
   typeof AuthenticationSignInAuditEvent
 > {}
 
-export const ChannelPrivateMembershipAddedAuditMetadata = Schema.Struct({
+const ChannelMembershipAddedAuditMetadataFields = {
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   workspaceIdentityId: WorkspaceIdentityId,
-});
+};
+
+export const ChannelPrivateMembershipAddedAuditMetadata = Schema.Struct(
+  ChannelMembershipAddedAuditMetadataFields,
+);
 export interface ChannelPrivateMembershipAddedAuditMetadata extends Schema.Schema.Type<
   typeof ChannelPrivateMembershipAddedAuditMetadata
 > {}
@@ -48,9 +52,28 @@ export interface ChannelPrivateMembershipAddedAuditEvent extends Schema.Schema.T
   typeof ChannelPrivateMembershipAddedAuditEvent
 > {}
 
+export const ChannelPublicMembershipAddedAuditMetadata = Schema.Struct(
+  ChannelMembershipAddedAuditMetadataFields,
+);
+export interface ChannelPublicMembershipAddedAuditMetadata extends Schema.Schema.Type<
+  typeof ChannelPublicMembershipAddedAuditMetadata
+> {}
+
+export const ChannelPublicMembershipAddedAuditEvent = Schema.Struct({
+  type: Schema.tag("channel.public_membership_added"),
+  version: Schema.Literals([1]),
+  actorId: UserId,
+  occurredAt: Schema.Date,
+  metadata: ChannelPublicMembershipAddedAuditMetadata,
+});
+export interface ChannelPublicMembershipAddedAuditEvent extends Schema.Schema.Type<
+  typeof ChannelPublicMembershipAddedAuditEvent
+> {}
+
 export const AuditEvent = Schema.Union([
   AuthenticationSignInAuditEvent,
   ChannelPrivateMembershipAddedAuditEvent,
+  ChannelPublicMembershipAddedAuditEvent,
 ]).pipe(Schema.toTaggedUnion("type"));
 
 export type AuditEvent = typeof AuditEvent.Type;

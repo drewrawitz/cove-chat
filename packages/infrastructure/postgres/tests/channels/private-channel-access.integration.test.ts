@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  AddPrivateChannelMemberCommand,
+  AddChannelMemberCommand,
   ChannelAccess,
   CreatePrivateChannelCommand,
   CreateWorkspaceCommand,
@@ -234,8 +234,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
         }),
       );
 
-      const updated = yield* channels.addPrivateMember(
-        AddPrivateChannelMemberCommand.make({
+      const updated = yield* channels.addMember(
+        AddChannelMemberCommand.make({
           actorAccountId: creatorAccountId,
           workspaceId: workspace.workspaceId,
           channelId,
@@ -355,7 +355,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
           purpose: ChannelPurpose.make("Coordinate confidential work."),
         }),
       );
-      const maintainerCandidates = yield* channels.listPrivateMemberCandidatesForActor(
+      const maintainerCandidates = yield* channels.listMemberCandidatesForActor(
         maintainerAccountId,
         workspace.workspaceId,
         channelId,
@@ -379,8 +379,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
         .listPrivateForAdministrator(nonmaintainerAccountId, workspace.workspaceId)
         .pipe(Effect.flip);
       const nonmaintainerMutation = yield* channels
-        .addPrivateMember(
-          AddPrivateChannelMemberCommand.make({
+        .addMember(
+          AddChannelMemberCommand.make({
             actorAccountId: nonmaintainerAccountId,
             workspaceId: workspace.workspaceId,
             channelId,
@@ -389,23 +389,19 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
         )
         .pipe(Effect.flip);
       const nonmaintainerCandidates = yield* channels
-        .listPrivateMemberCandidatesForActor(
-          nonmaintainerAccountId,
-          workspace.workspaceId,
-          channelId,
-        )
+        .listMemberCandidatesForActor(nonmaintainerAccountId, workspace.workspaceId, channelId)
         .pipe(Effect.flip);
       const missingCandidateChannelId = yield* makeChannelId(`missing-candidates-${suffix}`);
       const missingCandidates = yield* channels
-        .listPrivateMemberCandidatesForActor(
+        .listMemberCandidatesForActor(
           nonmaintainerAccountId,
           workspace.workspaceId,
           missingCandidateChannelId,
         )
         .pipe(Effect.flip);
       const missingMutation = yield* channels
-        .addPrivateMember(
-          AddPrivateChannelMemberCommand.make({
+        .addMember(
+          AddChannelMemberCommand.make({
             actorAccountId: nonmaintainerAccountId,
             workspaceId: workspace.workspaceId,
             channelId: yield* makeChannelId(`missing-${suffix}`),
@@ -448,21 +444,21 @@ layer(TestPostgres, { timeout: "2 minutes" })("Private Channel access", (it) => 
       });
       expect(missingCandidates).toMatchObject({ _tag: "Application.ChannelUnavailable" });
 
-      const participantMetadataBeforeJoin = yield* channels.getPrivateAdministrationForActor(
+      const participantMetadataBeforeJoin = yield* channels.getMembershipRosterForActor(
         maintainerAccountId,
         workspace.workspaceId,
         channelId,
       );
 
-      yield* channels.addPrivateMember(
-        AddPrivateChannelMemberCommand.make({
+      yield* channels.addMember(
+        AddChannelMemberCommand.make({
           actorAccountId: adminAccountId,
           workspaceId: workspace.workspaceId,
           channelId,
           workspaceIdentityId: adminIdentityId,
         }),
       );
-      const participantMetadataAfterJoin = yield* channels.getPrivateAdministrationForActor(
+      const participantMetadataAfterJoin = yield* channels.getMembershipRosterForActor(
         maintainerAccountId,
         workspace.workspaceId,
         channelId,

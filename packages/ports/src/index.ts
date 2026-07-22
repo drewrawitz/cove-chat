@@ -30,6 +30,8 @@ export {
   AuthenticationSignInAuditMetadata,
   ChannelPrivateMembershipAddedAuditEvent,
   ChannelPrivateMembershipAddedAuditMetadata,
+  ChannelPublicMembershipAddedAuditEvent,
+  ChannelPublicMembershipAddedAuditMetadata,
   type AuditEventWriterService,
 } from "./audit-event-writer.ts";
 export {

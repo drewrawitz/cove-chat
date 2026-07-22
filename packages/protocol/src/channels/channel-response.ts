@@ -46,11 +46,11 @@ export interface PrivateChannelListResponse extends Schema.Schema.Type<
   typeof PrivateChannelListResponse
 > {}
 
-export const PrivateChannelMemberCandidateListResponse = Schema.Struct({
+export const ChannelMemberCandidateListResponse = Schema.Struct({
   members: Schema.Array(ChannelMemberResponse),
-}).annotate({ identifier: "PrivateChannelMemberCandidateListResponse" });
-export interface PrivateChannelMemberCandidateListResponse extends Schema.Schema.Type<
-  typeof PrivateChannelMemberCandidateListResponse
+}).annotate({ identifier: "ChannelMemberCandidateListResponse" });
+export interface ChannelMemberCandidateListResponse extends Schema.Schema.Type<
+  typeof ChannelMemberCandidateListResponse
 > {}
 
 export const PublicChannelListResponse = Schema.Struct({
@@ -60,15 +60,27 @@ export interface PublicChannelListResponse extends Schema.Schema.Type<
   typeof PublicChannelListResponse
 > {}
 
-export const PrivateChannelAdministrationResponse = Schema.Struct({
+const ChannelMembershipRosterResponseFields = {
   id: Schema.String,
   workspaceId: Schema.String,
   name: Schema.String,
   purpose: Schema.String,
-  visibility: Schema.Literal("private"),
   maintainer: ChannelMaintainerResponse,
   members: Schema.Array(ChannelMemberResponse),
   actorHasChannelMembership: Schema.Boolean,
+};
+
+export const ChannelMembershipRosterResponse = Schema.Struct({
+  ...ChannelMembershipRosterResponseFields,
+  visibility: Schema.Literals(["public", "private"]),
+}).annotate({ identifier: "ChannelMembershipRosterResponse" });
+export interface ChannelMembershipRosterResponse extends Schema.Schema.Type<
+  typeof ChannelMembershipRosterResponse
+> {}
+
+export const PrivateChannelAdministrationResponse = Schema.Struct({
+  ...ChannelMembershipRosterResponseFields,
+  visibility: Schema.Literal("private"),
 }).annotate({ identifier: "PrivateChannelAdministrationResponse" });
 export interface PrivateChannelAdministrationResponse extends Schema.Schema.Type<
   typeof PrivateChannelAdministrationResponse

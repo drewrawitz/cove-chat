@@ -256,7 +256,6 @@ const make = Effect.gen(function* () {
         AND membership.channel_id = ${channelId}
       WHERE identity.workspace_id = ${workspaceId}
         AND identity.membership_ended_at IS NULL
-        AND identity.role <> 'guest'
         AND membership.identity_id IS NULL
       ORDER BY lower(identity.name), identity.id
     `,

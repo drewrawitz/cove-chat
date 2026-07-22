@@ -14,7 +14,7 @@ import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelLoading } from "../components/channel-loading.tsx";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
-import { PrivateChannelMembership } from "../components/private-channel-membership.tsx";
+import { ChannelMembership } from "../components/channel-membership.tsx";
 import { WorkspaceSwitcher } from "../components/workspace-switcher.tsx";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 
@@ -105,17 +105,17 @@ function ChannelPage(): ReactElement {
           </div>
 
           <div className="flex items-center gap-3">
-            {channel.data.visibility === "private" ? (
-              <PrivateChannelMembership
-                canAdminister={
-                  isWorkspaceAdministrator(workspace.data.membership.role) ||
-                  channel.data.maintainer.id === workspace.data.identity.id
-                }
-                channelId={channelId}
-                channelName={displayName}
-                workspaceId={workspaceId}
-              />
-            ) : null}
+            <ChannelMembership
+              canAdminister={
+                isWorkspaceAdministrator(workspace.data.membership.role) ||
+                channel.data.maintainer.id === workspace.data.identity.id
+              }
+              channelId={channelId}
+              channelName={displayName}
+              currentIdentityId={workspace.data.identity.id}
+              visibility={channel.data.visibility}
+              workspaceId={workspaceId}
+            />
             <img
               className="size-10 rounded-full border border-border bg-muted object-cover"
               src={channel.data.maintainer.avatarUrl}

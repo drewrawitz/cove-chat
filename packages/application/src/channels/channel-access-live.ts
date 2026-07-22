@@ -24,8 +24,9 @@ import {
   ChannelMaintainerView,
   ChannelMemberView,
   ChannelView,
-  PrivateChannelAdministrationView,
-  type AddPrivateChannelMemberCommand,
+  ChannelMembershipRosterView,
+  ChannelMemberUnavailable,
+  type AddChannelMemberCommand,
   type CreatePrivateChannelCommand,
   type CreatePublicChannelCommand,
 } from "./channel-access.ts";
@@ -104,12 +105,12 @@ const make = Effect.gen(function* () {
     return record;
   });
 
-  const administrationView = Effect.fn("ChannelAccess.administrationView")(function* (
+  const membershipRosterView = Effect.fn("ChannelAccess.membershipRosterView")(function* (
     workspaceId: WorkspaceId,
     record: ChannelAccessRecord,
   ) {
     const members = yield* repository.listMembers(workspaceId, record.channel.id);
-    return PrivateChannelAdministrationView.make({
+    return ChannelMembershipRosterView.make({
       channel: record.channel,
       maintainer: maintainerView(record.maintainer),
       members: members.map((member) =>
@@ -170,7 +171,7 @@ const make = Effect.gen(function* () {
   });
 
   const lockMembershipParticipants = Effect.fn("ChannelAccess.lockMembershipParticipants")(
-    function* (command: AddPrivateChannelMemberCommand) {
+    function* (command: AddChannelMemberCommand) {
       const actorSnapshot = yield* repository.readActiveActor(
         command.actorAccountId,
         command.workspaceId,
@@ -233,8 +234,8 @@ const make = Effect.gen(function* () {
       (command) => create(command, "private"),
       (effect) => recoverPersistence("ChannelAccess.createPrivate", effect),
     ),
-    addPrivateMember: Effect.fn("ChannelAccess.addPrivateMember")(
-      (command: AddPrivateChannelMemberCommand) =>
+    addMember: Effect.fn("ChannelAccess.addMember")(
+      (command: AddChannelMemberCommand) =>
         transactions.run(
           Effect.gen(function* () {
             const { actor, member } = yield* lockMembershipParticipants(command);
@@ -251,14 +252,22 @@ const make = Effect.gen(function* () {
             );
             const canAdminister =
               record !== undefined &&
-              record.channel.visibility === "private" &&
               (isWorkspaceAdministrator(actor.role) ||
                 record.channel.maintainerIdentityId === actor.id);
             if (!canAdminister) {
               return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
             }
 
-            if (member === undefined || !isFullMember(member.role)) {
+            if (member === undefined) {
+              return yield* Effect.fail(
+                new ChannelMemberUnavailable({
+                  workspaceId: command.workspaceId,
+                  channelId: command.channelId,
+                  workspaceIdentityId: command.workspaceIdentityId,
+                }),
+              );
+            }
+            if (record.channel.visibility === "private" && !isFullMember(member.role)) {
               return yield* Effect.fail(
                 new FullMemberUnavailable({
                   workspaceId: command.workspaceId,
@@ -274,27 +283,30 @@ const make = Effect.gen(function* () {
             );
             if (added) {
               const now = yield* Clock.currentTimeMillis;
+              const auditEventFields = {
+                actorId: command.actorAccountId,
+                occurredAt: new Date(now),
+                version: 1 as const,
+                metadata: {
+                  workspaceId: command.workspaceId,
+                  channelId: command.channelId,
+                  workspaceIdentityId: member.id,
+                },
+              };
               yield* auditEvents.append(
-                AuditEvent.cases["channel.private_membership_added"].make({
-                  actorId: command.actorAccountId,
-                  occurredAt: new Date(now),
-                  version: 1,
-                  metadata: {
-                    workspaceId: command.workspaceId,
-                    channelId: command.channelId,
-                    workspaceIdentityId: member.id,
-                  },
-                }),
+                record.channel.visibility === "private"
+                  ? AuditEvent.cases["channel.private_membership_added"].make(auditEventFields)
+                  : AuditEvent.cases["channel.public_membership_added"].make(auditEventFields),
               );
             }
 
-            return yield* administrationView(command.workspaceId, {
+            return yield* membershipRosterView(command.workspaceId, {
               ...record,
               hasChannelMembership: record.hasChannelMembership || member.id === actor.id,
             });
           }),
         ),
-      (effect) => recoverPersistence("ChannelAccess.addPrivateMember", effect),
+      (effect) => recoverPersistence("ChannelAccess.addMember", effect),
     ),
     listPrivateForActor: Effect.fn("ChannelAccess.listPrivateForActor")(
       function* (actorAccountId, workspaceId) {
@@ -304,9 +316,7 @@ const make = Effect.gen(function* () {
       },
       (effect) => recoverPersistence("ChannelAccess.listPrivateForActor", effect),
     ),
-    listPrivateMemberCandidatesForActor: Effect.fn(
-      "ChannelAccess.listPrivateMemberCandidatesForActor",
-    )(
+    listMemberCandidatesForActor: Effect.fn("ChannelAccess.listMemberCandidatesForActor")(
       function* (actorAccountId, workspaceId, channelId) {
         const actor = yield* repository.readActiveActor(actorAccountId, workspaceId);
         if (actor === undefined) {
@@ -315,22 +325,25 @@ const make = Effect.gen(function* () {
         const record = yield* repository.findById(workspaceId, actor.id, channelId);
         const canAdminister =
           record !== undefined &&
-          record.channel.visibility === "private" &&
           (isWorkspaceAdministrator(actor.role) ||
             record.channel.maintainerIdentityId === actor.id);
         if (!canAdminister) {
           return yield* Effect.fail(new ChannelUnavailable({ channelId }));
         }
         const candidates = yield* repository.listMemberCandidates(workspaceId, channelId);
-        return candidates.map((candidate) =>
-          ChannelMemberView.make({
-            id: candidate.id,
-            name: candidate.name,
-            avatarUrl: candidate.avatarUrl,
-          }),
-        );
+        return candidates
+          .filter(
+            (candidate) => record.channel.visibility === "public" || isFullMember(candidate.role),
+          )
+          .map((candidate) =>
+            ChannelMemberView.make({
+              id: candidate.id,
+              name: candidate.name,
+              avatarUrl: candidate.avatarUrl,
+            }),
+          );
       },
-      (effect) => recoverPersistence("ChannelAccess.listPrivateMemberCandidatesForActor", effect),
+      (effect) => recoverPersistence("ChannelAccess.listMemberCandidatesForActor", effect),
     ),
     listPrivateForAdministrator: Effect.fn("ChannelAccess.listPrivateForAdministrator")(
       function* (actorAccountId, workspaceId) {
@@ -339,11 +352,13 @@ const make = Effect.gen(function* () {
           return yield* Effect.fail(new ChannelAdministrationForbidden({ workspaceId }));
         }
         const channels = yield* repository.listPrivate(workspaceId, actor.id);
-        return yield* Effect.forEach(channels, (record) => administrationView(workspaceId, record));
+        return yield* Effect.forEach(channels, (record) =>
+          membershipRosterView(workspaceId, record),
+        );
       },
       (effect) => recoverPersistence("ChannelAccess.listPrivateForAdministrator", effect),
     ),
-    getPrivateAdministrationForActor: Effect.fn("ChannelAccess.getPrivateAdministrationForActor")(
+    getMembershipRosterForActor: Effect.fn("ChannelAccess.getMembershipRosterForActor")(
       function* (actorAccountId, workspaceId, channelId) {
         const actor = yield* repository.readActiveActor(actorAccountId, workspaceId);
         if (actor === undefined) {
@@ -352,14 +367,13 @@ const make = Effect.gen(function* () {
         const record = yield* repository.findById(workspaceId, actor.id, channelId);
         const canInspect =
           record !== undefined &&
-          record.channel.visibility === "private" &&
-          (isWorkspaceAdministrator(actor.role) || record.hasChannelMembership);
+          (isWorkspaceAdministrator(actor.role) || canActorViewChannel(actor, record));
         if (!canInspect) {
           return yield* Effect.fail(new ChannelUnavailable({ channelId }));
         }
-        return yield* administrationView(workspaceId, record);
+        return yield* membershipRosterView(workspaceId, record);
       },
-      (effect) => recoverPersistence("ChannelAccess.getPrivateAdministrationForActor", effect),
+      (effect) => recoverPersistence("ChannelAccess.getMembershipRosterForActor", effect),
     ),
     joinPublic: Effect.fn("ChannelAccess.joinPublic")(
       (command) =>
