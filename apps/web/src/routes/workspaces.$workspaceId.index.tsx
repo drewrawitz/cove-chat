@@ -12,8 +12,10 @@ import {
   useWorkspacesUpdateWorkspaceIdentity,
 } from "../api/generated/cove-app.ts";
 import { PageMessage } from "../components/page-message.tsx";
+import { PrivateChannelAdministration } from "../components/private-channel-administration.tsx";
 import { WorkspaceAdministration } from "../components/workspace-administration.tsx";
 import { requiredFormValue, roleLabel } from "../form-data.ts";
+import { isWorkspaceAdministrator } from "../workspace-role.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/")({
   component: WorkspaceManagement,
@@ -25,8 +27,7 @@ function WorkspaceManagement(): ReactElement {
   const queryClient = useQueryClient();
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const workspaces = useWorkspacesListWorkspaces({ query: { retry: false } });
-  const canAdminister =
-    workspace.data?.membership.role === "owner" || workspace.data?.membership.role === "admin";
+  const canAdminister = isWorkspaceAdministrator(workspace.data?.membership.role);
   const endMembership = useWorkspacesEndMembership();
   const updateIdentity = useWorkspacesUpdateWorkspaceIdentity();
 
@@ -211,11 +212,17 @@ function WorkspaceManagement(): ReactElement {
             </form>
 
             {canAdminister ? (
-              <WorkspaceAdministration
-                actorIsOwner={workspace.data.membership.role === "owner"}
-                currentIdentityId={workspace.data.identity.id}
-                workspaceId={workspaceId}
-              />
+              <>
+                <PrivateChannelAdministration
+                  currentIdentityId={workspace.data.identity.id}
+                  workspaceId={workspaceId}
+                />
+                <WorkspaceAdministration
+                  actorIsOwner={workspace.data.membership.role === "owner"}
+                  currentIdentityId={workspace.data.identity.id}
+                  workspaceId={workspaceId}
+                />
+              </>
             ) : null}
 
             <div className="mt-10 border-t pt-6">

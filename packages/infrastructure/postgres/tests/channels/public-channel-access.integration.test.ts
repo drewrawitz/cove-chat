@@ -58,6 +58,15 @@ layer(TestPostgres, { timeout: "2 minutes" })("Public Channel access", (it) => {
         name: "Alice Product",
         avatarUrl: "/avatars/alice.svg",
       });
+      expect(created.hasChannelMembership).toBe(true);
+
+      const memberships = yield* sql<{ identityId: string }>`
+        SELECT identity_id AS "identityId"
+        FROM channel_memberships
+        WHERE workspace_id = ${workspace.workspaceId}
+          AND channel_id = ${created.channel.id}
+      `;
+      expect(memberships).toEqual([{ identityId: workspace.workspaceIdentityId }]);
     }),
   );
 });

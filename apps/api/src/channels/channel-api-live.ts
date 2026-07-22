@@ -1,5 +1,7 @@
 import {
+  AddPrivateChannelMemberCommand,
   ChannelAccess,
+  CreatePrivateChannelCommand,
   CreatePublicChannelCommand,
   JoinPublicChannelCommand,
 } from "@cove/application";
@@ -9,6 +11,7 @@ import {
   makeChannelId,
   makeUserId,
   makeWorkspaceId,
+  makeWorkspaceIdentityId,
 } from "@cove/domain";
 import {
   AuthErrorResponses,
@@ -21,7 +24,15 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
-import { publicChannelListResponse, publicChannelResponse } from "./channel-response.ts";
+import {
+  channelResponse,
+  privateChannelAdministrationListResponse,
+  privateChannelAdministrationResponse,
+  privateChannelListResponse,
+  privateChannelMemberCandidateListResponse,
+  publicChannelListResponse,
+  publicChannelResponse,
+} from "./channel-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -39,6 +50,25 @@ const channelErrorResponse = (error: unknown) =>
     : AuthErrorResponses.internalServerError;
 
 const createChannelErrorResponse = workspaceErrorResponse;
+
+const channelAdministrationErrorResponse = (error: unknown) => {
+  switch (errorTag(error)) {
+    case "Application.ChannelUnavailable":
+    case "Domain.InvalidIdentifier":
+      return ChannelErrorResponses.unavailable;
+    case "Application.FullMemberUnavailable":
+      return WorkspaceErrorResponses.fullMemberUnavailable;
+    case "Application.WorkspaceUnavailable":
+      return WorkspaceErrorResponses.unavailable;
+    default:
+      return AuthErrorResponses.internalServerError;
+  }
+};
+
+const privateChannelAdministrationListErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.ChannelAdministrationForbidden"
+    ? ChannelErrorResponses.administrationForbidden
+    : workspaceErrorResponse(error);
 
 export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (handlers) =>
   handlers
@@ -72,15 +102,80 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
         );
       }).pipe(Effect.mapError(createChannelErrorResponse)),
     )
-    .handle("getPublicChannel", ({ params }) =>
+    .handle("createPrivateChannel", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channelId = yield* makeChannelId(randomUUID());
+        const channels = yield* ChannelAccess;
+        return channelResponse(
+          yield* channels.createPrivate(
+            CreatePrivateChannelCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              name: ChannelName.make(payload.name),
+              purpose: ChannelPurpose.make(payload.purpose),
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(createChannelErrorResponse)),
+    )
+    .handle("listPrivateChannels", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channels = yield* ChannelAccess;
+        return privateChannelListResponse(
+          yield* channels.listPrivateForActor(actorId, workspaceId),
+        );
+      }).pipe(Effect.mapError(workspaceErrorResponse)),
+    )
+    .handle("listPrivateChannelMemberCandidates", ({ params }) =>
       Effect.gen(function* () {
         const actor = yield* AuthenticatedActor;
         const actorId = yield* makeUserId(actor.userId);
         const workspaceId = yield* makeWorkspaceId(params.workspaceId);
         const channelId = yield* makeChannelId(params.channelId);
         const channels = yield* ChannelAccess;
-        return publicChannelResponse(
-          yield* channels.getPublicForActor(actorId, workspaceId, channelId),
+        return privateChannelMemberCandidateListResponse(
+          yield* channels.listPrivateMemberCandidatesForActor(actorId, workspaceId, channelId),
+        );
+      }).pipe(Effect.mapError(channelErrorResponse)),
+    )
+    .handle("listPrivateChannelsForAdministration", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channels = yield* ChannelAccess;
+        return privateChannelAdministrationListResponse(
+          yield* channels.listPrivateForAdministrator(actorId, workspaceId),
+        );
+      }).pipe(Effect.mapError(privateChannelAdministrationListErrorResponse)),
+    )
+    .handle("getChannel", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channelId = yield* makeChannelId(params.channelId);
+        const channels = yield* ChannelAccess;
+        return channelResponse(yield* channels.getForActor(actorId, workspaceId, channelId));
+      }).pipe(Effect.mapError(channelErrorResponse)),
+    )
+    .handle("getPrivateChannelAdministration", ({ params }) =>
+      Effect.gen(function* () {
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channelId = yield* makeChannelId(params.channelId);
+        const channels = yield* ChannelAccess;
+        return privateChannelAdministrationResponse(
+          yield* channels.getPrivateAdministrationForActor(actorId, workspaceId, channelId),
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
     )
@@ -98,5 +193,26 @@ export const ChannelApiLive = HttpApiBuilder.group(CoveAppApi, "channels", (hand
           ),
         );
       }).pipe(Effect.mapError(channelErrorResponse)),
+    )
+    .handle("addPrivateChannelMember", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const actor = yield* AuthenticatedActor;
+        const actorId = yield* makeUserId(actor.userId);
+        const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+        const channelId = yield* makeChannelId(params.channelId);
+        const workspaceIdentityId = yield* makeWorkspaceIdentityId(params.workspaceIdentityId);
+        const channels = yield* ChannelAccess;
+        return privateChannelAdministrationResponse(
+          yield* channels.addPrivateMember(
+            AddPrivateChannelMemberCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              workspaceIdentityId,
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(channelAdministrationErrorResponse)),
     ),
 );
