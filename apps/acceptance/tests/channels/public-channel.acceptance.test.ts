@@ -37,18 +37,18 @@ it.live(
       yield* signIn(acceptance, "bob@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
       yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
-      yield* browserAction(() => page.getByRole("heading", { name: "#general" }).waitFor());
+      yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
       yield* browserAction(() =>
-        page.locator("summary").filter({ hasText: "Create channel" }).click(),
+        page.locator("summary").filter({ hasText: "New channel" }).click(),
       );
-      yield* browserAction(() => page.getByLabel("Channel name").fill("product-lab"));
+      yield* browserAction(() => page.getByLabel("Channel name").fill("Product Lab"));
       yield* browserAction(() =>
         page
           .getByLabel("Purpose")
           .fill("A durable place to explore and maintain product experiments."),
       );
       yield* browserAction(() => page.getByRole("button", { name: "Create channel" }).click());
-      yield* browserAction(() => page.getByRole("heading", { name: "#product-lab" }).waitFor());
+      yield* browserAction(() => page.getByRole("heading", { name: "Product Lab" }).waitFor());
 
       const channelId = new URL(page.url()).pathname.split("/").at(-1);
       expect(channelId).toBeDefined();
@@ -60,19 +60,21 @@ it.live(
       const memberNavigation = page.getByRole("navigation", { name: "Your channels" });
       expect(
         yield* browserAction(() =>
-          memberNavigation.getByRole("link", { name: "product-lab" }).count(),
+          memberNavigation.getByRole("link", { name: "Product Lab" }).count(),
         ),
       ).toBe(0);
       const discovery = page.getByRole("region", { name: "Discover public channels" });
-      yield* browserAction(() => discovery.getByText("product-lab", { exact: true }).waitFor());
-      yield* browserAction(() =>
-        discovery
-          .getByText("A durable place to explore and maintain product experiments.")
-          .waitFor(),
-      );
-      yield* browserAction(() => discovery.getByRole("link", { name: "product-lab" }).click());
+      yield* browserAction(() => discovery.getByText("Product Lab", { exact: true }).waitFor());
+      expect(
+        yield* browserAction(() =>
+          discovery
+            .getByText("A durable place to explore and maintain product experiments.")
+            .count(),
+        ),
+      ).toBe(0);
+      yield* browserAction(() => discovery.getByRole("link", { name: "Product Lab" }).click());
 
-      yield* browserAction(() => page.getByRole("heading", { name: "#product-lab" }).waitFor());
+      yield* browserAction(() => page.getByRole("heading", { name: "Product Lab" }).waitFor());
       yield* browserAction(() =>
         page.getByText("A durable place to explore and maintain product experiments.").waitFor(),
       );
@@ -81,17 +83,17 @@ it.live(
         yield* browserAction(() =>
           page
             .getByRole("navigation", { name: "Your channels" })
-            .getByRole("link", { name: "product-lab" })
+            .getByRole("link", { name: "Product Lab" })
             .count(),
         ),
       ).toBe(0);
 
       yield* browserAction(() => page.getByRole("button", { name: "Join channel" }).click());
-      yield* browserAction(() => page.getByText("You joined #product-lab.").waitFor());
+      yield* browserAction(() => page.getByText("You joined Product Lab.").waitFor());
       yield* browserAction(() =>
         page
           .getByRole("navigation", { name: "Your channels" })
-          .getByRole("link", { name: "product-lab" })
+          .getByRole("link", { name: "Product Lab" })
           .waitFor(),
       );
 
@@ -103,7 +105,7 @@ it.live(
       const otherWorkspaceId = new URL(page.url()).pathname.split("/").at(-1);
       expect(otherWorkspaceId).toBeDefined();
       yield* browserAction(() => page.getByRole("link", { name: "Open conversations" }).click());
-      yield* browserAction(() => page.getByRole("heading", { name: "#general" }).waitFor());
+      yield* browserAction(() => page.getByRole("heading", { name: "General" }).waitFor());
       yield* browserAction(() => page.getByText("Maintained by Alice in Cove").waitFor());
 
       yield* browserAction(() =>

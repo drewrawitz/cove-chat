@@ -9,6 +9,7 @@ import {
   useChannelsJoinPublicChannel,
   useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
+import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelSidebar } from "../components/channel-sidebar.tsx";
 import { PageMessage } from "../components/page-message.tsx";
 
@@ -42,6 +43,8 @@ function PublicChannel(): ReactElement {
     );
   }
 
+  const displayName = channelDisplayName(channel.data.name);
+
   const join = (): void => {
     joinChannel.mutate(
       { workspaceId, channelId },
@@ -61,90 +64,116 @@ function PublicChannel(): ReactElement {
   };
 
   return (
-    <main className="min-h-svh bg-muted/30 p-3 sm:p-5">
-      <div className="mx-auto grid min-h-[calc(100svh-1.5rem)] w-full max-w-[96rem] overflow-hidden rounded-3xl border bg-card shadow-sm sm:min-h-[calc(100svh-2.5rem)] lg:grid-cols-[19rem_minmax(0,1fr)]">
-        <aside className="border-b bg-muted/20 p-4 lg:border-r lg:border-b-0 lg:p-5">
-          <header className="border-b pb-5">
-            <div className="flex items-center justify-between gap-3">
-              <Link
-                className="font-heading text-sm font-semibold tracking-[0.18em] text-primary uppercase"
-                to="/"
-              >
-                Cove
-              </Link>
-              <Link
-                className="text-xs font-medium text-primary hover:underline"
-                to="/workspaces/$workspaceId"
-                params={{ workspaceId }}
-              >
-                Manage
-              </Link>
-            </div>
-            <h1 className="mt-4 truncate font-heading text-xl font-semibold tracking-tight">
-              {workspace.data.workspace.name}
-            </h1>
-            <p className="mt-1 truncate text-sm text-muted-foreground">
-              {workspace.data.identity.name}
-            </p>
-          </header>
+    <main className="dark min-h-svh bg-background text-foreground">
+      <div className="min-h-svh w-full lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-r lg:border-b-0">
+          <div className="p-4 lg:p-5">
+            <header>
+              <div className="flex items-center gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary font-heading text-base font-semibold text-primary-foreground">
+                  {workspace.data.workspace.name.slice(0, 1).toLocaleUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-base font-semibold">
+                    {workspace.data.workspace.name}
+                  </h1>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {workspace.data.identity.name}
+                  </p>
+                </div>
+              </div>
 
-          <ChannelSidebar activeChannelId={channelId} workspaceId={workspaceId} />
+              <nav className="mt-7 grid gap-1" aria-label="Workspace navigation">
+                <Link
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none"
+                  to="/"
+                >
+                  <span className="text-muted-foreground" aria-hidden="true">
+                    ←
+                  </span>
+                  All workspaces
+                </Link>
+                <Link
+                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none"
+                  to="/workspaces/$workspaceId"
+                  params={{ workspaceId }}
+                >
+                  <span className="text-muted-foreground" aria-hidden="true">
+                    ⚙
+                  </span>
+                  Workspace settings
+                </Link>
+              </nav>
+            </header>
+
+            <ChannelSidebar activeChannelId={channelId} workspaceId={workspaceId} />
+          </div>
         </aside>
 
         <section className="min-w-0 bg-background">
-          <header className="border-b px-5 py-5 sm:px-8 sm:py-6">
-            <div className="flex flex-wrap items-start justify-between gap-5">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.14em] text-primary uppercase">
-                  Public Channel
+          <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
+            <header className="flex flex-wrap items-start justify-between gap-6 pb-10">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-4xl font-semibold tracking-tight sm:text-5xl">{displayName}</h2>
+                <p className="mt-3 max-w-3xl text-base text-muted-foreground sm:text-lg">
+                  Public <span aria-hidden="true">·</span> {channel.data.purpose}
                 </p>
-                <h2 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-                  #{channel.data.name}
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  {channel.data.purpose}
-                </p>
-                <p className="mt-3 text-xs font-medium text-muted-foreground">
+                <p className="mt-3 text-sm text-muted-foreground">
                   Maintained by {channel.data.maintainer.name}
                 </p>
               </div>
 
-              {channel.data.hasChannelMembership ? (
-                <span className="rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-                  Joined
-                </span>
-              ) : (
-                <Button type="button" disabled={joinChannel.isPending} onClick={join}>
-                  {joinChannel.isPending ? "Joining…" : "Join channel"}
-                </Button>
-              )}
-            </div>
+              <div className="flex items-center gap-3">
+                <img
+                  className="size-10 rounded-full border border-border bg-muted object-cover"
+                  src={channel.data.maintainer.avatarUrl}
+                  alt=""
+                />
+                {channel.data.hasChannelMembership ? (
+                  <span className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm font-medium text-muted-foreground">
+                    Joined
+                  </span>
+                ) : (
+                  <Button type="button" size="lg" disabled={joinChannel.isPending} onClick={join}>
+                    {joinChannel.isPending ? "Joining…" : "Join channel"}
+                  </Button>
+                )}
+              </div>
+            </header>
+
             {joinChannel.isSuccess ? (
-              <p className="mt-3 text-sm text-muted-foreground" role="status">
-                You joined #{channel.data.name}.
+              <p className="-mt-6 mb-6 text-sm text-muted-foreground" role="status">
+                You joined {displayName}.
               </p>
             ) : null}
             {joinChannel.isError ? (
-              <p className="mt-3 text-sm text-destructive" role="alert">
+              <p className="-mt-6 mb-6 text-sm text-destructive" role="alert">
                 Cove could not join this channel. Refresh and try again.
               </p>
             ) : null}
-          </header>
 
-          <div className="px-5 py-8 sm:px-8 sm:py-10">
-            <div className="mx-auto max-w-3xl">
-              <div className="flex items-baseline justify-between gap-4">
-                <h3 className="font-heading text-xl font-semibold">Topics</h3>
-                <span className="text-xs font-medium text-muted-foreground">0 open</span>
+            <section aria-labelledby="topics-heading">
+              <div className="flex items-baseline justify-between gap-4 border-b pb-4">
+                <h3 id="topics-heading" className="text-lg font-semibold">
+                  Topics
+                </h3>
+                <span className="text-sm text-muted-foreground">0 open</span>
               </div>
-              <section className="mt-5 rounded-2xl border border-dashed bg-muted/20 px-6 py-12 text-center">
-                <h4 className="font-heading text-lg font-semibold">No topics yet</h4>
-                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+
+              <div className="flex min-h-72 flex-col items-center justify-center border-b px-6 py-16 text-center">
+                <span
+                  className="flex size-12 items-center justify-center rounded-full border border-border bg-muted/30 text-xl text-muted-foreground"
+                  aria-hidden="true"
+                >
+                  ◌
+                </span>
+                <h4 className="mt-5 text-lg font-semibold">No topics yet</h4>
+                <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
                   Conversations in Cove begin with a named Topic and an Opening Brief. Topic
                   creation arrives in the next conversation slice.
                 </p>
-              </section>
-            </div>
+              </div>
+            </section>
           </div>
         </section>
       </div>
