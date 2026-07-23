@@ -94,8 +94,8 @@ function TopicPage(): ReactElement {
         <TopicMessages
           canReply={channel.data.hasChannelMembership}
           channelId={channelId}
+          currentIdentity={workspace.data.identity}
           messages={topic.data.messages}
-          currentIdentityId={workspace.data.identity.id}
           refresh={refreshTopic}
           topicId={topicId}
           workspaceId={workspaceId}

@@ -25,6 +25,7 @@ import { requiredFormValue } from "../form-data.ts";
 import { topicMessageKind, topicMessageKindLabel } from "../topic-message-kind.ts";
 import { LocalTimestamp } from "./local-timestamp.tsx";
 import { useSnackbar } from "./snackbar.tsx";
+import { TopicReplyComposer } from "./topic-reply-composer.tsx";
 
 interface TopicMessage {
   readonly id: string;
@@ -43,8 +44,12 @@ interface TopicMessage {
 interface TopicMessagesProps {
   readonly canReply: boolean;
   readonly channelId: string;
+  readonly currentIdentity: {
+    readonly avatarUrl: string;
+    readonly id: string;
+    readonly name: string;
+  };
   readonly messages: ReadonlyArray<TopicMessage>;
-  readonly currentIdentityId: string;
   readonly refresh: () => Promise<void>;
   readonly topicId: string;
   readonly workspaceId: string;
@@ -59,7 +64,7 @@ export function TopicMessages({
   canReply,
   channelId,
   messages,
-  currentIdentityId,
+  currentIdentity,
   refresh,
   topicId,
   workspaceId,
@@ -75,24 +80,14 @@ export function TopicMessages({
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
 
-  const add = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    addMessage.mutate(
-      {
-        workspaceId,
-        channelId,
-        topicId,
-        data: { body: requiredFormValue(form, "messageBody") },
-      },
-      {
-        onSuccess: async () => {
-          formElement.reset();
-          await refresh();
-        },
-      },
-    );
+  const add = async (body: string): Promise<void> => {
+    await addMessage.mutateAsync({
+      workspaceId,
+      channelId,
+      topicId,
+      data: { body },
+    });
+    await refresh();
   };
 
   const edit = (event: FormEvent<HTMLFormElement>, messageId: string): void => {
@@ -136,7 +131,7 @@ export function TopicMessages({
           const kindLabel = topicMessageKindLabel(message.position);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
           const excerpt = messageExcerpt(message.body);
-          const isAuthor = message.author.id === currentIdentityId;
+          const isAuthor = message.author.id === currentIdentity.id;
           const canChange = canReply && isAuthor && !message.deleted;
           const isEditing = editingId === message.id;
 
@@ -260,29 +255,15 @@ export function TopicMessages({
       </ol>
 
       {canReply ? (
-        <form className="border-t pt-8" onSubmit={add}>
-          <label className="text-base font-semibold" htmlFor="newMessage">
-            Write a reply
-          </label>
-          <textarea
-            id="newMessage"
-            name="messageBody"
-            required
-            rows={5}
-            className="mt-3 w-full resize-y rounded-lg border bg-background px-4 py-3 leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            placeholder="Add context, evidence, or a response to this Topic."
+        <>
+          <div className="h-24" aria-hidden="true" />
+          <TopicReplyComposer
+            identity={currentIdentity}
+            hasError={addMessage.isError}
+            isPending={mutationPending}
+            onPost={add}
           />
-          {addMessage.isError ? (
-            <p className="mt-2 text-sm text-destructive" role="alert">
-              Cove could not add this reply. Refresh and try again.
-            </p>
-          ) : null}
-          <div className="mt-3 flex justify-end">
-            <Button type="submit" size="lg" disabled={mutationPending}>
-              {addMessage.isPending ? "Replying…" : "Reply"}
-            </Button>
-          </div>
-        </form>
+        </>
       ) : null}
 
       {deletingMessage === undefined ? null : (

@@ -24,7 +24,11 @@ test("identifies messages by author and timestamp instead of a numbered heading"
       <TopicMessages
         canReply
         channelId="channel-1"
-        currentIdentityId="identity-1"
+        currentIdentity={{
+          id: "identity-1",
+          name: "Bob in Cove",
+          avatarUrl: "/avatars/bob.svg",
+        }}
         messages={[
           {
             id: "message-1",
@@ -81,7 +85,8 @@ test("identifies messages by author and timestamp instead of a numbered heading"
   );
   expect(markup).toContain("More actions for reply 1 by Bob in Cove");
   expect(markup).toContain("More actions for reply 2 by Bob in Cove");
-  expect(markup).toContain(">Write a reply</label>");
+  expect(markup).toContain(">Reply");
+  expect(markup).toContain('aria-keyshortcuts="R"');
   expect(markup).not.toContain(">Opening Brief</h3>");
   expect(markup).not.toContain("Message 1");
 });

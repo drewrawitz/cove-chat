@@ -65,10 +65,11 @@ it.live(
       );
       yield* browserAction(() => page.getByText("Edited", { exact: true }).waitFor());
 
+      yield* browserAction(() => page.keyboard.press("r"));
       yield* browserAction(() =>
         page.getByLabel("Write a reply").fill("The release candidate passed smoke testing."),
       );
-      yield* browserAction(() => page.getByRole("button", { name: "Reply" }).click());
+      yield* browserAction(() => page.getByRole("button", { name: "Post" }).click());
       yield* browserAction(() =>
         page.getByText("The release candidate passed smoke testing.", { exact: true }).waitFor(),
       );
