@@ -165,7 +165,7 @@ export function TopicMessages({
           const isEditing = editingId === message.id;
 
           return (
-            <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-8">
+            <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-5">
               <article
                 aria-label={isEditing ? `Edit ${kind} by ${message.author.name}` : undefined}
                 aria-labelledby={isEditing ? undefined : `message-${message.id}`}
@@ -183,19 +183,22 @@ export function TopicMessages({
                     onSubmit={(event) => edit(event, message.id)}
                   />
                 ) : (
-                  <>
-                    <header className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          className="size-10 rounded-full border border-border bg-muted object-cover"
-                          src={message.author.avatarUrl}
-                          alt=""
-                        />
-                        <div>
-                          <h3 id={`message-${message.id}`} className="font-semibold">
+                  <div className="flex items-start gap-3">
+                    <img
+                      className="size-10 shrink-0 rounded-full border border-border bg-muted object-cover"
+                      src={message.author.avatarUrl}
+                      alt=""
+                    />
+                    <div className="min-w-0 flex-1">
+                      <header className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                          <h3
+                            id={`message-${message.id}`}
+                            className="truncate font-semibold leading-5"
+                          >
                             {message.author.name}
                           </h3>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="shrink-0 text-sm leading-5 text-muted-foreground">
                             <LocalTimestamp mode="message" value={message.createdAt} />
                             {message.edited && !message.deleted ? (
                               <>
@@ -205,66 +208,66 @@ export function TopicMessages({
                             ) : null}
                           </p>
                         </div>
-                      </div>
 
-                      {canChange ? (
-                        <MenuRoot>
-                          <MenuTrigger
-                            className={buttonVariants({
-                              variant: "ghost",
-                              size: "icon-sm",
-                              className: "message-actions",
-                            })}
-                            aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="currentColor"
-                              aria-hidden="true"
-                              className="size-4"
+                        {canChange ? (
+                          <MenuRoot>
+                            <MenuTrigger
+                              className={buttonVariants({
+                                variant: "ghost",
+                                size: "icon-sm",
+                                className: "message-actions",
+                              })}
+                              aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
                             >
-                              <circle cx="5" cy="12" r="1.5" />
-                              <circle cx="12" cy="12" r="1.5" />
-                              <circle cx="19" cy="12" r="1.5" />
-                            </svg>
-                          </MenuTrigger>
-                          <MenuPortal>
-                            <MenuPositioner side="bottom" align="end">
-                              <MenuPopup>
-                                <MenuItem
-                                  onClick={() => {
-                                    editMessage.reset();
-                                    setEditingId(message.id);
-                                  }}
-                                >
-                                  Edit {kind}
-                                </MenuItem>
-                                <MenuItem
-                                  className="text-destructive data-highlighted:text-destructive"
-                                  onClick={() => {
-                                    deleteMessage.reset();
-                                    setDeletingId(message.id);
-                                  }}
-                                >
-                                  Delete {kind}
-                                </MenuItem>
-                              </MenuPopup>
-                            </MenuPositioner>
-                          </MenuPortal>
-                        </MenuRoot>
-                      ) : null}
-                    </header>
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden="true"
+                                className="size-4"
+                              >
+                                <circle cx="5" cy="12" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="19" cy="12" r="1.5" />
+                              </svg>
+                            </MenuTrigger>
+                            <MenuPortal>
+                              <MenuPositioner side="bottom" align="end">
+                                <MenuPopup>
+                                  <MenuItem
+                                    onClick={() => {
+                                      editMessage.reset();
+                                      setEditingId(message.id);
+                                    }}
+                                  >
+                                    Edit {kind}
+                                  </MenuItem>
+                                  <MenuItem
+                                    className="text-destructive data-highlighted:text-destructive"
+                                    onClick={() => {
+                                      deleteMessage.reset();
+                                      setDeletingId(message.id);
+                                    }}
+                                  >
+                                    Delete {kind}
+                                  </MenuItem>
+                                </MenuPopup>
+                              </MenuPositioner>
+                            </MenuPortal>
+                          </MenuRoot>
+                        ) : null}
+                      </header>
 
-                    {message.deleted ? (
-                      <p className="mt-5 text-sm italic text-muted-foreground">
-                        {kindLabel} deleted
-                      </p>
-                    ) : (
-                      <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-foreground/90">
-                        {message.body}
-                      </p>
-                    )}
-                  </>
+                      {message.deleted ? (
+                        <p className="mt-1 text-sm leading-6 italic text-muted-foreground">
+                          {kindLabel} deleted
+                        </p>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-base leading-6 text-foreground/90">
+                          {message.body}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 )}
               </article>
             </li>

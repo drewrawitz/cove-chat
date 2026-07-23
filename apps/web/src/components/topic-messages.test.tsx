@@ -184,6 +184,20 @@ test("identifies messages by author and timestamp instead of a numbered heading"
   expect(markup).not.toContain("Message 1");
 });
 
+test("keeps message metadata and body in a compact column beside the avatar", () => {
+  render(topicMessages([openingMessage]));
+
+  const author = screen.getByRole("heading", { name: currentIdentity.name });
+  const body = screen.getByText(openingMessage.body);
+  const contentColumn = body.parentElement;
+
+  expect(contentColumn?.contains(author)).toBe(true);
+  expect(contentColumn?.querySelector("img")).toBeNull();
+  expect(author.parentElement?.querySelector("time")).not.toBeNull();
+  expect(author.parentElement?.classList.contains("flex")).toBe(true);
+  expect(body.closest("li")?.classList.contains("py-5")).toBe(true);
+});
+
 test("focuses the message editor when Edit is selected", () => {
   render(topicMessages([openingMessage]));
 
