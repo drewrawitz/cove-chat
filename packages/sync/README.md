@@ -13,6 +13,7 @@ apply migrations, and start the cache:
 
 ```sh
 vp run @cove/db#migrate:deploy
+vp run @cove/db#generate:zero
 vp run @cove/sync#dev
 ```
 

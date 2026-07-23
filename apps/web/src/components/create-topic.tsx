@@ -52,6 +52,7 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
           await navigate({
             to: "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
             params: { workspaceId, channelId, topicId: topic.id },
+            state: (previous) => ({ ...previous, justCreatedTopicId: topic.id }),
           });
         },
       },

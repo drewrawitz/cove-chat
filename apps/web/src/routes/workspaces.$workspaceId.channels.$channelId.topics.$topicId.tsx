@@ -1,6 +1,6 @@
 import { queries } from "@cove/sync";
 import { useQuery } from "@rocicorp/zero/react";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useLocation } from "@tanstack/react-router";
 import { type ReactElement, useRef } from "react";
 import {
   useAuthMe,
@@ -13,7 +13,7 @@ import { PageMessage } from "../components/page-message.tsx";
 import { TopicHeader } from "../components/topic-header.tsx";
 import { TopicMessages } from "../components/topic-messages.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
-import { synchronizedTopicDetail } from "../topic-sync.ts";
+import { synchronizedTopicDetail, topicProjectionState } from "../topic-sync.ts";
 
 export const Route = createFileRoute(
   "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
@@ -21,6 +21,12 @@ export const Route = createFileRoute(
 
 function TopicPage(): ReactElement {
   const { workspaceId, channelId, topicId } = Route.useParams();
+  const justCreatedTopicId = useLocation({
+    select: ({ state }) =>
+      "justCreatedTopicId" in state && typeof state.justCreatedTopicId === "string"
+        ? state.justCreatedTopicId
+        : undefined,
+  });
   const topicHeading = useRef<HTMLHeadingElement>(null);
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
@@ -29,10 +35,13 @@ function TopicPage(): ReactElement {
     queries.topics.byId({ workspaceId, channelId, topicId }),
   );
   const topic = synchronizedTopicDetail(synchronizedTopic);
-  const topicPending = synchronizedTopicResult.type === "unknown" && topic === undefined;
-  const topicError =
-    synchronizedTopicResult.type === "error" ||
-    (synchronizedTopicResult.type === "complete" && topic === undefined);
+  const projectionState = topicProjectionState({
+    queryResultType: synchronizedTopicResult.type,
+    topicAvailable: topic !== undefined,
+    justCreated: justCreatedTopicId === topicId,
+  });
+  const topicPending = projectionState === "syncing";
+  const topicError = projectionState === "unavailable";
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;

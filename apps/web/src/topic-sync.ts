@@ -54,6 +54,23 @@ export interface TopicSummaryView {
   };
 }
 
+export type TopicProjectionState = "syncing" | "available" | "unavailable";
+
+export function topicProjectionState({
+  queryResultType,
+  topicAvailable,
+  justCreated,
+}: {
+  readonly queryResultType: "unknown" | "complete" | "error";
+  readonly topicAvailable: boolean;
+  readonly justCreated: boolean;
+}): TopicProjectionState {
+  if (queryResultType === "error") return "unavailable";
+  if (topicAvailable) return "available";
+  if (queryResultType === "unknown" || justCreated) return "syncing";
+  return "unavailable";
+}
+
 const topicMessageView = (message: SynchronizedTopicMessage): TopicMessageView | undefined => {
   if (message.author === undefined) return undefined;
 

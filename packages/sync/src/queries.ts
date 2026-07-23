@@ -37,16 +37,14 @@ const authorizedTopics = (args: z.output<typeof ChannelTopicsArguments>, context
               workspace.whereExists("identities", (identity) =>
                 identity
                   .where("accountId", context.userID)
-                  .where("membershipEndedAt", "IS", undefined)
+                  .where("membershipEndedAt", "IS", null)
                   .where("role", "!=", "guest"),
               ),
             ),
           ),
           expression.exists("memberships", (membership) =>
             membership.whereExists("workspaceIdentity", (identity) =>
-              identity
-                .where("accountId", context.userID)
-                .where("membershipEndedAt", "IS", undefined),
+              identity.where("accountId", context.userID).where("membershipEndedAt", "IS", null),
             ),
           ),
         ),

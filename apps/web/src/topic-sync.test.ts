@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { synchronizedTopicDetail, synchronizedTopicSummaries } from "./topic-sync.ts";
+import {
+  synchronizedTopicDetail,
+  synchronizedTopicSummaries,
+  topicProjectionState,
+} from "./topic-sync.ts";
 
 const messages = [
   {
@@ -78,5 +82,28 @@ describe("synchronized Topic views", () => {
       deleted: true,
     });
     expect(detail?.messages[1]).not.toHaveProperty("body");
+  });
+
+  it("keeps a just-created Topic syncing until its delayed projection arrives", () => {
+    expect([
+      topicProjectionState({
+        queryResultType: "complete",
+        topicAvailable: false,
+        justCreated: true,
+      }),
+      topicProjectionState({
+        queryResultType: "complete",
+        topicAvailable: true,
+        justCreated: true,
+      }),
+    ]).toEqual(["syncing", "available"]);
+
+    expect(
+      topicProjectionState({
+        queryResultType: "complete",
+        topicAvailable: false,
+        justCreated: false,
+      }),
+    ).toBe("unavailable");
   });
 });
