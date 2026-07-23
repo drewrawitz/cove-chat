@@ -85,9 +85,9 @@ export function TopicMessages({
 
   useEffect(() => {
     if (initiallyPositionedTopicId.current === topicId) return;
-    initiallyPositionedTopicId.current = topicId;
 
     const frame = window.requestAnimationFrame(() => {
+      initiallyPositionedTopicId.current = topicId;
       window.scrollTo({
         top: messages.length > 1 ? document.documentElement.scrollHeight : 0,
         behavior: "auto",

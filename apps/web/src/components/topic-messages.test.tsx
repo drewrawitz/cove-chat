@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { StrictMode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { SnackbarProvider } from "./snackbar.tsx";
@@ -228,6 +229,29 @@ test("opens a Topic with replies at the latest message only once", () => {
 
   rerender(topicMessages([openingMessage, unrelatedReply, newReply]));
   expect(scrollTo).toHaveBeenCalledOnce();
+});
+
+test("opens a Topic at the latest message when Strict Mode replays effects", () => {
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  const pendingFrames = new Map<number, FrameRequestCallback>();
+  let nextFrame = 0;
+  vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => {
+    nextFrame += 1;
+    pendingFrames.set(nextFrame, callback);
+    return nextFrame;
+  });
+  vi.mocked(window.cancelAnimationFrame).mockImplementation((frame) => {
+    pendingFrames.delete(frame);
+  });
+
+  render(<StrictMode>{topicMessages([openingMessage, unrelatedReply])}</StrictMode>);
+  for (const callback of pendingFrames.values()) callback(0);
+
+  expect(scrollTo).toHaveBeenCalledOnce();
+  expect(scrollTo).toHaveBeenCalledWith({ top: 2400, behavior: "auto" });
 });
 
 test("focuses the message editor when Edit is selected", () => {
