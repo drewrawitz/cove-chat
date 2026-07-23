@@ -10,9 +10,9 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
-import { Route as WorkspaceInvitationsRedeemRouteImport } from './routes/workspace-invitations.redeem'
 import { Route as AuthVerifyRouteImport } from './routes/auth.verify'
+import { Route as WorkspaceInvitationsRedeemRouteImport } from './routes/workspace-invitations.redeem'
+import { Route as WorkspacesWorkspaceIdRouteImport } from './routes/workspaces.$workspaceId'
 import { Route as WorkspacesWorkspaceIdIndexRouteImport } from './routes/workspaces.$workspaceId.index'
 import { Route as WorkspacesWorkspaceIdChannelsChannelIdRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId'
 import { Route as WorkspacesWorkspaceIdChannelsChannelIdIndexRouteImport } from './routes/workspaces.$workspaceId.channels.$channelId.index'
@@ -23,9 +23,9 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WorkspacesWorkspaceIdRoute = WorkspacesWorkspaceIdRouteImport.update({
-  id: '/workspaces/$workspaceId',
-  path: '/workspaces/$workspaceId',
+const AuthVerifyRoute = AuthVerifyRouteImport.update({
+  id: '/auth/verify',
+  path: '/auth/verify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkspaceInvitationsRedeemRoute =
@@ -34,9 +34,9 @@ const WorkspaceInvitationsRedeemRoute =
     path: '/workspace-invitations/redeem',
     getParentRoute: () => rootRouteImport,
   } as any)
-const AuthVerifyRoute = AuthVerifyRouteImport.update({
-  id: '/auth/verify',
-  path: '/auth/verify',
+const WorkspacesWorkspaceIdRoute = WorkspacesWorkspaceIdRouteImport.update({
+  id: '/workspaces/$workspaceId',
+  path: '/workspaces/$workspaceId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkspacesWorkspaceIdIndexRoute =
@@ -140,11 +140,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/workspaces/$workspaceId': {
-      id: '/workspaces/$workspaceId'
-      path: '/workspaces/$workspaceId'
-      fullPath: '/workspaces/$workspaceId'
-      preLoaderRoute: typeof WorkspacesWorkspaceIdRouteImport
+    '/auth/verify': {
+      id: '/auth/verify'
+      path: '/auth/verify'
+      fullPath: '/auth/verify'
+      preLoaderRoute: typeof AuthVerifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/workspace-invitations/redeem': {
@@ -154,11 +154,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceInvitationsRedeemRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/verify': {
-      id: '/auth/verify'
-      path: '/auth/verify'
-      fullPath: '/auth/verify'
-      preLoaderRoute: typeof AuthVerifyRouteImport
+    '/workspaces/$workspaceId': {
+      id: '/workspaces/$workspaceId'
+      path: '/workspaces/$workspaceId'
+      fullPath: '/workspaces/$workspaceId'
+      preLoaderRoute: typeof WorkspacesWorkspaceIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/workspaces/$workspaceId/': {
