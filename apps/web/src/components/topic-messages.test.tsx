@@ -95,17 +95,13 @@ afterEach(() => {
   cleanup();
 });
 
-const topicMessages = (
-  messages: ReadonlyArray<typeof openingMessage>,
-  refresh: () => Promise<void> = () => Promise.resolve(),
-) => (
+const topicMessages = (messages: ReadonlyArray<typeof openingMessage>) => (
   <SnackbarProvider>
     <TopicMessages
       canReply
       channelId="channel-1"
       currentIdentity={currentIdentity}
       messages={messages}
-      refresh={refresh}
       topicId="topic-1"
       workspaceId="workspace-1"
     />
@@ -175,7 +171,6 @@ test("identifies messages by author and timestamp instead of a numbered heading"
             },
           },
         ]}
-        refresh={() => Promise.resolve()}
         topicId="topic-1"
         workspaceId="workspace-1"
       />
@@ -314,8 +309,7 @@ test("presents message editing as a composer with Cancel before Save", () => {
 });
 
 test("scrolls the newly posted reply into view after it renders", async () => {
-  const refresh = vi.fn(() => Promise.resolve());
-  const { rerender } = render(topicMessages([openingMessage], refresh));
+  const { rerender } = render(topicMessages([openingMessage]));
 
   fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
   fireEvent.change(screen.getByLabelText("Write a reply"), {
@@ -325,14 +319,13 @@ test("scrolls the newly posted reply into view after it renders", async () => {
 
   await waitFor(() => {
     expect(apiHarness.addMessage).toHaveBeenCalled();
-    expect(refresh).toHaveBeenCalled();
   });
   expect(scrollIntoView).not.toHaveBeenCalled();
 
-  rerender(topicMessages([openingMessage, unrelatedReply], refresh));
+  rerender(topicMessages([openingMessage, unrelatedReply]));
   expect(scrollIntoView).not.toHaveBeenCalled();
 
-  rerender(topicMessages([openingMessage, unrelatedReply, newReply], refresh));
+  rerender(topicMessages([openingMessage, unrelatedReply, newReply]));
 
   await waitFor(() => {
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });

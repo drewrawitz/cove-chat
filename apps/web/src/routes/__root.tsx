@@ -4,6 +4,7 @@ import { TanStackDevtools } from "@tanstack/react-devtools";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import { SnackbarProvider } from "../components/snackbar.tsx";
+import { CoveSyncProvider } from "../integrations/zero/cove-sync-provider.tsx";
 
 import appCss from "../styles.css?url";
 
@@ -44,7 +45,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <SnackbarProvider>{children}</SnackbarProvider>
+        <CoveSyncProvider>
+          <SnackbarProvider>{children}</SnackbarProvider>
+        </CoveSyncProvider>
         <TanStackDevtools
           config={{
             position: "bottom-right",

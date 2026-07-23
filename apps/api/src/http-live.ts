@@ -10,6 +10,7 @@ import { ChannelApiLive } from "./channels/index.ts";
 import { HealthApiLive } from "./health/index.ts";
 import { WorkspaceApiLive } from "./workspaces/index.ts";
 import { TopicApiLive } from "./topics/index.ts";
+import { ZeroQueryRoute } from "./zero/index.ts";
 
 const AppApiRoutes = HttpApiBuilder.layer(CoveAppApi).pipe(
   Layer.provide(Layer.mergeAll(AuthApiLive, WorkspaceApiLive, ChannelApiLive, TopicApiLive)),
@@ -37,6 +38,7 @@ const AppApiDocumentation = HttpApiScalar.layer(CoveAppApi, {
 
 const CoreHttpRoutes = Layer.mergeAll(
   AppApiRoutes,
+  ZeroQueryRoute,
   OperationsApiRoutes,
   PublicApiRoutes,
   PublicApiDocumentation,

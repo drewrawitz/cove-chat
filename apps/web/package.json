@@ -15,7 +15,9 @@
     "test": "vp run generate:api && vp test run --config vite.test.config.ts"
   },
   "dependencies": {
+    "@cove/sync": "workspace:*",
     "@cove/ui": "workspace:*",
+    "@rocicorp/zero": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-devtools": "latest",
     "@tanstack/react-query": "latest",

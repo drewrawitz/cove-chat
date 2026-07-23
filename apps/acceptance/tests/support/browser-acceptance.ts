@@ -1,5 +1,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -9,8 +11,10 @@ import { Context, Effect, Layer, Schedule } from "effect";
 
 const execFileAsync = promisify(execFile);
 const repositoryDirectory = fileURLToPath(new URL("../../../../", import.meta.url));
+const acceptanceDirectory = join(repositoryDirectory, "apps/acceptance");
 const dbPackageDirectory = join(repositoryDirectory, "packages/db");
 const prismaExecutable = join(dbPackageDirectory, "node_modules/.bin/prisma");
+const zeroCacheExecutable = join(acceptanceDirectory, "node_modules/.bin/zero-cache-dev");
 const webDirectory = join(repositoryDirectory, "apps/web");
 const webExecutable = join(webDirectory, "node_modules/.bin/vp");
 
@@ -106,10 +110,23 @@ const startProcess = Effect.fn("BrowserAcceptance.startProcess")(
 const startDatabase = Effect.fn("BrowserAcceptance.startDatabase")(() =>
   Effect.acquireRelease(
     Effect.tryPromise({
-      try: () => new PostgreSqlContainer("postgres:18.4-alpine").start(),
+      try: () =>
+        new PostgreSqlContainer("postgres:18.4-alpine")
+          .withCommand(["postgres", "-c", "wal_level=logical"])
+          .start(),
       catch: (cause) => new Error("Could not start acceptance PostgreSQL.", { cause }),
     }),
     (running) => Effect.promise(() => running.stop()),
+  ),
+);
+
+const makeZeroReplicaDirectory = Effect.fn("BrowserAcceptance.makeZeroReplicaDirectory")(() =>
+  Effect.acquireRelease(
+    Effect.tryPromise({
+      try: () => mkdtemp(join(tmpdir(), "cove-zero-acceptance-")),
+      catch: (cause) => new Error("Could not create the Zero replica directory.", { cause }),
+    }),
+    (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
   ),
 );
 
@@ -166,6 +183,7 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
 );
 
 export interface BrowserAcceptanceService {
+  readonly browser: Browser;
   readonly page: Page;
   readonly webUrl: string;
   readonly makeWorkspaceInvitationResendable: (inviteeEmail: string) => Effect.Effect<void, Error>;
@@ -189,9 +207,22 @@ export const BrowserAcceptanceLive = Layer.effect(
     const apiPort = yield* allocatePort();
     let webPort = yield* allocatePort();
     while (webPort === apiPort) webPort = yield* allocatePort();
+    let zeroPort = yield* allocatePort();
+    while (zeroPort === apiPort || zeroPort === webPort) zeroPort = yield* allocatePort();
+    let changeStreamerPort = yield* allocatePort();
+    while (
+      changeStreamerPort === apiPort ||
+      changeStreamerPort === webPort ||
+      changeStreamerPort === zeroPort
+    ) {
+      changeStreamerPort = yield* allocatePort();
+    }
+    const zeroReplicaDirectory = yield* makeZeroReplicaDirectory();
     const apiUrl = `http://127.0.0.1:${apiPort}`;
     const webUrl = `http://localhost:${webPort}`;
+    const zeroUrl = `http://localhost:${zeroPort}`;
     const apiOutput: Array<string> = [];
+    const zeroOutput: Array<string> = [];
     const webOutput: Array<string> = [];
     const browserOutput: Array<string> = [];
 
@@ -214,11 +245,37 @@ export const BrowserAcceptanceLive = Layer.effect(
     yield* waitForServer(`${apiUrl}/health/ready`, apiOutput);
 
     yield* startProcess(
+      zeroCacheExecutable,
+      [],
+      {
+        cwd: acceptanceDirectory,
+        env: {
+          ...process.env,
+          ZERO_APP_ID: "cove_acceptance",
+          ZERO_APP_PUBLICATIONS: "cove_zero_data",
+          ZERO_CHANGE_STREAMER_PORT: String(changeStreamerPort),
+          ZERO_ENABLE_CRUD_MUTATIONS: "false",
+          ZERO_PORT: String(zeroPort),
+          ZERO_QUERY_FORWARD_COOKIES: "true",
+          ZERO_QUERY_URL: `${apiUrl}/api/zero/query`,
+          ZERO_REPLICA_FILE: join(zeroReplicaDirectory, "zero.db"),
+          ZERO_UPSTREAM_DB: databaseUrl,
+        },
+      },
+      zeroOutput,
+    );
+    yield* waitForServer(zeroUrl, zeroOutput);
+
+    yield* startProcess(
       webExecutable,
       ["dev", "--host", "localhost", "--port", String(webPort)],
       {
         cwd: webDirectory,
-        env: { ...process.env, COVE_API_ORIGIN: apiUrl },
+        env: {
+          ...process.env,
+          COVE_API_ORIGIN: apiUrl,
+          VITE_ZERO_CACHE_URL: zeroUrl,
+        },
       },
       webOutput,
     );
@@ -268,6 +325,7 @@ export const BrowserAcceptanceLive = Layer.effect(
               [
                 "No development magic link has been delivered.",
                 `API output:\n${apiOutput.join("")}`,
+                `Zero output:\n${zeroOutput.join("")}`,
                 `Web output:\n${webOutput.join("")}`,
                 `Browser output:\n${browserOutput.join("")}`,
               ].join("\n"),
@@ -305,6 +363,7 @@ export const BrowserAcceptanceLive = Layer.effect(
                 [
                   "No development Workspace invitation link has been delivered.",
                   `API output:\n${apiOutput.join("")}`,
+                  `Zero output:\n${zeroOutput.join("")}`,
                   `Web output:\n${webOutput.join("")}`,
                   `Browser output:\n${browserOutput.join("")}`,
                 ].join("\n"),
@@ -340,6 +399,7 @@ export const BrowserAcceptanceLive = Layer.effect(
     );
 
     return BrowserAcceptance.of({
+      browser,
       page,
       webUrl,
       makeWorkspaceInvitationResendable,

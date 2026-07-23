@@ -1,11 +1,10 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { queries } from "@cove/sync";
+import { useQuery } from "@rocicorp/zero/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactElement, useRef } from "react";
 import {
   useAuthMe,
   useChannelsGetChannel,
-  getTopicsListTopicsQueryKey,
-  useTopicsGetTopic,
   useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
@@ -14,6 +13,7 @@ import { PageMessage } from "../components/page-message.tsx";
 import { TopicHeader } from "../components/topic-header.tsx";
 import { TopicMessages } from "../components/topic-messages.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
+import { synchronizedTopicDetail } from "../topic-sync.ts";
 
 export const Route = createFileRoute(
   "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
@@ -22,19 +22,17 @@ export const Route = createFileRoute(
 function TopicPage(): ReactElement {
   const { workspaceId, channelId, topicId } = Route.useParams();
   const topicHeading = useRef<HTMLHeadingElement>(null);
-  const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetChannel(workspaceId, channelId, { query: { retry: false } });
-  const topic = useTopicsGetTopic(workspaceId, channelId, topicId, { query: { retry: false } });
-  const refreshTopic = async (): Promise<void> => {
-    await Promise.all([
-      topic.refetch(),
-      queryClient.invalidateQueries({
-        queryKey: getTopicsListTopicsQueryKey(workspaceId, channelId),
-      }),
-    ]);
-  };
+  const [synchronizedTopic, synchronizedTopicResult] = useQuery(
+    queries.topics.byId({ workspaceId, channelId, topicId }),
+  );
+  const topic = synchronizedTopicDetail(synchronizedTopic);
+  const topicPending = synchronizedTopicResult.type === "unknown" && topic === undefined;
+  const topicError =
+    synchronizedTopicResult.type === "error" ||
+    (synchronizedTopicResult.type === "complete" && topic === undefined);
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -47,7 +45,7 @@ function TopicPage(): ReactElement {
   }
 
   let content: ReactElement;
-  if (channel.isPending || topic.isPending) {
+  if (channel.isPending || topicPending) {
     content = (
       <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
         <p className="text-muted-foreground" role="status">
@@ -55,7 +53,7 @@ function TopicPage(): ReactElement {
         </p>
       </div>
     );
-  } else if (channel.isError || topic.isError) {
+  } else if (channel.isError || topicError || topic === undefined) {
     content = (
       <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
         <p className="text-muted-foreground" role="status">
@@ -78,23 +76,23 @@ function TopicPage(): ReactElement {
           channelId={channelId}
           channelName={displayName}
           headingRef={topicHeading}
-          replyCount={Math.max(0, topic.data.messages.length - 1)}
-          title={topic.data.title}
+          replyCount={Math.max(0, topic.messages.length - 1)}
+          title={topic.title}
           workspaceId={workspaceId}
         />
 
         <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:py-24">
           <header className="border-b pb-8">
-            {topic.data.intent === undefined ? null : (
+            {topic.intent === undefined ? null : (
               <span className="inline-flex rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-                {topicIntentLabel(topic.data.intent)}
+                {topicIntentLabel(topic.intent)}
               </span>
             )}
             <h2
               ref={topicHeading}
               className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl"
             >
-              {topic.data.title}
+              {topic.title}
             </h2>
           </header>
 
@@ -102,8 +100,7 @@ function TopicPage(): ReactElement {
             canReply={channel.data.hasChannelMembership}
             channelId={channelId}
             currentIdentity={workspace.data.identity}
-            messages={topic.data.messages}
-            refresh={refreshTopic}
+            messages={topic.messages}
             topicId={topicId}
             workspaceId={workspaceId}
           />
@@ -117,7 +114,7 @@ function TopicPage(): ReactElement {
       accountDisplayName={account.data.displayName}
       accountEmail={account.data.email}
       activeChannelId={channelId}
-      busy={channel.isPending || topic.isPending}
+      busy={channel.isPending || topicPending}
       identityName={workspace.data.identity.name}
       workspaceId={workspaceId}
       workspaceName={workspace.data.workspace.name}

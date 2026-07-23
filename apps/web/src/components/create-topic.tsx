@@ -9,10 +9,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@cove/ui/components/dialog";
-import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactElement, useRef, useState } from "react";
-import { getTopicsListTopicsQueryKey, useTopicsCreateTopic } from "../api/generated/cove-app.ts";
+import { useTopicsCreateTopic } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
 import { topicIntentFromFormValue, topicIntentOptions } from "../topic-intent.ts";
 
@@ -26,7 +25,6 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
   const titleInput = useRef<HTMLInputElement>(null);
   const createTopic = useTopicsCreateTopic();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const setOpen = (open: boolean): void => {
     if (createTopic.isPending) return;
@@ -51,15 +49,10 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
         onSuccess: async (topic) => {
           formElement.reset();
           setDialogOpen(false);
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: getTopicsListTopicsQueryKey(workspaceId, channelId),
-            }),
-            navigate({
-              to: "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
-              params: { workspaceId, channelId, topicId: topic.id },
-            }),
-          ]);
+          await navigate({
+            to: "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
+            params: { workspaceId, channelId, topicId: topic.id },
+          });
         },
       },
     );

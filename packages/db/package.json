@@ -6,6 +6,7 @@
   "scripts": {
     "check": "prisma validate",
     "format": "prisma format",
+    "generate:zero": "prisma generate --generator zero",
     "migrate:create": "prisma migrate dev --create-only",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:dev": "prisma migrate dev",
@@ -20,6 +21,7 @@
     "@types/node": "catalog:",
     "dotenv": "catalog:",
     "prisma": "7.8.0",
+    "prisma-zero": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "ready": "vp run check && vp run test && vp run -r build",
-    "check": "vp run web#generate:api && vp check",
-    "test": "vp run web#generate:api && vp run --filter './packages/**' --filter './apps/api' test && vp run web#test && vp run @cove/acceptance#test",
+    "check": "vp run @cove/db#generate:zero && vp run web#generate:api && vp check",
+    "test": "vp run @cove/db#generate:zero && vp run web#generate:api && vp run --filter './packages/**' --filter './apps/api' test && vp run web#test && vp run @cove/acceptance#test",
     "dev": "vp run web#dev",
     "prepare": "vp config && vp run web#generate:api",
     "doctor": "npx react-doctor@latest"
