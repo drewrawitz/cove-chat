@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { SnackbarProvider } from "./snackbar.tsx";
@@ -8,6 +8,7 @@ import { TopicMessages } from "./topic-messages.tsx";
 
 const apiHarness = vi.hoisted(() => ({
   addMessage: vi.fn(),
+  editMessage: vi.fn(),
 }));
 
 vi.mock("../api/generated/cove-app.ts", () => {
@@ -21,7 +22,7 @@ vi.mock("../api/generated/cove-app.ts", () => {
   return {
     useTopicsAddMessage: () => ({ ...mutation(), mutateAsync: apiHarness.addMessage }),
     useTopicsDeleteMessage: mutation,
-    useTopicsEditMessage: mutation,
+    useTopicsEditMessage: () => ({ ...mutation(), mutate: apiHarness.editMessage }),
   };
 });
 
@@ -70,6 +71,7 @@ const scrollIntoView = vi.fn();
 beforeEach(() => {
   apiHarness.addMessage.mockReset();
   apiHarness.addMessage.mockResolvedValue(newReply);
+  apiHarness.editMessage.mockReset();
   scrollIntoView.mockClear();
   Object.defineProperty(Element.prototype, "scrollIntoView", {
     configurable: true,
@@ -97,6 +99,17 @@ const topicMessages = (
     />
   </SnackbarProvider>
 );
+
+const openOpeningBriefEditor = (): HTMLTextAreaElement => {
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "More actions for opening brief by Bob in Cove: Capture the remaining launch risks.",
+    }),
+  );
+  fireEvent.click(screen.getByRole("menuitem", { name: "Edit opening brief" }));
+
+  return screen.getByLabelText("Edit opening brief") as HTMLTextAreaElement;
+};
 
 test("identifies messages by author and timestamp instead of a numbered heading", () => {
   const markup = renderToStaticMarkup(
@@ -169,6 +182,65 @@ test("identifies messages by author and timestamp instead of a numbered heading"
   expect(markup).toContain('aria-keyshortcuts="R"');
   expect(markup).not.toContain(">Opening Brief</h3>");
   expect(markup).not.toContain("Message 1");
+});
+
+test("focuses the message editor when Edit is selected", () => {
+  render(topicMessages([openingMessage]));
+
+  const editor = openOpeningBriefEditor();
+
+  expect(editor).toBe(document.activeElement);
+  expect(editor.selectionStart).toBe(openingMessage.body.length);
+  expect(editor.selectionEnd).toBe(openingMessage.body.length);
+});
+
+test("discards message edits with Escape", () => {
+  render(topicMessages([openingMessage]));
+  const editor = openOpeningBriefEditor();
+  fireEvent.change(editor, { target: { value: "An unfinished change" } });
+
+  fireEvent.keyDown(editor, { key: "Escape" });
+
+  expect(screen.queryByLabelText("Edit opening brief")).toBeNull();
+  expect(screen.getByText(openingMessage.body)).toBeDefined();
+});
+
+test.each([
+  { shortcut: "Command", modifier: { metaKey: true } },
+  { shortcut: "Control", modifier: { ctrlKey: true } },
+])("saves message edits with $shortcut+Enter", ({ modifier }) => {
+  render(topicMessages([openingMessage]));
+  const editor = openOpeningBriefEditor();
+  fireEvent.change(editor, { target: { value: "A keyboard-first edit" } });
+
+  fireEvent.keyDown(editor, { key: "Enter", ...modifier });
+
+  expect(apiHarness.editMessage).toHaveBeenCalledWith(
+    {
+      workspaceId: "workspace-1",
+      channelId: "channel-1",
+      topicId: "topic-1",
+      messageId: openingMessage.id,
+      data: { body: "A keyboard-first edit" },
+    },
+    expect.objectContaining({ onSuccess: expect.any(Function) }),
+  );
+});
+
+test("presents message editing as a composer with Cancel before Save", () => {
+  render(topicMessages([openingMessage]));
+  const editor = openOpeningBriefEditor();
+  const form = editor.form;
+
+  expect(form?.classList.contains("rounded-2xl")).toBe(true);
+  expect(form?.parentElement?.querySelector("img")?.getAttribute("src")).toBe(
+    currentIdentity.avatarUrl,
+  );
+  expect(
+    within(form as HTMLFormElement)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["Cancel", "Save"]);
 });
 
 test("scrolls the newly posted reply into view after it renders", async () => {

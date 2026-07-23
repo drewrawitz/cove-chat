@@ -25,6 +25,7 @@ import { requiredFormValue } from "../form-data.ts";
 import { topicMessageKind, topicMessageKindLabel } from "../topic-message-kind.ts";
 import { LocalTimestamp } from "./local-timestamp.tsx";
 import { useSnackbar } from "./snackbar.tsx";
+import { TopicMessageEditor } from "./topic-message-editor.tsx";
 import { TopicReplyComposer } from "./topic-reply-composer.tsx";
 
 interface TopicMessage {
@@ -165,116 +166,105 @@ export function TopicMessages({
 
           return (
             <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-8">
-              <article aria-labelledby={`message-${message.id}`}>
-                <header className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <img
-                      className="size-10 rounded-full border border-border bg-muted object-cover"
-                      src={message.author.avatarUrl}
-                      alt=""
-                    />
-                    <div>
-                      <h3 id={`message-${message.id}`} className="font-semibold">
-                        {message.author.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        <LocalTimestamp mode="message" value={message.createdAt} />
-                        {message.edited && !message.deleted ? (
-                          <>
-                            {" "}
-                            <span aria-hidden="true">·</span> <span>Edited</span>
-                          </>
-                        ) : null}
-                      </p>
-                    </div>
-                  </div>
-
-                  {canChange && !isEditing ? (
-                    <MenuRoot>
-                      <MenuTrigger
-                        className={buttonVariants({
-                          variant: "ghost",
-                          size: "icon-sm",
-                          className: "message-actions",
-                        })}
-                        aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          aria-hidden="true"
-                          className="size-4"
-                        >
-                          <circle cx="5" cy="12" r="1.5" />
-                          <circle cx="12" cy="12" r="1.5" />
-                          <circle cx="19" cy="12" r="1.5" />
-                        </svg>
-                      </MenuTrigger>
-                      <MenuPortal>
-                        <MenuPositioner side="bottom" align="end">
-                          <MenuPopup>
-                            <MenuItem
-                              onClick={() => {
-                                editMessage.reset();
-                                setEditingId(message.id);
-                              }}
-                            >
-                              Edit {kind}
-                            </MenuItem>
-                            <MenuItem
-                              className="text-destructive data-highlighted:text-destructive"
-                              onClick={() => {
-                                deleteMessage.reset();
-                                setDeletingId(message.id);
-                              }}
-                            >
-                              Delete {kind}
-                            </MenuItem>
-                          </MenuPopup>
-                        </MenuPositioner>
-                      </MenuPortal>
-                    </MenuRoot>
-                  ) : null}
-                </header>
-
-                {message.deleted ? (
-                  <p className="mt-5 text-sm italic text-muted-foreground">{kindLabel} deleted</p>
-                ) : isEditing ? (
-                  <form className="mt-5" onSubmit={(event) => edit(event, message.id)}>
-                    <label className="sr-only" htmlFor={`edit-message-${message.id}`}>
-                      Edit {kind}
-                    </label>
-                    <textarea
-                      id={`edit-message-${message.id}`}
-                      name="messageBody"
-                      defaultValue={message.body}
-                      required
-                      rows={5}
-                      className="w-full resize-y rounded-lg border bg-background px-4 py-3 leading-6 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                    {editMessage.isError ? (
-                      <p className="mt-2 text-sm text-destructive" role="alert">
-                        Cove could not save this edit. Refresh and try again.
-                      </p>
-                    ) : null}
-                    <div className="mt-3 flex items-center gap-2">
-                      <Button type="submit" disabled={mutationPending}>
-                        {editMessage.isPending ? "Saving…" : "Save edit"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={mutationPending}
-                        onClick={() => setEditingId(undefined)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
+              <article
+                aria-label={isEditing ? `Edit ${kind} by ${message.author.name}` : undefined}
+                aria-labelledby={isEditing ? undefined : `message-${message.id}`}
+              >
+                {isEditing ? (
+                  <TopicMessageEditor
+                    authorAvatarUrl={message.author.avatarUrl}
+                    defaultBody={message.body}
+                    editorId={`edit-message-${message.id}`}
+                    editorLabel={`Edit ${kind}`}
+                    hasError={editMessage.isError}
+                    isDisabled={mutationPending}
+                    isSaving={editMessage.isPending}
+                    onCancel={() => setEditingId(undefined)}
+                    onSubmit={(event) => edit(event, message.id)}
+                  />
                 ) : (
-                  <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-foreground/90">
-                    {message.body}
-                  </p>
+                  <>
+                    <header className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <img
+                          className="size-10 rounded-full border border-border bg-muted object-cover"
+                          src={message.author.avatarUrl}
+                          alt=""
+                        />
+                        <div>
+                          <h3 id={`message-${message.id}`} className="font-semibold">
+                            {message.author.name}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            <LocalTimestamp mode="message" value={message.createdAt} />
+                            {message.edited && !message.deleted ? (
+                              <>
+                                {" "}
+                                <span aria-hidden="true">·</span> <span>Edited</span>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+                      </div>
+
+                      {canChange ? (
+                        <MenuRoot>
+                          <MenuTrigger
+                            className={buttonVariants({
+                              variant: "ghost",
+                              size: "icon-sm",
+                              className: "message-actions",
+                            })}
+                            aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              aria-hidden="true"
+                              className="size-4"
+                            >
+                              <circle cx="5" cy="12" r="1.5" />
+                              <circle cx="12" cy="12" r="1.5" />
+                              <circle cx="19" cy="12" r="1.5" />
+                            </svg>
+                          </MenuTrigger>
+                          <MenuPortal>
+                            <MenuPositioner side="bottom" align="end">
+                              <MenuPopup>
+                                <MenuItem
+                                  onClick={() => {
+                                    editMessage.reset();
+                                    setEditingId(message.id);
+                                  }}
+                                >
+                                  Edit {kind}
+                                </MenuItem>
+                                <MenuItem
+                                  className="text-destructive data-highlighted:text-destructive"
+                                  onClick={() => {
+                                    deleteMessage.reset();
+                                    setDeletingId(message.id);
+                                  }}
+                                >
+                                  Delete {kind}
+                                </MenuItem>
+                              </MenuPopup>
+                            </MenuPositioner>
+                          </MenuPortal>
+                        </MenuRoot>
+                      ) : null}
+                    </header>
+
+                    {message.deleted ? (
+                      <p className="mt-5 text-sm italic text-muted-foreground">
+                        {kindLabel} deleted
+                      </p>
+                    ) : (
+                      <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-foreground/90">
+                        {message.body}
+                      </p>
+                    )}
+                  </>
                 )}
               </article>
             </li>
