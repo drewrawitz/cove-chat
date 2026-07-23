@@ -1,20 +1,27 @@
 {
-  "name": "@cove/acceptance",
+  "name": "@cove/sync",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
+  },
   "scripts": {
+    "build": "vp pack",
     "check": "vp check",
-    "install:browsers": "playwright install chromium",
-    "test": "vp run web#generate:api && vp test run"
+    "dev": "zero-cache-dev",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@rocicorp/zero": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
-    "@rocicorp/zero": "catalog:",
     "@testcontainers/postgresql": "catalog:",
     "@types/node": "catalog:",
-    "effect": "catalog:",
-    "playwright": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

@@ -16,6 +16,7 @@
     "@cove/infrastructure-email": "workspace:*",
     "@cove/infrastructure-postgres": "workspace:*",
     "@cove/protocol": "workspace:*",
+    "@cove/sync": "workspace:*",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:"
   },

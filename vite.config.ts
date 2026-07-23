@@ -8,11 +8,16 @@ export default defineConfig({
     ignorePatterns: [
       "**/routeTree.gen.ts",
       "apps/web/src/api/generated/**",
+      "packages/sync/src/generated/**",
       "packages/protocol/openapi/app.json",
     ],
   },
   lint: {
-    ignorePatterns: ["**/routeTree.gen.ts", "apps/web/src/api/generated/**"],
+    ignorePatterns: [
+      "**/routeTree.gen.ts",
+      "apps/web/src/api/generated/**",
+      "packages/sync/src/generated/**",
+    ],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }],
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },

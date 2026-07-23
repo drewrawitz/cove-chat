@@ -27,3 +27,7 @@ vp run -r build
 ```bash
 vp run dev
 ```
+
+Durable Topic updates also require the API, a PostgreSQL server configured with
+`wal_level=logical`, and the Zero cache. See [`packages/sync/README.md`](packages/sync/README.md)
+for the sync process and environment variables.

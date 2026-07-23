@@ -1,4 +1,6 @@
 import { Button } from "@cove/ui/components/button";
+import { queries } from "@cove/sync";
+import { useQuery } from "@rocicorp/zero/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactElement } from "react";
 import {
@@ -7,7 +9,6 @@ import {
   useAuthMe,
   useChannelsGetChannel,
   useChannelsJoinPublicChannel,
-  useTopicsListTopics,
   useWorkspacesGetWorkspace,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
@@ -20,8 +21,9 @@ import { CreateTopic } from "../components/create-topic.tsx";
 import { LocalTimestamp } from "../components/local-timestamp.tsx";
 import { useJoinChannel } from "../components/use-join-channel.ts";
 import { topicMessageKindLabel } from "../topic-message-kind.ts";
+import { synchronizedTopicSummaries, type TopicSummaryView } from "../topic-sync.ts";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
-import { topicIntentLabel, type TopicIntent } from "../topic-intent.ts";
+import { topicIntentLabel } from "../topic-intent.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId/")({
   component: ChannelPage,
@@ -35,7 +37,10 @@ function ChannelPage(): ReactElement {
     query: { retry: false },
   });
   const joinChannelMutation = useChannelsJoinPublicChannel();
-  const topics = useTopicsListTopics(workspaceId, channelId, { query: { retry: false } });
+  const [synchronizedTopics, synchronizedTopicsResult] = useQuery(
+    queries.topics.inChannel({ workspaceId, channelId }),
+  );
+  const topics = synchronizedTopicSummaries(synchronizedTopics);
   const joinChannel = useJoinChannel({
     queriesToInvalidate: [
       getChannelsGetChannelQueryKey(workspaceId, channelId),
@@ -168,9 +173,7 @@ function ChannelPage(): ReactElement {
               Topics
             </h3>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {topics.data?.topics.length ?? 0} open
-              </span>
+              <span className="text-sm text-muted-foreground">{topics.length} open</span>
               {channel.data.hasChannelMembership ? (
                 <CreateTopic channelId={channelId} workspaceId={workspaceId} />
               ) : null}
@@ -178,9 +181,9 @@ function ChannelPage(): ReactElement {
           </div>
           <TopicList
             channelId={channelId}
-            isError={topics.isError}
-            isPending={topics.isPending}
-            topics={topics.data?.topics ?? []}
+            isError={synchronizedTopicsResult.type === "error"}
+            isPending={synchronizedTopicsResult.type === "unknown" && topics.length === 0}
+            topics={topics}
             workspaceId={workspaceId}
           />
         </section>
@@ -193,7 +196,9 @@ function ChannelPage(): ReactElement {
       accountDisplayName={account.data.displayName}
       accountEmail={account.data.email}
       activeChannelId={channelId}
-      busy={channel.isPending || topics.isPending}
+      busy={
+        channel.isPending || (synchronizedTopicsResult.type === "unknown" && topics.length === 0)
+      }
       identityName={workspace.data.identity.name}
       workspaceId={workspaceId}
       workspaceName={workspace.data.workspace.name}
@@ -203,28 +208,11 @@ function ChannelPage(): ReactElement {
   );
 }
 
-interface TopicSummary {
-  readonly id: string;
-  readonly title: string;
-  readonly intent?: TopicIntent;
-  readonly messageCount: number;
-  readonly latestMessage: {
-    readonly body?: string;
-    readonly position: number;
-    readonly createdAt: string;
-    readonly deleted: boolean;
-    readonly author: {
-      readonly name: string;
-      readonly avatarUrl: string;
-    };
-  };
-}
-
 interface TopicListProps {
   readonly channelId: string;
   readonly isError: boolean;
   readonly isPending: boolean;
-  readonly topics: ReadonlyArray<TopicSummary>;
+  readonly topics: ReadonlyArray<TopicSummaryView>;
   readonly workspaceId: string;
 }
 

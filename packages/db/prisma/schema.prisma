@@ -2,6 +2,13 @@ datasource db {
   provider = "postgresql"
 }
 
+generator zero {
+  provider      = "prisma-zero"
+  output        = "../../sync/src/generated"
+  camelCase     = true
+  excludeTables = ["User", "MagicLink", "Session", "AuditEvent", "WorkspaceInvitation", "MessageRevision"]
+}
+
 enum WorkspaceRole {
   OWNER  @map("owner")
   ADMIN  @map("admin")

@@ -13,6 +13,7 @@ catalog:
   "@effect/platform-node": 4.0.0-beta.98
   "@effect/sql-pg": 4.0.0-beta.98
   "@effect/vitest": 4.0.0-beta.98
+  "@types/pg": 8.15.6
   "@testcontainers/postgresql": 12.0.4
   "@types/node": ^24
   dotenv: 17.4.2
@@ -24,11 +25,14 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
   vite-plus: 0.2.4
   playwright: ^1.61.1
+  pg: 8.22.0
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   orval: ^8.22.0
   zod: ^4.4.3
   react-doctor: ^0.7.8
   date-fns: ^4.4.0
+  "@rocicorp/zero": 1.8.0
+  prisma-zero: 0.2.1
 overrides:
   vite: "catalog:"
 peerDependencyRules:
@@ -38,6 +42,7 @@ peerDependencyRules:
     vite: "*"
 allowBuilds:
   "@prisma/engines": true
+  "@rocicorp/zero-sqlite3": true
   cpu-features: false
   esbuild: true
   lightningcss: true

@@ -51,7 +51,6 @@ interface TopicMessagesProps {
     readonly name: string;
   };
   readonly messages: ReadonlyArray<TopicMessage>;
-  readonly refresh: () => Promise<void>;
   readonly topicId: string;
   readonly workspaceId: string;
 }
@@ -66,7 +65,6 @@ export function TopicMessages({
   channelId,
   messages,
   currentIdentity,
-  refresh,
   topicId,
   workspaceId,
 }: TopicMessagesProps): ReactElement {
@@ -126,7 +124,6 @@ export function TopicMessages({
         data: { body },
       });
       scrollAfterMessageId.current = createdMessage.id;
-      await refresh();
     } catch (error) {
       scrollAfterMessageId.current = undefined;
       throw error;
@@ -145,9 +142,8 @@ export function TopicMessages({
         data: { body: requiredFormValue(form, "messageBody") },
       },
       {
-        onSuccess: async () => {
+        onSuccess: () => {
           setEditingId(undefined);
-          await refresh();
         },
       },
     );
@@ -157,10 +153,9 @@ export function TopicMessages({
     deleteMessage.mutate(
       { workspaceId, channelId, topicId, messageId: message.id },
       {
-        onSuccess: async () => {
+        onSuccess: () => {
           setDeletingId(undefined);
           showSnackbar(`${topicMessageKindLabel(message.position)} deleted.`);
-          await refresh();
         },
       },
     );
