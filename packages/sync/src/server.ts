@@ -9,13 +9,12 @@ export interface CoveQueryRequest {
 
 export class InvalidCoveQueryRequestError extends Error {
   readonly _tag = "CoveQueryRequest.Invalid";
+  readonly reason: "QueryNotFound" | "InputValidation";
 
-  constructor(
-    readonly reason: "QueryNotFound" | "InputValidation",
-    cause: unknown,
-  ) {
+  constructor(reason: "QueryNotFound" | "InputValidation", cause: unknown) {
     super("Invalid Cove query request.", { cause });
     this.name = "InvalidCoveQueryRequestError";
+    this.reason = reason;
   }
 }
 

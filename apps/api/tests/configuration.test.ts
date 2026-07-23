@@ -21,7 +21,7 @@ it("loads workspace package sources during API development", () => {
       ...developmentConditions,
       "--input-type=module",
       "--eval",
-      "import { PublicChannelListResponse } from '@cove/protocol'; void PublicChannelListResponse;",
+      "import { PublicChannelListResponse } from '@cove/protocol'; import { InvalidCoveQueryRequestError } from '@cove/sync/server'; void PublicChannelListResponse; void InvalidCoveQueryRequestError;",
     ],
     {
       cwd: fileURLToPath(new URL("..", import.meta.url)),
