@@ -15,7 +15,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@cove/ui/components/menu";
-import { type FormEvent, type ReactElement, useState } from "react";
+import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
 import {
   useTopicsAddMessage,
   useTopicsDeleteMessage,
@@ -73,6 +73,7 @@ export function TopicMessages({
   const editMessage = useTopicsEditMessage();
   const deleteMessage = useTopicsDeleteMessage();
   const { showSnackbar } = useSnackbar();
+  const scrollAfterMessageId = useRef<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string>();
   const [deletingId, setDeletingId] = useState<string>();
   const deletingMessage = messages.find((message) => message.id === deletingId);
@@ -80,14 +81,41 @@ export function TopicMessages({
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
 
-  const add = async (body: string): Promise<void> => {
-    await addMessage.mutateAsync({
-      workspaceId,
-      channelId,
-      topicId,
-      data: { body },
+  useEffect(() => {
+    const messageId = scrollAfterMessageId.current;
+    if (messageId === undefined) {
+      return;
+    }
+
+    const messageElement = document.getElementById(`topic-message-${messageId}`);
+    if (messageElement === null) {
+      return;
+    }
+
+    scrollAfterMessageId.current = undefined;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    messageElement.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
     });
-    await refresh();
+  }, [messages]);
+
+  const add = async (body: string): Promise<void> => {
+    try {
+      const createdMessage = await addMessage.mutateAsync({
+        workspaceId,
+        channelId,
+        topicId,
+        data: { body },
+      });
+      scrollAfterMessageId.current = createdMessage.id;
+      await refresh();
+    } catch (error) {
+      scrollAfterMessageId.current = undefined;
+      throw error;
+    }
   };
 
   const edit = (event: FormEvent<HTMLFormElement>, messageId: string): void => {
@@ -136,7 +164,7 @@ export function TopicMessages({
           const isEditing = editingId === message.id;
 
           return (
-            <li key={message.id} className="message-row py-8">
+            <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-8">
               <article aria-labelledby={`message-${message.id}`}>
                 <header className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3">
