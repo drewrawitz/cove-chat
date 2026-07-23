@@ -1,7 +1,16 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import type { Page } from "playwright";
 import { browserAction, openConversations, signIn } from "../support/browser-actions.ts";
 import { BrowserAcceptance, BrowserAcceptanceLive } from "../support/browser-acceptance.ts";
+
+const postReply = (page: Page, body: string) =>
+  Effect.gen(function* () {
+    yield* browserAction(() => page.keyboard.press("r"));
+    yield* browserAction(() => page.getByLabel("Write a reply").fill(body));
+    yield* browserAction(() => page.getByRole("button", { name: "Post" }).click());
+    yield* browserAction(() => page.getByText(body, { exact: true }).waitFor());
+  });
 
 it.live(
   "synchronizes committed Topic changes across sessions and converges after reconnect",
@@ -66,31 +75,9 @@ it.live(
           .waitFor(),
       );
 
-      yield* browserAction(() => acceptance.page.keyboard.press("r"));
-      yield* browserAction(() =>
-        acceptance.page
-          .getByLabel("Write a reply")
-          .fill("The release candidate passed smoke testing."),
-      );
-      yield* browserAction(() => acceptance.page.getByRole("button", { name: "Post" }).click());
-      yield* browserAction(() =>
-        acceptance.page
-          .getByText("The release candidate passed smoke testing.", { exact: true })
-          .waitFor(),
-      );
+      yield* postReply(acceptance.page, "The release candidate passed smoke testing.");
 
-      yield* browserAction(() => acceptance.page.keyboard.press("r"));
-      yield* browserAction(() =>
-        acceptance.page
-          .getByLabel("Write a reply")
-          .fill("The rollback rehearsal completed successfully."),
-      );
-      yield* browserAction(() => acceptance.page.getByRole("button", { name: "Post" }).click());
-      yield* browserAction(() =>
-        acceptance.page
-          .getByText("The rollback rehearsal completed successfully.", { exact: true })
-          .waitFor(),
-      );
+      yield* postReply(acceptance.page, "The rollback rehearsal completed successfully.");
 
       yield* browserAction(() => aliceContext.setOffline(false));
 

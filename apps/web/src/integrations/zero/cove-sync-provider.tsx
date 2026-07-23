@@ -1,6 +1,6 @@
 import { schema } from "@cove/sync";
 import { useConnectionState, ZeroProvider } from "@rocicorp/zero/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { useAuthMe } from "../../api/generated/cove-app.ts";
 
 const cacheURL = import.meta.env.VITE_ZERO_CACHE_URL ?? "http://localhost:4848";
@@ -33,14 +33,10 @@ function DurableSyncStatus({ enabled }: { readonly enabled: boolean }) {
 export function CoveSyncProvider({ children }: CoveSyncProviderProps): ReactNode {
   const account = useAuthMe({ query: { retry: false } });
   const userID = account.data?.id;
+  const context = useMemo(() => ({ userID: userID ?? "" }), [userID]);
 
   return (
-    <ZeroProvider
-      cacheURL={cacheURL}
-      context={{ userID: userID ?? "" }}
-      schema={schema}
-      userID={userID}
-    >
+    <ZeroProvider cacheURL={cacheURL} context={context} schema={schema} userID={userID}>
       <DurableSyncStatus enabled={userID !== undefined} />
       {children}
     </ZeroProvider>

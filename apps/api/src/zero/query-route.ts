@@ -35,6 +35,7 @@ const handle = (request: HttpServerRequest.HttpServerRequest) =>
     Effect.catchTag("Application.Unauthenticated", () => Effect.succeed(unauthorized)),
     Effect.catchCause((cause) => Effect.logError(cause).pipe(Effect.as(internalServerError))),
     Effect.provide(SessionIdentityResolverLive),
+    Effect.withSpan("ZeroQueryRoute.authorizeQuery"),
   );
 
 export const ZeroQueryRoute = HttpRouter.add("POST", "/api/zero/query", handle);

@@ -13,6 +13,7 @@ catalog:
   "@effect/platform-node": 4.0.0-beta.98
   "@effect/sql-pg": 4.0.0-beta.98
   "@effect/vitest": 4.0.0-beta.98
+  "@types/pg": 8.15.6
   "@testcontainers/postgresql": 12.0.4
   "@types/node": ^24
   dotenv: 17.4.2
@@ -24,6 +25,7 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.2.4
   vite-plus: 0.2.4
   playwright: ^1.61.1
+  pg: 8.22.0
   "@typescript/native-preview": 7.0.0-dev.20260707.2
   orval: ^8.22.0
   zod: ^4.4.3

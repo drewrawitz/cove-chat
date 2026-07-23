@@ -90,20 +90,20 @@ export function synchronizedTopicSummaries(
 ): ReadonlyArray<TopicSummaryView> {
   return topics.flatMap((topic) => {
     const latestMessage = topic.messages.at(-1);
-    if (latestMessage?.author === undefined) return [];
+    const latestMessageView =
+      latestMessage === undefined ? undefined : topicMessageView(latestMessage);
+    if (latestMessageView === undefined) return [];
 
     const fields = {
       id: topic.id,
       title: topic.title,
       messageCount: topic.messages.length,
       latestMessage: {
-        ...(latestMessage.deletedAt != null || latestMessage.body == null
-          ? {}
-          : { body: latestMessage.body }),
-        position: latestMessage.position,
-        createdAt: new Date(latestMessage.createdAt).toISOString(),
-        deleted: latestMessage.deletedAt != null,
-        author: latestMessage.author,
+        ...(latestMessageView.body === undefined ? {} : { body: latestMessageView.body }),
+        position: latestMessageView.position,
+        createdAt: latestMessageView.createdAt,
+        deleted: latestMessageView.deleted,
+        author: latestMessageView.author,
       },
     };
     return topic.intent == null ? [fields] : [{ ...fields, intent: topic.intent }];
