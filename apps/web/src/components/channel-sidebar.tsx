@@ -135,7 +135,7 @@ export function ChannelSidebar({
         </DialogTrigger>
         <DialogPortal>
           <DialogBackdrop />
-          <DialogPopup className="dark bg-card" initialFocus={channelNameInput}>
+          <DialogPopup initialFocus={channelNameInput}>
             <form onSubmit={create}>
               <header className="flex items-start justify-between gap-6 border-b p-6 sm:p-8">
                 <div>

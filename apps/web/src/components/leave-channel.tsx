@@ -104,7 +104,7 @@ export function LeaveChannel({
       </DialogTrigger>
       <DialogPortal>
         <DialogBackdrop />
-        <DialogPopup className="dark w-[min(32rem,calc(100vw-2rem))] bg-card">
+        <DialogPopup className="w-[min(32rem,calc(100vw-2rem))]">
           <header className="border-b p-6 sm:p-8">
             <DialogTitle>Leave {channelName}?</DialogTitle>
             <DialogDescription className="mt-2 leading-6">

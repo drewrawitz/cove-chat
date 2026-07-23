@@ -51,6 +51,16 @@ test("discards an empty draft immediately", () => {
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+test("closes an empty composer with Escape", () => {
+  render(<TopicReplyComposer identity={identity} onPost={vi.fn()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  fireEvent.keyDown(screen.getByLabelText("Write a reply"), { key: "Escape" });
+
+  expect(screen.queryByLabelText("Write a reply")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
 test("confirms before discarding a nonblank draft", () => {
   render(<TopicReplyComposer identity={identity} onPost={vi.fn()} />);
 
@@ -58,9 +68,10 @@ test("confirms before discarding a nonblank draft", () => {
   fireEvent.change(screen.getByLabelText("Write a reply"), {
     target: { value: "A useful reply" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+  fireEvent.keyDown(screen.getByLabelText("Write a reply"), { key: "Escape" });
 
   expect(screen.getByRole("heading", { name: "Discard reply?" })).toBeDefined();
+  expect(screen.getByRole("dialog").classList.contains("dark")).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Keep writing" }));
   expect((screen.getByLabelText("Write a reply") as HTMLTextAreaElement).value).toBe(
     "A useful reply",
@@ -85,6 +96,28 @@ test("posts a trimmed draft and returns to the collapsed bar", async () => {
 
   await waitFor(() => {
     expect(onPost).toHaveBeenCalledWith("Ship it");
+    expect(screen.queryByLabelText("Write a reply")).toBeNull();
+  });
+});
+
+test.each([
+  { shortcut: "Command", modifier: { metaKey: true } },
+  { shortcut: "Control", modifier: { ctrlKey: true } },
+])("posts with $shortcut+Enter", async ({ modifier }) => {
+  const onPost = vi.fn(() => Promise.resolve());
+  render(<TopicReplyComposer identity={identity} onPost={onPost} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  fireEvent.change(screen.getByLabelText("Write a reply"), {
+    target: { value: "Keyboard first" },
+  });
+  fireEvent.keyDown(screen.getByLabelText("Write a reply"), {
+    key: "Enter",
+    ...modifier,
+  });
+
+  await waitFor(() => {
+    expect(onPost).toHaveBeenCalledWith("Keyboard first");
     expect(screen.queryByLabelText("Write a reply")).toBeNull();
   });
 });

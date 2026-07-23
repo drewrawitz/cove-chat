@@ -7,7 +7,14 @@ import {
   DialogRoot,
   DialogTitle,
 } from "@cove/ui/components/dialog";
-import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 interface ReplyIdentity {
   readonly avatarUrl: string;
@@ -115,6 +122,25 @@ export function TopicReplyComposer({
     void post();
   };
 
+  const handleComposerKeyDown = (event: ReactKeyboardEvent<HTMLFormElement>): void => {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!isBusy) {
+        requestDiscard();
+      }
+      return;
+    }
+
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void post();
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-1rem_3rem_-2rem_rgba(0,0,0,0.9)] backdrop-blur sm:px-8 lg:left-[var(--conversation-sidebar-width)] lg:px-12">
@@ -122,6 +148,7 @@ export function TopicReplyComposer({
           {isExpanded ? (
             <form
               className="rounded-2xl border border-border bg-card p-4 shadow-2xl transition-colors focus-within:border-ring sm:p-6"
+              onKeyDown={handleComposerKeyDown}
               onSubmit={submit}
             >
               <label className="sr-only" htmlFor="newMessage">
@@ -134,8 +161,9 @@ export function TopicReplyComposer({
                 required
                 rows={10}
                 value={draft}
-                className="min-h-[clamp(12rem,38dvh,24rem)] w-full resize-y bg-transparent text-base leading-7 outline-none placeholder:text-muted-foreground"
+                className="min-h-[clamp(10rem,30dvh,20rem)] w-full resize-y bg-transparent text-base leading-7 outline-none placeholder:text-muted-foreground"
                 placeholder="Write a reply…"
+                aria-keyshortcuts="Meta+Enter Control+Enter Escape"
                 onChange={(event) => setDraft(event.currentTarget.value)}
               />
               {hasError ? (
