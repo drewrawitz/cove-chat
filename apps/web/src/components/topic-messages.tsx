@@ -74,6 +74,7 @@ export function TopicMessages({
   const editMessage = useTopicsEditMessage();
   const deleteMessage = useTopicsDeleteMessage();
   const { showSnackbar } = useSnackbar();
+  const initiallyPositionedTopicId = useRef<string | undefined>(undefined);
   const scrollAfterMessageId = useRef<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string>();
   const [deletingId, setDeletingId] = useState<string>();
@@ -81,6 +82,19 @@ export function TopicMessages({
   const deletingMessageKind =
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
+
+  useEffect(() => {
+    if (initiallyPositionedTopicId.current === topicId) return;
+    initiallyPositionedTopicId.current = topicId;
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({
+        top: messages.length > 1 ? document.documentElement.scrollHeight : 0,
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages.length, topicId]);
 
   useEffect(() => {
     const messageId = scrollAfterMessageId.current;

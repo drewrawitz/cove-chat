@@ -67,16 +67,27 @@ const unrelatedReply = {
 };
 
 const scrollIntoView = vi.fn();
+const scrollTo = vi.fn();
 
 beforeEach(() => {
   apiHarness.addMessage.mockReset();
   apiHarness.addMessage.mockResolvedValue(newReply);
   apiHarness.editMessage.mockReset();
   scrollIntoView.mockClear();
+  scrollTo.mockClear();
   Object.defineProperty(Element.prototype, "scrollIntoView", {
     configurable: true,
     value: scrollIntoView,
   });
+  Object.defineProperty(window, "scrollTo", {
+    configurable: true,
+    value: scrollTo,
+  });
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    callback(0);
+    return 1;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
 });
 
 afterEach(() => {
@@ -196,6 +207,27 @@ test("keeps message metadata and body in a compact column beside the avatar", ()
   expect(author.parentElement?.querySelector("time")).not.toBeNull();
   expect(author.parentElement?.classList.contains("flex")).toBe(true);
   expect(body.closest("li")?.classList.contains("py-5")).toBe(true);
+});
+
+test("opens a Topic with only its opening brief at the top", () => {
+  render(topicMessages([openingMessage]));
+
+  expect(scrollTo).toHaveBeenCalledOnce();
+  expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "auto" });
+});
+
+test("opens a Topic with replies at the latest message only once", () => {
+  Object.defineProperty(document.documentElement, "scrollHeight", {
+    configurable: true,
+    value: 2400,
+  });
+  const { rerender } = render(topicMessages([openingMessage, unrelatedReply]));
+
+  expect(scrollTo).toHaveBeenCalledOnce();
+  expect(scrollTo).toHaveBeenCalledWith({ top: 2400, behavior: "auto" });
+
+  rerender(topicMessages([openingMessage, unrelatedReply, newReply]));
+  expect(scrollTo).toHaveBeenCalledOnce();
 });
 
 test("focuses the message editor when Edit is selected", () => {
