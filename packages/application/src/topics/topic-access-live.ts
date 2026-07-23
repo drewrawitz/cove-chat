@@ -36,7 +36,7 @@ function messageView(record: TopicMessageRecord): TopicMessageView {
 function topicSummaryView(record: TopicSummaryRecord): TopicSummaryView {
   return TopicSummaryView.make({
     topic: record.topic,
-    openingBrief: messageView(record.openingBrief),
+    latestMessage: messageView(record.latestMessage),
     messageCount: record.messageCount,
   });
 }

@@ -108,6 +108,16 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             intent: "question",
           }),
         );
+        yield* topics.addMessage(
+          AddMessageCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            messageId: yield* makeMessageId(`latest-${fixtures.messageId}`),
+            body: MessageBody.make("The release candidate passed smoke testing."),
+          }),
+        );
 
         const summaries = yield* topics.listForActor(
           fixtures.readerAccountId,
@@ -149,7 +159,14 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         expect(summaries).toHaveLength(1);
         expect(summaries[0]).toMatchObject({
           topic: { id: fixtures.topicId, intent: "question" },
-          messageCount: 1,
+          latestMessage: {
+            message: {
+              body: "The release candidate passed smoke testing.",
+              position: 2,
+            },
+            author: { name: "Topic Author" },
+          },
+          messageCount: 2,
         });
         expect(detail.messages[0]?.message.body).toBe("Capture the remaining launch risks.");
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);

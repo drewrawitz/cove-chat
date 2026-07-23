@@ -132,7 +132,7 @@ function messageRecord(row: MessageRow): TopicMessageRecord {
 function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
   return TopicSummaryRecord.make({
     topic: topic(row),
-    openingBrief: messageRecord({
+    latestMessage: messageRecord({
       id: row.messageId,
       workspaceId: row.workspaceId,
       topicId: row.id,
@@ -164,31 +164,35 @@ const make = Effect.gen(function* () {
         topic.intent,
         topic.opened_by_identity_id AS "openedByIdentityId",
         topic.created_at AS "createdAt",
-        opening.id AS "messageId",
-        opening.body AS "messageBody",
-        opening.position AS "messagePosition",
-        opening.created_at AS "messageCreatedAt",
-        opening.edited_at AS "messageEditedAt",
-        opening.deleted_at AS "messageDeletedAt",
-        opening.author_identity_id AS "authorIdentityId",
+        latest.id AS "messageId",
+        latest.body AS "messageBody",
+        latest.position AS "messagePosition",
+        latest.created_at AS "messageCreatedAt",
+        latest.edited_at AS "messageEditedAt",
+        latest.deleted_at AS "messageDeletedAt",
+        latest.author_identity_id AS "authorIdentityId",
         author.name AS "authorName",
         author.avatar_url AS "authorAvatarUrl",
-        count(message.id)::integer AS "messageCount"
+        (
+          SELECT count(*)::integer
+          FROM messages AS message
+          WHERE message.workspace_id = topic.workspace_id
+            AND message.topic_id = topic.id
+        ) AS "messageCount"
       FROM topics AS topic
-      INNER JOIN messages AS opening
-        ON opening.workspace_id = topic.workspace_id
-        AND opening.topic_id = topic.id
-        AND opening.position = 1
+      INNER JOIN LATERAL (
+        SELECT message.*
+        FROM messages AS message
+        WHERE message.workspace_id = topic.workspace_id
+          AND message.topic_id = topic.id
+        ORDER BY message.position DESC, message.id DESC
+        LIMIT 1
+      ) AS latest ON TRUE
       INNER JOIN workspace_identities AS author
-        ON author.workspace_id = opening.workspace_id
-        AND author.id = opening.author_identity_id
-      INNER JOIN messages AS message
-        ON message.workspace_id = topic.workspace_id
-        AND message.topic_id = topic.id
+        ON author.workspace_id = latest.workspace_id
+        AND author.id = latest.author_identity_id
       WHERE topic.workspace_id = ${workspaceId}
         AND topic.channel_id = ${channelId}
-      GROUP BY topic.workspace_id, topic.id, opening.workspace_id, opening.topic_id, opening.id,
-        author.workspace_id, author.id
       ORDER BY topic.created_at DESC, topic.id
     `,
   });

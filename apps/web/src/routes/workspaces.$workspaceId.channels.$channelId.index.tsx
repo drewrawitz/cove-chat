@@ -18,6 +18,7 @@ import { ChannelMembership } from "../components/channel-membership.tsx";
 import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { CreateTopic } from "../components/create-topic.tsx";
+import { LocalTimestamp } from "../components/local-timestamp.tsx";
 import { useSnackbar } from "../components/snackbar.tsx";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel, type TopicIntent } from "../topic-intent.ts";
@@ -212,10 +213,15 @@ interface TopicSummary {
   readonly title: string;
   readonly intent?: TopicIntent;
   readonly messageCount: number;
-  readonly openingBrief: {
+  readonly latestMessage: {
     readonly body?: string;
+    readonly position: number;
+    readonly createdAt: string;
     readonly deleted: boolean;
-    readonly author: { readonly name: string };
+    readonly author: {
+      readonly name: string;
+      readonly avatarUrl: string;
+    };
   };
 }
 
@@ -272,27 +278,46 @@ function TopicList({
           <Link
             to="/workspaces/$workspaceId/channels/$channelId/topics/$topicId"
             params={{ workspaceId, channelId, topicId: topic.id }}
-            className="group block px-4 py-6 transition-colors hover:bg-muted/30 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:px-6"
+            className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4 py-5 transition-colors hover:bg-muted/30 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:px-6"
           >
-            <div className="flex flex-wrap items-center gap-2">
-              {topic.intent === undefined ? null : (
-                <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {topicIntentLabel(topic.intent)}
+            <img
+              className="size-10 rounded-full border border-border bg-muted object-cover"
+              src={topic.latestMessage.author.avatarUrl}
+              alt=""
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="truncate text-base font-semibold group-hover:text-primary">
+                  {topic.title}
+                </h4>
+                {topic.intent === undefined ? null : (
+                  <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {topicIntentLabel(topic.intent)}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {topic.messageCount} {topic.messageCount === 1 ? "message" : "messages"}
                 </span>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {topic.messageCount} {topic.messageCount === 1 ? "message" : "messages"}
-              </span>
+              </div>
+              <p className="mt-1 truncate text-sm text-muted-foreground">
+                <span className="font-medium text-foreground/80">
+                  {topic.latestMessage.author.name}
+                </span>
+                <span aria-hidden="true">: </span>
+                <span>
+                  {topic.latestMessage.deleted
+                    ? topic.latestMessage.position === 1
+                      ? "Opening brief deleted"
+                      : "Reply deleted"
+                    : topic.latestMessage.body}
+                </span>
+              </p>
             </div>
-            <h4 className="mt-3 text-xl font-semibold tracking-tight group-hover:text-primary">
-              {topic.title}
-            </h4>
-            <p className="mt-2 line-clamp-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {topic.openingBrief.deleted ? "Opening Brief removed" : topic.openingBrief.body}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Opened by {topic.openingBrief.author.name}
-            </p>
+            <LocalTimestamp
+              className="text-xs tabular-nums text-muted-foreground"
+              mode="relative"
+              value={topic.latestMessage.createdAt}
+            />
           </Link>
         </li>
       ))}

@@ -658,7 +658,7 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
       openedByIdentityId: authorIdentityId,
       createdAt,
     });
-    const openingBrief = {
+    const latestMessage = {
       message: Message.make({
         id: messageId,
         workspaceId,
@@ -687,8 +687,8 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
         }),
     });
     const repository = makeRepository({
-      listSummariesInChannel: () => Effect.succeed([{ topic, openingBrief, messageCount: 1 }]),
-      findById: () => Effect.succeed({ topic, messages: [openingBrief] }),
+      listSummariesInChannel: () => Effect.succeed([{ topic, latestMessage, messageCount: 1 }]),
+      findById: () => Effect.succeed({ topic, messages: [latestMessage] }),
     });
 
     const result = yield* Effect.gen(function* () {
@@ -700,7 +700,7 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
     expect(result.summaries).toHaveLength(1);
-    expect(result.summaries[0]?.openingBrief.message.body).toBe(
+    expect(result.summaries[0]?.latestMessage.message.body).toBe(
       "Capture the remaining launch risks.",
     );
     expect(result.detail.topic.id).toBe(topicId);

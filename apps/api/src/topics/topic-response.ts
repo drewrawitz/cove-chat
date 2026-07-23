@@ -39,7 +39,7 @@ export const topicResponse = (view: TopicView): TopicResponse =>
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({
     ...topicResponseFields(view),
-    openingBrief: topicResponseMessage(view.openingBrief),
+    latestMessage: topicResponseMessage(view.latestMessage),
     messageCount: view.messageCount,
   });
 

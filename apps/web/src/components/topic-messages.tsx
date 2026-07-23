@@ -22,6 +22,7 @@ import {
   useTopicsEditMessage,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
+import { LocalTimestamp } from "./local-timestamp.tsx";
 import { useSnackbar } from "./snackbar.tsx";
 
 interface TopicMessage {
@@ -47,16 +48,6 @@ interface TopicMessagesProps {
   readonly topicId: string;
   readonly workspaceId: string;
 }
-
-const timestampFormatter = new Intl.DateTimeFormat("en-US", {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZone: "UTC",
-  timeZoneName: "short",
-});
 
 const messageKind = (position: number): "opening brief" | "reply" =>
   position === 1 ? "opening brief" : "reply";
@@ -147,7 +138,6 @@ export function TopicMessages({
           const kind = messageKind(message.position);
           const kindLabel = sentenceCase(kind);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
-          const timestamp = timestampFormatter.format(new Date(message.createdAt));
           const excerpt = messageExcerpt(message.body);
           const isAuthor = message.author.id === currentIdentityId;
           const canChange = canReply && isAuthor && !message.deleted;
@@ -168,7 +158,7 @@ export function TopicMessages({
                         {message.author.name}
                       </h3>
                       <p className="text-sm text-muted-foreground">
-                        <time dateTime={message.createdAt}>{timestamp}</time>
+                        <LocalTimestamp mode="message" value={message.createdAt} />
                         {message.edited && !message.deleted ? (
                           <>
                             {" "}
@@ -187,7 +177,7 @@ export function TopicMessages({
                           size: "icon-sm",
                           className: "message-actions",
                         })}
-                        aria-label={`More actions for ${actionKind} by ${message.author.name}, ${timestamp}: ${excerpt}`}
+                        aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
                       >
                         <svg
                           viewBox="0 0 24 24"

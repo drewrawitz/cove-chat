@@ -75,9 +75,9 @@ test("identifies messages by author and timestamp instead of a numbered heading"
 
   expect(markup).toContain(">Bob in Cove</h3>");
   expect(markup).toContain('dateTime="2026-07-22T19:15:00.000Z"');
-  expect(markup).toContain("Jul 22, 2026, 7:15 PM UTC");
+  expect(markup).toContain(">…</time>");
   expect(markup).toContain(
-    'aria-label="More actions for opening brief by Bob in Cove, Jul 22, 2026, 7:15 PM UTC: Capture the remaining launch risks."',
+    'aria-label="More actions for opening brief by Bob in Cove: Capture the remaining launch risks."',
   );
   expect(markup).toContain("More actions for reply 1 by Bob in Cove");
   expect(markup).toContain("More actions for reply 2 by Bob in Cove");

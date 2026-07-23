@@ -22,7 +22,7 @@ export interface TopicMessageView extends Schema.Schema.Type<typeof TopicMessage
 
 export const TopicSummaryView = Schema.Struct({
   topic: Topic,
-  openingBrief: TopicMessageView,
+  latestMessage: TopicMessageView,
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export interface TopicSummaryView extends Schema.Schema.Type<typeof TopicSummaryView> {}

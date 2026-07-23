@@ -30,7 +30,7 @@ const TopicResponseFields = {
 
 export const TopicSummaryResponse = Schema.Struct({
   ...TopicResponseFields,
-  openingBrief: TopicMessageResponse,
+  latestMessage: TopicMessageResponse,
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 }).annotate({ identifier: "TopicSummaryResponse" });
 export interface TopicSummaryResponse extends Schema.Schema.Type<typeof TopicSummaryResponse> {}

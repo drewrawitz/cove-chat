@@ -28,7 +28,7 @@ export interface TopicMessageRecord extends Schema.Schema.Type<typeof TopicMessa
 
 export const TopicSummaryRecord = Schema.Struct({
   topic: Topic,
-  openingBrief: TopicMessageRecord,
+  latestMessage: TopicMessageRecord,
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export interface TopicSummaryRecord extends Schema.Schema.Type<typeof TopicSummaryRecord> {}

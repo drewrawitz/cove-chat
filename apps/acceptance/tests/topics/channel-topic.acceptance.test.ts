@@ -31,7 +31,15 @@ it.live(
       yield* browserAction(() =>
         page.getByRole("heading", { name: "Bob in Cove", level: 3 }).waitFor(),
       );
-      yield* browserAction(() => page.locator("time").first().waitFor());
+      const openingBriefTime = page.locator("time").first();
+      yield* browserAction(() => openingBriefTime.waitFor());
+      yield* browserAction(() =>
+        page
+          .getByText(/^(now|\d+[mh])$/)
+          .first()
+          .waitFor(),
+      );
+      expect(yield* browserAction(() => openingBriefTime.getAttribute("title"))).toBeTruthy();
       expect(
         yield* browserAction(() => page.getByText("Opening Brief", { exact: true }).count()),
       ).toBe(0);
@@ -40,7 +48,7 @@ it.live(
       );
       yield* browserAction(() =>
         page
-          .getByRole("button", { name: /More actions for opening brief by Bob in Cove,/ })
+          .getByRole("button", { name: /More actions for opening brief by Bob in Cove:/ })
           .click(),
       );
       yield* browserAction(() =>
@@ -65,7 +73,7 @@ it.live(
         page.getByText("The release candidate passed smoke testing.", { exact: true }).waitFor(),
       );
       yield* browserAction(() =>
-        page.getByRole("button", { name: /More actions for reply 1 by Bob in Cove,/ }).click(),
+        page.getByRole("button", { name: /More actions for reply 1 by Bob in Cove:/ }).click(),
       );
       yield* browserAction(() => page.getByRole("menuitem", { name: "Delete reply" }).click());
       const deleteDialog = page.getByRole("dialog");
@@ -84,6 +92,11 @@ it.live(
       const topicSummary = page.getByRole("link", { name: /Release readiness/ });
       yield* browserAction(() => topicSummary.waitFor());
       yield* browserAction(() => topicSummary.getByText("Question", { exact: true }).waitFor());
+      yield* browserAction(() => topicSummary.getByText("Bob in Cove", { exact: true }).waitFor());
+      yield* browserAction(() =>
+        topicSummary.getByText("Reply deleted", { exact: true }).waitFor(),
+      );
+      yield* browserAction(() => topicSummary.locator("time").waitFor());
       expect(
         yield* browserAction(() => page.getByRole("button", { name: /message|send/i }).count()),
       ).toBe(0);
