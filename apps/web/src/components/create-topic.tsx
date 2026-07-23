@@ -70,7 +70,7 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
       <DialogTrigger className={buttonVariants({ size: "lg" })}>Start a topic</DialogTrigger>
       <DialogPortal>
         <DialogBackdrop />
-        <DialogPopup className="dark bg-card" initialFocus={titleInput}>
+        <DialogPopup initialFocus={titleInput}>
           <form onSubmit={create}>
             <header className="flex items-start justify-between gap-6 border-b p-6 sm:p-8">
               <div>

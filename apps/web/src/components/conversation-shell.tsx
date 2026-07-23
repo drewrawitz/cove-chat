@@ -24,8 +24,8 @@ export function ConversationShell({
   workspaceName,
 }: ConversationShellProps): ReactElement {
   return (
-    <main className="dark min-h-svh bg-background text-foreground">
-      <div className="min-h-svh w-full lg:grid lg:grid-cols-[18rem_minmax(0,1fr)]">
+    <main className="dark min-h-svh bg-background text-foreground [--conversation-sidebar-width:18rem]">
+      <div className="min-h-svh w-full lg:grid lg:grid-cols-[var(--conversation-sidebar-width)_minmax(0,1fr)]">
         <aside className="border-b border-sidebar-border bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:h-svh lg:overflow-y-auto lg:border-r lg:border-b-0">
           <div className="p-4 lg:p-5">
             <header>

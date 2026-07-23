@@ -59,16 +59,17 @@ it.live(
           .getByLabel("Edit opening brief")
           .fill("Capture the remaining launch risks and owners."),
       );
-      yield* browserAction(() => page.getByRole("button", { name: "Save edit" }).click());
+      yield* browserAction(() => page.getByRole("button", { name: "Save" }).click());
       yield* browserAction(() =>
         page.getByText("Capture the remaining launch risks and owners.", { exact: true }).waitFor(),
       );
       yield* browserAction(() => page.getByText("Edited", { exact: true }).waitFor());
 
+      yield* browserAction(() => page.keyboard.press("r"));
       yield* browserAction(() =>
         page.getByLabel("Write a reply").fill("The release candidate passed smoke testing."),
       );
-      yield* browserAction(() => page.getByRole("button", { name: "Reply" }).click());
+      yield* browserAction(() => page.keyboard.press("Meta+Enter"));
       yield* browserAction(() =>
         page.getByText("The release candidate passed smoke testing.", { exact: true }).waitFor(),
       );

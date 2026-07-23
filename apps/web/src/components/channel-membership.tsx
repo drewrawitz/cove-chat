@@ -65,7 +65,7 @@ export function ChannelMembership({
 
       <DialogPortal>
         <DialogBackdrop />
-        <DialogPopup className="dark bg-card">
+        <DialogPopup>
           <header className="flex items-start justify-between gap-6 border-b p-6 sm:p-8">
             <div>
               <DialogTitle>{canAdminister ? "Manage members" : "Channel members"}</DialogTitle>

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import type { ReactElement } from "react";
+import { type ReactElement, useRef } from "react";
 import {
   useAuthMe,
   useChannelsGetChannel,
@@ -11,6 +11,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { TopicHeader } from "../components/topic-header.tsx";
 import { TopicMessages } from "../components/topic-messages.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
 
@@ -20,6 +21,7 @@ export const Route = createFileRoute(
 
 function TopicPage(): ReactElement {
   const { workspaceId, channelId, topicId } = Route.useParams();
+  const topicHeading = useRef<HTMLHeadingElement>(null);
   const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
@@ -71,36 +73,42 @@ function TopicPage(): ReactElement {
   } else {
     const displayName = channelDisplayName(channel.data.name);
     content = (
-      <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:py-24">
-        <Link
-          className="text-sm font-medium text-muted-foreground hover:text-foreground"
-          to="/workspaces/$workspaceId/channels/$channelId"
-          params={{ workspaceId, channelId }}
-        >
-          ← Back to {displayName}
-        </Link>
-
-        <header className="border-b pb-8 pt-8">
-          {topic.data.intent === undefined ? null : (
-            <span className="inline-flex rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
-              {topicIntentLabel(topic.data.intent)}
-            </span>
-          )}
-          <h2 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">
-            {topic.data.title}
-          </h2>
-        </header>
-
-        <TopicMessages
-          canReply={channel.data.hasChannelMembership}
+      <>
+        <TopicHeader
           channelId={channelId}
-          messages={topic.data.messages}
-          currentIdentityId={workspace.data.identity.id}
-          refresh={refreshTopic}
-          topicId={topicId}
+          channelName={displayName}
+          headingRef={topicHeading}
+          replyCount={Math.max(0, topic.data.messages.length - 1)}
+          title={topic.data.title}
           workspaceId={workspaceId}
         />
-      </div>
+
+        <div className="mx-auto w-full max-w-4xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:py-24">
+          <header className="border-b pb-8">
+            {topic.data.intent === undefined ? null : (
+              <span className="inline-flex rounded-full border border-border bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
+                {topicIntentLabel(topic.data.intent)}
+              </span>
+            )}
+            <h2
+              ref={topicHeading}
+              className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl"
+            >
+              {topic.data.title}
+            </h2>
+          </header>
+
+          <TopicMessages
+            canReply={channel.data.hasChannelMembership}
+            channelId={channelId}
+            currentIdentity={workspace.data.identity}
+            messages={topic.data.messages}
+            refresh={refreshTopic}
+            topicId={topicId}
+            workspaceId={workspaceId}
+          />
+        </div>
+      </>
     );
   }
 

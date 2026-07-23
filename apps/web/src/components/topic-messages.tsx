@@ -15,7 +15,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@cove/ui/components/menu";
-import { type FormEvent, type ReactElement, useState } from "react";
+import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
 import {
   useTopicsAddMessage,
   useTopicsDeleteMessage,
@@ -25,6 +25,8 @@ import { requiredFormValue } from "../form-data.ts";
 import { topicMessageKind, topicMessageKindLabel } from "../topic-message-kind.ts";
 import { LocalTimestamp } from "./local-timestamp.tsx";
 import { useSnackbar } from "./snackbar.tsx";
+import { TopicMessageEditor } from "./topic-message-editor.tsx";
+import { TopicReplyComposer } from "./topic-reply-composer.tsx";
 
 interface TopicMessage {
   readonly id: string;
@@ -43,8 +45,12 @@ interface TopicMessage {
 interface TopicMessagesProps {
   readonly canReply: boolean;
   readonly channelId: string;
+  readonly currentIdentity: {
+    readonly avatarUrl: string;
+    readonly id: string;
+    readonly name: string;
+  };
   readonly messages: ReadonlyArray<TopicMessage>;
-  readonly currentIdentityId: string;
   readonly refresh: () => Promise<void>;
   readonly topicId: string;
   readonly workspaceId: string;
@@ -59,7 +65,7 @@ export function TopicMessages({
   canReply,
   channelId,
   messages,
-  currentIdentityId,
+  currentIdentity,
   refresh,
   topicId,
   workspaceId,
@@ -68,6 +74,8 @@ export function TopicMessages({
   const editMessage = useTopicsEditMessage();
   const deleteMessage = useTopicsDeleteMessage();
   const { showSnackbar } = useSnackbar();
+  const initiallyPositionedTopicId = useRef<string | undefined>(undefined);
+  const scrollAfterMessageId = useRef<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string>();
   const [deletingId, setDeletingId] = useState<string>();
   const deletingMessage = messages.find((message) => message.id === deletingId);
@@ -75,24 +83,54 @@ export function TopicMessages({
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
 
-  const add = (event: FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    addMessage.mutate(
-      {
+  useEffect(() => {
+    if (initiallyPositionedTopicId.current === topicId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      initiallyPositionedTopicId.current = topicId;
+      window.scrollTo({
+        top: messages.length > 1 ? document.documentElement.scrollHeight : 0,
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages.length, topicId]);
+
+  useEffect(() => {
+    const messageId = scrollAfterMessageId.current;
+    if (messageId === undefined) {
+      return;
+    }
+
+    const messageElement = document.getElementById(`topic-message-${messageId}`);
+    if (messageElement === null) {
+      return;
+    }
+
+    scrollAfterMessageId.current = undefined;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    messageElement.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [messages]);
+
+  const add = async (body: string): Promise<void> => {
+    try {
+      const createdMessage = await addMessage.mutateAsync({
         workspaceId,
         channelId,
         topicId,
-        data: { body: requiredFormValue(form, "messageBody") },
-      },
-      {
-        onSuccess: async () => {
-          formElement.reset();
-          await refresh();
-        },
-      },
-    );
+        data: { body },
+      });
+      scrollAfterMessageId.current = createdMessage.id;
+      await refresh();
+    } catch (error) {
+      scrollAfterMessageId.current = undefined;
+      throw error;
+    }
   };
 
   const edit = (event: FormEvent<HTMLFormElement>, messageId: string): void => {
@@ -136,122 +174,114 @@ export function TopicMessages({
           const kindLabel = topicMessageKindLabel(message.position);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
           const excerpt = messageExcerpt(message.body);
-          const isAuthor = message.author.id === currentIdentityId;
+          const isAuthor = message.author.id === currentIdentity.id;
           const canChange = canReply && isAuthor && !message.deleted;
           const isEditing = editingId === message.id;
 
           return (
-            <li key={message.id} className="message-row py-8">
-              <article aria-labelledby={`message-${message.id}`}>
-                <header className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3">
+            <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-5">
+              <article
+                aria-label={isEditing ? `Edit ${kind} by ${message.author.name}` : undefined}
+                aria-labelledby={isEditing ? undefined : `message-${message.id}`}
+              >
+                {isEditing ? (
+                  <TopicMessageEditor
+                    authorAvatarUrl={message.author.avatarUrl}
+                    defaultBody={message.body}
+                    editorId={`edit-message-${message.id}`}
+                    editorLabel={`Edit ${kind}`}
+                    hasError={editMessage.isError}
+                    isDisabled={mutationPending}
+                    isSaving={editMessage.isPending}
+                    onCancel={() => setEditingId(undefined)}
+                    onSubmit={(event) => edit(event, message.id)}
+                  />
+                ) : (
+                  <div className="flex items-start gap-3">
                     <img
-                      className="size-10 rounded-full border border-border bg-muted object-cover"
+                      className="size-10 shrink-0 rounded-full border border-border bg-muted object-cover"
                       src={message.author.avatarUrl}
                       alt=""
                     />
-                    <div>
-                      <h3 id={`message-${message.id}`} className="font-semibold">
-                        {message.author.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        <LocalTimestamp mode="message" value={message.createdAt} />
-                        {message.edited && !message.deleted ? (
-                          <>
-                            {" "}
-                            <span aria-hidden="true">·</span> <span>Edited</span>
-                          </>
+                    <div className="min-w-0 flex-1">
+                      <header className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                          <h3
+                            id={`message-${message.id}`}
+                            className="truncate font-semibold leading-5"
+                          >
+                            {message.author.name}
+                          </h3>
+                          <p className="shrink-0 text-sm leading-5 text-muted-foreground">
+                            <LocalTimestamp mode="message" value={message.createdAt} />
+                            {message.edited && !message.deleted ? (
+                              <>
+                                {" "}
+                                <span aria-hidden="true">·</span> <span>Edited</span>
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+
+                        {canChange ? (
+                          <MenuRoot>
+                            <MenuTrigger
+                              className={buttonVariants({
+                                variant: "ghost",
+                                size: "icon-sm",
+                                className: "message-actions",
+                              })}
+                              aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="currentColor"
+                                aria-hidden="true"
+                                className="size-4"
+                              >
+                                <circle cx="5" cy="12" r="1.5" />
+                                <circle cx="12" cy="12" r="1.5" />
+                                <circle cx="19" cy="12" r="1.5" />
+                              </svg>
+                            </MenuTrigger>
+                            <MenuPortal>
+                              <MenuPositioner side="bottom" align="end">
+                                <MenuPopup>
+                                  <MenuItem
+                                    onClick={() => {
+                                      editMessage.reset();
+                                      setEditingId(message.id);
+                                    }}
+                                  >
+                                    Edit {kind}
+                                  </MenuItem>
+                                  <MenuItem
+                                    className="text-destructive data-highlighted:text-destructive"
+                                    onClick={() => {
+                                      deleteMessage.reset();
+                                      setDeletingId(message.id);
+                                    }}
+                                  >
+                                    Delete {kind}
+                                  </MenuItem>
+                                </MenuPopup>
+                              </MenuPositioner>
+                            </MenuPortal>
+                          </MenuRoot>
                         ) : null}
-                      </p>
+                      </header>
+
+                      {message.deleted ? (
+                        <p className="mt-1 text-sm leading-6 italic text-muted-foreground">
+                          {kindLabel} deleted
+                        </p>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-base leading-6 text-foreground/90">
+                          {message.body}
+                        </p>
+                      )}
                     </div>
                   </div>
-
-                  {canChange && !isEditing ? (
-                    <MenuRoot>
-                      <MenuTrigger
-                        className={buttonVariants({
-                          variant: "ghost",
-                          size: "icon-sm",
-                          className: "message-actions",
-                        })}
-                        aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
-                      >
-                        <svg
-                          viewBox="0 0 24 24"
-                          fill="currentColor"
-                          aria-hidden="true"
-                          className="size-4"
-                        >
-                          <circle cx="5" cy="12" r="1.5" />
-                          <circle cx="12" cy="12" r="1.5" />
-                          <circle cx="19" cy="12" r="1.5" />
-                        </svg>
-                      </MenuTrigger>
-                      <MenuPortal>
-                        <MenuPositioner side="bottom" align="end">
-                          <MenuPopup>
-                            <MenuItem
-                              onClick={() => {
-                                editMessage.reset();
-                                setEditingId(message.id);
-                              }}
-                            >
-                              Edit {kind}
-                            </MenuItem>
-                            <MenuItem
-                              className="text-destructive data-highlighted:text-destructive"
-                              onClick={() => {
-                                deleteMessage.reset();
-                                setDeletingId(message.id);
-                              }}
-                            >
-                              Delete {kind}
-                            </MenuItem>
-                          </MenuPopup>
-                        </MenuPositioner>
-                      </MenuPortal>
-                    </MenuRoot>
-                  ) : null}
-                </header>
-
-                {message.deleted ? (
-                  <p className="mt-5 text-sm italic text-muted-foreground">{kindLabel} deleted</p>
-                ) : isEditing ? (
-                  <form className="mt-5" onSubmit={(event) => edit(event, message.id)}>
-                    <label className="sr-only" htmlFor={`edit-message-${message.id}`}>
-                      Edit {kind}
-                    </label>
-                    <textarea
-                      id={`edit-message-${message.id}`}
-                      name="messageBody"
-                      defaultValue={message.body}
-                      required
-                      rows={5}
-                      className="w-full resize-y rounded-lg border bg-background px-4 py-3 leading-6 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                    />
-                    {editMessage.isError ? (
-                      <p className="mt-2 text-sm text-destructive" role="alert">
-                        Cove could not save this edit. Refresh and try again.
-                      </p>
-                    ) : null}
-                    <div className="mt-3 flex items-center gap-2">
-                      <Button type="submit" disabled={mutationPending}>
-                        {editMessage.isPending ? "Saving…" : "Save edit"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={mutationPending}
-                        onClick={() => setEditingId(undefined)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </form>
-                ) : (
-                  <p className="mt-5 whitespace-pre-wrap text-base leading-7 text-foreground/90">
-                    {message.body}
-                  </p>
                 )}
               </article>
             </li>
@@ -260,29 +290,15 @@ export function TopicMessages({
       </ol>
 
       {canReply ? (
-        <form className="border-t pt-8" onSubmit={add}>
-          <label className="text-base font-semibold" htmlFor="newMessage">
-            Write a reply
-          </label>
-          <textarea
-            id="newMessage"
-            name="messageBody"
-            required
-            rows={5}
-            className="mt-3 w-full resize-y rounded-lg border bg-background px-4 py-3 leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            placeholder="Add context, evidence, or a response to this Topic."
+        <>
+          <div className="h-24" aria-hidden="true" />
+          <TopicReplyComposer
+            identity={currentIdentity}
+            hasError={addMessage.isError}
+            isPending={mutationPending}
+            onPost={add}
           />
-          {addMessage.isError ? (
-            <p className="mt-2 text-sm text-destructive" role="alert">
-              Cove could not add this reply. Refresh and try again.
-            </p>
-          ) : null}
-          <div className="mt-3 flex justify-end">
-            <Button type="submit" size="lg" disabled={mutationPending}>
-              {addMessage.isPending ? "Replying…" : "Reply"}
-            </Button>
-          </div>
-        </form>
+        </>
       ) : null}
 
       {deletingMessage === undefined ? null : (
