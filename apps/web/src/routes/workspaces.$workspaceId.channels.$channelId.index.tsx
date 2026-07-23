@@ -1,5 +1,4 @@
 import { Button } from "@cove/ui/components/button";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactElement } from "react";
 import {
@@ -19,7 +18,8 @@ import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { CreateTopic } from "../components/create-topic.tsx";
 import { LocalTimestamp } from "../components/local-timestamp.tsx";
-import { useSnackbar } from "../components/snackbar.tsx";
+import { useJoinChannel } from "../components/use-join-channel.ts";
+import { topicMessageKindLabel } from "../topic-message-kind.ts";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel, type TopicIntent } from "../topic-intent.ts";
 
@@ -29,15 +29,20 @@ export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channel
 
 function ChannelPage(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
-  const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetChannel(workspaceId, channelId, {
     query: { retry: false },
   });
-  const joinChannel = useChannelsJoinPublicChannel();
+  const joinChannelMutation = useChannelsJoinPublicChannel();
   const topics = useTopicsListTopics(workspaceId, channelId, { query: { retry: false } });
-  const { showSnackbar } = useSnackbar();
+  const joinChannel = useJoinChannel({
+    queriesToInvalidate: [
+      getChannelsGetChannelQueryKey(workspaceId, channelId),
+      getChannelsListPublicChannelsQueryKey(workspaceId),
+    ],
+    successMessage: (channelName) => `You joined ${channelName}.`,
+  });
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -60,20 +65,10 @@ function ChannelPage(): ReactElement {
   }
 
   const join = (displayName: string): void => {
-    joinChannel.mutate(
+    joinChannelMutation.mutate(
       { workspaceId, channelId },
       {
-        onSuccess: async () => {
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
-            }),
-            queryClient.invalidateQueries({
-              queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
-            }),
-          ]);
-          showSnackbar(`You joined ${displayName}.`);
-        },
+        onSuccess: () => joinChannel.onJoined(displayName),
       },
     );
   };
@@ -152,16 +147,16 @@ function ChannelPage(): ReactElement {
               <Button
                 type="button"
                 size="lg"
-                disabled={joinChannel.isPending}
+                disabled={joinChannelMutation.isPending}
                 onClick={() => join(displayName)}
               >
-                {joinChannel.isPending ? "Joining…" : "Join channel"}
+                {joinChannelMutation.isPending ? "Joining…" : "Join channel"}
               </Button>
             ) : null}
           </div>
         </header>
 
-        {channel.data.visibility === "public" && joinChannel.isError ? (
+        {channel.data.visibility === "public" && joinChannelMutation.isError ? (
           <p className="-mt-6 mb-6 text-sm text-destructive" role="alert">
             Cove could not join this channel. Refresh and try again.
           </p>
@@ -306,9 +301,7 @@ function TopicList({
                 <span aria-hidden="true">: </span>
                 <span>
                   {topic.latestMessage.deleted
-                    ? topic.latestMessage.position === 1
-                      ? "Opening brief deleted"
-                      : "Reply deleted"
+                    ? `${topicMessageKindLabel(topic.latestMessage.position)} deleted`
                     : topic.latestMessage.body}
                 </span>
               </p>

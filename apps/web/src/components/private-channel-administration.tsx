@@ -1,5 +1,4 @@
 import { Button } from "@cove/ui/components/button";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
 import {
@@ -9,7 +8,7 @@ import {
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelMemberForm } from "./channel-member-form.tsx";
-import { useSnackbar } from "./snackbar.tsx";
+import { useJoinChannel } from "./use-join-channel.ts";
 
 interface PrivateChannelAdministrationProps {
   readonly currentIdentityId: string;
@@ -20,32 +19,23 @@ export function PrivateChannelAdministration({
   currentIdentityId,
   workspaceId,
 }: PrivateChannelAdministrationProps): ReactElement {
-  const queryClient = useQueryClient();
   const channels = useChannelsListPrivateChannelsForAdministration(workspaceId, {
     query: { retry: false },
   });
-  const joinChannel = useChannelsAddChannelMember();
-  const { showSnackbar } = useSnackbar();
+  const joinChannelMutation = useChannelsAddChannelMember();
   const [joiningChannelId, setJoiningChannelId] = useState<string>();
-
-  const refreshMembership = async (): Promise<void> => {
-    await Promise.all([
-      channels.refetch(),
-      queryClient.invalidateQueries({
-        queryKey: getChannelsListPrivateChannelsQueryKey(workspaceId),
-      }),
-    ]);
-  };
+  const joinChannel = useJoinChannel({
+    additionalRefresh: channels.refetch,
+    queriesToInvalidate: [getChannelsListPrivateChannelsQueryKey(workspaceId)],
+    successMessage: (channelName) => `You joined ${channelName}.`,
+  });
 
   const join = (channelId: string, channelName: string): void => {
     setJoiningChannelId(channelId);
-    joinChannel.mutate(
+    joinChannelMutation.mutate(
       { workspaceId, channelId, workspaceIdentityId: currentIdentityId },
       {
-        onSuccess: async () => {
-          await refreshMembership();
-          showSnackbar(`You joined ${channelName}.`);
-        },
+        onSuccess: () => joinChannel.onJoined(channelName),
         onSettled: () => setJoiningChannelId(undefined),
       },
     );
@@ -102,7 +92,7 @@ export function PrivateChannelAdministration({
                   <Button
                     type="button"
                     aria-label={`Join ${displayName}`}
-                    disabled={joinChannel.isPending}
+                    disabled={joinChannelMutation.isPending}
                     onClick={() => join(channel.id, displayName)}
                   >
                     {isJoining ? "Joining…" : "Join channel"}
@@ -114,7 +104,7 @@ export function PrivateChannelAdministration({
                   className="border-t pt-4 sm:col-span-2"
                   excludedIdentityId={currentIdentityId}
                   label={`Member to add to ${displayName}`}
-                  onMembershipChanged={refreshMembership}
+                  onMembershipChanged={joinChannel.refresh}
                   workspaceId={workspaceId}
                 />
               </li>
@@ -123,7 +113,7 @@ export function PrivateChannelAdministration({
         </ul>
       )}
 
-      {joinChannel.isError ? (
+      {joinChannelMutation.isError ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
           Cove could not join that Private Channel. Refresh and try again.
         </p>

@@ -12,15 +12,23 @@ test("formats compact relative timestamps", () => {
 
 test("uses relative time only when a message is from the same local calendar day", () => {
   const now = new Date(2026, 6, 23, 10);
+  const previousDay = new Date(2026, 6, 22, 23, 30);
+  const expectedPreviousDay = new Intl.DateTimeFormat(undefined, {
+    year: "2-digit",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(previousDay);
 
   expect(messageTimestampLabel(new Date(2026, 6, 23, 9, 15), now)).toBe("45m");
-  expect(messageTimestampLabel(new Date(2026, 6, 22, 23, 30), now)).toBe("07/22/26");
+  expect(messageTimestampLabel(previousDay, now)).toBe(expectedPreviousDay);
 });
 
 test("formats the full hover timestamp in the runtime's local timezone", () => {
-  const formatted = fullLocalTimestamp(new Date(2026, 6, 22, 23, 30));
+  const timestamp = new Date(2026, 6, 22, 23, 30);
+  const expected = new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "long",
+  }).format(timestamp);
 
-  expect(formatted).toContain("Jul 22, 2026");
-  expect(formatted).toContain("11:30:00 PM");
-  expect(formatted).toMatch(/(?:GMT|UTC|[A-Z]{3,5})/);
+  expect(fullLocalTimestamp(timestamp)).toBe(expected);
 });

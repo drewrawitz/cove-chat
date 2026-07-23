@@ -8,7 +8,10 @@ ALTER TABLE "contributions"
   CHECK (
     ("deleted_at" IS NULL AND "body" IS NOT NULL)
     OR ("deleted_at" IS NOT NULL AND "body" IS NULL)
-  );
+  ) NOT VALID;
+
+ALTER TABLE "contributions"
+  VALIDATE CONSTRAINT "contributions_body_tombstone_check";
 
 CREATE TYPE "ContributionRevisionOperation" AS ENUM ('edit', 'delete');
 

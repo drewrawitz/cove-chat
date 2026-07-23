@@ -22,6 +22,7 @@ import {
   useTopicsEditMessage,
 } from "../api/generated/cove-app.ts";
 import { requiredFormValue } from "../form-data.ts";
+import { topicMessageKind, topicMessageKindLabel } from "../topic-message-kind.ts";
 import { LocalTimestamp } from "./local-timestamp.tsx";
 import { useSnackbar } from "./snackbar.tsx";
 
@@ -49,11 +50,6 @@ interface TopicMessagesProps {
   readonly workspaceId: string;
 }
 
-const messageKind = (position: number): "opening brief" | "reply" =>
-  position === 1 ? "opening brief" : "reply";
-
-const sentenceCase = (value: string): string => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`;
-
 const messageExcerpt = (body: string | undefined): string => {
   const normalized = body?.replaceAll(/\s+/g, " ").trim() ?? "";
   return normalized.length > 60 ? `${normalized.slice(0, 59)}…` : normalized;
@@ -75,6 +71,8 @@ export function TopicMessages({
   const [editingId, setEditingId] = useState<string>();
   const [deletingId, setDeletingId] = useState<string>();
   const deletingMessage = messages.find((message) => message.id === deletingId);
+  const deletingMessageKind =
+    deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
 
   const add = (event: FormEvent<HTMLFormElement>): void => {
@@ -122,9 +120,8 @@ export function TopicMessages({
       { workspaceId, channelId, topicId, messageId: message.id },
       {
         onSuccess: async () => {
-          const kind = sentenceCase(messageKind(message.position));
           setDeletingId(undefined);
-          showSnackbar(`${kind} deleted.`);
+          showSnackbar(`${topicMessageKindLabel(message.position)} deleted.`);
           await refresh();
         },
       },
@@ -135,8 +132,8 @@ export function TopicMessages({
     <>
       <ol className="divide-y" aria-label="Topic messages">
         {messages.map((message) => {
-          const kind = messageKind(message.position);
-          const kindLabel = sentenceCase(kind);
+          const kind = topicMessageKind(message.position);
+          const kindLabel = topicMessageKindLabel(message.position);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
           const excerpt = messageExcerpt(message.body);
           const isAuthor = message.author.id === currentIdentityId;
@@ -300,14 +297,13 @@ export function TopicMessages({
           <DialogPortal>
             <DialogBackdrop />
             <DialogPopup className="max-w-md p-6 sm:p-7">
-              <DialogTitle>Delete {messageKind(deletingMessage.position)}?</DialogTitle>
+              <DialogTitle>Delete {deletingMessageKind}?</DialogTitle>
               <DialogDescription className="mt-2 leading-6">
                 This removes the text but keeps its place in the Topic.
               </DialogDescription>
               {deleteMessage.isError ? (
                 <p className="mt-4 text-sm text-destructive" role="alert">
-                  Cove could not delete this {messageKind(deletingMessage.position)}. Refresh and
-                  try again.
+                  Cove could not delete this {deletingMessageKind}. Refresh and try again.
                 </p>
               ) : null}
               <div className="mt-6 flex justify-end gap-2">
@@ -325,9 +321,7 @@ export function TopicMessages({
                   disabled={deleteMessage.isPending}
                   onClick={() => remove(deletingMessage)}
                 >
-                  {deleteMessage.isPending
-                    ? "Deleting…"
-                    : `Delete ${messageKind(deletingMessage.position)}`}
+                  {deleteMessage.isPending ? "Deleting…" : `Delete ${deletingMessageKind}`}
                 </Button>
               </div>
             </DialogPopup>
