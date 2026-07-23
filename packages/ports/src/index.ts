@@ -52,7 +52,7 @@ export { TransactionManager, type TransactionManagerService } from "./transactio
 
 export {
   TopicAuthorRecord,
-  TopicContributionRecord,
+  TopicMessageRecord,
   TopicRecord,
   TopicRepository,
   TopicSummaryRecord,

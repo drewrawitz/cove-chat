@@ -6,14 +6,14 @@ const unavailableDefinition = {
   message: "Topic is unavailable.",
 } as const;
 
-const contributionUnavailableDefinition = {
-  code: "CONTRIBUTION_UNAVAILABLE",
-  message: "Contribution is unavailable.",
+const messageUnavailableDefinition = {
+  code: "MESSAGE_UNAVAILABLE",
+  message: "Message is unavailable.",
 } as const;
 
-const contributionMutationForbiddenDefinition = {
-  code: "CONTRIBUTION_MUTATION_FORBIDDEN",
-  message: "Only the Contribution author can change it.",
+const messageMutationForbiddenDefinition = {
+  code: "MESSAGE_MUTATION_FORBIDDEN",
+  message: "Only the Message author can change it.",
 } as const;
 
 export const TopicUnavailableResponse = Schema.Struct({
@@ -23,24 +23,24 @@ export const TopicUnavailableResponse = Schema.Struct({
   .annotate({ identifier: "TopicUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
-export const ContributionUnavailableResponse = Schema.Struct({
-  code: Schema.Literals([contributionUnavailableDefinition.code]),
-  message: Schema.Literals([contributionUnavailableDefinition.message]),
+export const MessageUnavailableResponse = Schema.Struct({
+  code: Schema.Literals([messageUnavailableDefinition.code]),
+  message: Schema.Literals([messageUnavailableDefinition.message]),
 })
-  .annotate({ identifier: "ContributionUnavailableResponse" })
+  .annotate({ identifier: "MessageUnavailableResponse" })
   .pipe(HttpApiSchema.status("NotFound"));
 
-export const ContributionMutationForbiddenResponse = Schema.Struct({
-  code: Schema.Literals([contributionMutationForbiddenDefinition.code]),
-  message: Schema.Literals([contributionMutationForbiddenDefinition.message]),
+export const MessageMutationForbiddenResponse = Schema.Struct({
+  code: Schema.Literals([messageMutationForbiddenDefinition.code]),
+  message: Schema.Literals([messageMutationForbiddenDefinition.message]),
 })
-  .annotate({ identifier: "ContributionMutationForbiddenResponse" })
+  .annotate({ identifier: "MessageMutationForbiddenResponse" })
   .pipe(HttpApiSchema.status("Forbidden"));
 
 export const TopicErrorResponses = {
-  contributionMutationForbidden: ContributionMutationForbiddenResponse.make(
-    contributionMutationForbiddenDefinition,
+  messageMutationForbidden: MessageMutationForbiddenResponse.make(
+    messageMutationForbiddenDefinition,
   ),
-  contributionUnavailable: ContributionUnavailableResponse.make(contributionUnavailableDefinition),
+  messageUnavailable: MessageUnavailableResponse.make(messageUnavailableDefinition),
   unavailable: TopicUnavailableResponse.make(unavailableDefinition),
 } as const;

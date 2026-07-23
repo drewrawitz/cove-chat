@@ -9,6 +9,7 @@ import {
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelMemberForm } from "./channel-member-form.tsx";
+import { useSnackbar } from "./snackbar.tsx";
 
 interface PrivateChannelAdministrationProps {
   readonly currentIdentityId: string;
@@ -24,8 +25,8 @@ export function PrivateChannelAdministration({
     query: { retry: false },
   });
   const joinChannel = useChannelsAddChannelMember();
+  const { showSnackbar } = useSnackbar();
   const [joiningChannelId, setJoiningChannelId] = useState<string>();
-  const [joinedChannelName, setJoinedChannelName] = useState<string>();
 
   const refreshMembership = async (): Promise<void> => {
     await Promise.all([
@@ -38,13 +39,12 @@ export function PrivateChannelAdministration({
 
   const join = (channelId: string, channelName: string): void => {
     setJoiningChannelId(channelId);
-    setJoinedChannelName(undefined);
     joinChannel.mutate(
       { workspaceId, channelId, workspaceIdentityId: currentIdentityId },
       {
         onSuccess: async () => {
           await refreshMembership();
-          setJoinedChannelName(channelName);
+          showSnackbar(`You joined ${channelName}.`);
         },
         onSettled: () => setJoiningChannelId(undefined),
       },
@@ -123,11 +123,6 @@ export function PrivateChannelAdministration({
         </ul>
       )}
 
-      {joinedChannelName === undefined ? null : (
-        <p className="mt-4 text-sm text-muted-foreground" role="status">
-          You joined {joinedChannelName}.
-        </p>
-      )}
       {joinChannel.isError ? (
         <p className="mt-4 text-sm text-destructive" role="alert">
           Cove could not join that Private Channel. Refresh and try again.

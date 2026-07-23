@@ -8,7 +8,7 @@ export const TopicAuthorResponse = Schema.Struct({
 }).annotate({ identifier: "TopicAuthorResponse" });
 export interface TopicAuthorResponse extends Schema.Schema.Type<typeof TopicAuthorResponse> {}
 
-export const TopicContributionResponse = Schema.Struct({
+export const TopicMessageResponse = Schema.Struct({
   id: Schema.String,
   body: Schema.optionalKey(Schema.String),
   position: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -16,10 +16,8 @@ export const TopicContributionResponse = Schema.Struct({
   edited: Schema.Boolean,
   deleted: Schema.Boolean,
   author: TopicAuthorResponse,
-}).annotate({ identifier: "TopicContributionResponse" });
-export interface TopicContributionResponse extends Schema.Schema.Type<
-  typeof TopicContributionResponse
-> {}
+}).annotate({ identifier: "TopicMessageResponse" });
+export interface TopicMessageResponse extends Schema.Schema.Type<typeof TopicMessageResponse> {}
 
 const TopicResponseFields = {
   id: Schema.String,
@@ -32,8 +30,8 @@ const TopicResponseFields = {
 
 export const TopicSummaryResponse = Schema.Struct({
   ...TopicResponseFields,
-  openingBrief: TopicContributionResponse,
-  contributionCount: Schema.Int.check(Schema.isGreaterThan(0)),
+  openingBrief: TopicMessageResponse,
+  messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 }).annotate({ identifier: "TopicSummaryResponse" });
 export interface TopicSummaryResponse extends Schema.Schema.Type<typeof TopicSummaryResponse> {}
 
@@ -44,6 +42,6 @@ export interface TopicListResponse extends Schema.Schema.Type<typeof TopicListRe
 
 export const TopicResponse = Schema.Struct({
   ...TopicResponseFields,
-  contributions: Schema.Array(TopicContributionResponse),
+  messages: Schema.Array(TopicMessageResponse),
 }).annotate({ identifier: "TopicResponse" });
 export interface TopicResponse extends Schema.Schema.Type<typeof TopicResponse> {}

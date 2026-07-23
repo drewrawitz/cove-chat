@@ -45,8 +45,8 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/membership",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics",
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}",
-      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}/contributions",
-      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}/contributions/{contributionId}",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}/messages",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}/messages/{messageId}",
       "/api/app/v1/workspaces/{workspaceId}/identity",
       "/api/app/v1/workspaces/{workspaceId}/invitations",
       "/api/app/v1/workspaces/{workspaceId}/invitations/{invitationId}",
@@ -58,16 +58,16 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
     expect(document.paths).not.toHaveProperty(
-      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/contributions",
+      "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/messages",
     );
     expect(document.components.schemas).toMatchObject({
-      ContributionMutationRequest: {
+      MessageMutationRequest: {
         properties: { body: expect.any(Object) },
         required: ["body"],
       },
     });
-    expect(document.components.schemas?.ContributionMutationRequest?.properties).not.toHaveProperty(
-      "parentContributionId",
+    expect(document.components.schemas?.MessageMutationRequest?.properties).not.toHaveProperty(
+      "parentMessageId",
     );
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("202");
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("500");

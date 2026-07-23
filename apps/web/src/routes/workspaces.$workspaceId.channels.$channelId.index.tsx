@@ -18,6 +18,7 @@ import { ChannelMembership } from "../components/channel-membership.tsx";
 import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { CreateTopic } from "../components/create-topic.tsx";
+import { useSnackbar } from "../components/snackbar.tsx";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel, type TopicIntent } from "../topic-intent.ts";
 
@@ -35,6 +36,7 @@ function ChannelPage(): ReactElement {
   });
   const joinChannel = useChannelsJoinPublicChannel();
   const topics = useTopicsListTopics(workspaceId, channelId, { query: { retry: false } });
+  const { showSnackbar } = useSnackbar();
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -56,7 +58,7 @@ function ChannelPage(): ReactElement {
     );
   }
 
-  const join = (): void => {
+  const join = (displayName: string): void => {
     joinChannel.mutate(
       { workspaceId, channelId },
       {
@@ -69,6 +71,7 @@ function ChannelPage(): ReactElement {
               queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
             }),
           ]);
+          showSnackbar(`You joined ${displayName}.`);
         },
       },
     );
@@ -145,18 +148,18 @@ function ChannelPage(): ReactElement {
                 Joined
               </span>
             ) : channel.data.visibility === "public" ? (
-              <Button type="button" size="lg" disabled={joinChannel.isPending} onClick={join}>
+              <Button
+                type="button"
+                size="lg"
+                disabled={joinChannel.isPending}
+                onClick={() => join(displayName)}
+              >
                 {joinChannel.isPending ? "Joining…" : "Join channel"}
               </Button>
             ) : null}
           </div>
         </header>
 
-        {channel.data.visibility === "public" && joinChannel.isSuccess ? (
-          <p className="-mt-6 mb-6 text-sm text-muted-foreground" role="status">
-            You joined {displayName}.
-          </p>
-        ) : null}
         {channel.data.visibility === "public" && joinChannel.isError ? (
           <p className="-mt-6 mb-6 text-sm text-destructive" role="alert">
             Cove could not join this channel. Refresh and try again.
@@ -208,7 +211,7 @@ interface TopicSummary {
   readonly id: string;
   readonly title: string;
   readonly intent?: TopicIntent;
-  readonly contributionCount: number;
+  readonly messageCount: number;
   readonly openingBrief: {
     readonly body?: string;
     readonly deleted: boolean;
@@ -278,8 +281,7 @@ function TopicList({
                 </span>
               )}
               <span className="text-xs text-muted-foreground">
-                {topic.contributionCount}{" "}
-                {topic.contributionCount === 1 ? "contribution" : "contributions"}
+                {topic.messageCount} {topic.messageCount === 1 ? "message" : "messages"}
               </span>
             </div>
             <h4 className="mt-3 text-xl font-semibold tracking-tight group-hover:text-primary">

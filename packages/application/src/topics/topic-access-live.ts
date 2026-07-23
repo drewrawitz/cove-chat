@@ -1,7 +1,7 @@
-import { Contribution, Topic } from "@cove/domain";
+import { Message, Topic } from "@cove/domain";
 import {
   type PersistenceError,
-  type TopicContributionRecord,
+  type TopicMessageRecord,
   type TopicRecord,
   TopicRepository,
   type TopicSummaryRecord,
@@ -15,36 +15,36 @@ import {
 } from "../channels/channel-access.ts";
 import { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
 import {
-  type AddContributionCommand,
+  type AddMessageCommand,
   type CreateTopicCommand,
-  ContributionMutationForbidden,
-  ContributionUnavailable,
-  type DeleteContributionCommand,
-  type EditContributionCommand,
+  MessageMutationForbidden,
+  MessageUnavailable,
+  type DeleteMessageCommand,
+  type EditMessageCommand,
   TopicAccess,
   TopicAccessFailure,
-  TopicContributionView,
+  TopicMessageView,
   TopicSummaryView,
   TopicUnavailable,
   TopicView,
 } from "./topic-access.ts";
 
-function contributionView(record: TopicContributionRecord): TopicContributionView {
-  return TopicContributionView.make(record);
+function messageView(record: TopicMessageRecord): TopicMessageView {
+  return TopicMessageView.make(record);
 }
 
 function topicSummaryView(record: TopicSummaryRecord): TopicSummaryView {
   return TopicSummaryView.make({
     topic: record.topic,
-    openingBrief: contributionView(record.openingBrief),
-    contributionCount: record.contributionCount,
+    openingBrief: messageView(record.openingBrief),
+    messageCount: record.messageCount,
   });
 }
 
 function topicView(record: TopicRecord): TopicView {
   return TopicView.make({
     topic: record.topic,
-    contributions: record.contributions.map(contributionView),
+    messages: record.messages.map(messageView),
   });
 }
 
@@ -73,8 +73,8 @@ const make = Effect.gen(function* () {
     return yield* channels.getConversationContextForActor(actorAccountId, workspaceId, channelId);
   });
 
-  const contributionMutationTarget = Effect.fn("TopicAccess.contributionMutationTarget")(function* (
-    command: EditContributionCommand | DeleteContributionCommand,
+  const messageMutationTarget = Effect.fn("TopicAccess.messageMutationTarget")(function* (
+    command: EditMessageCommand | DeleteMessageCommand,
   ) {
     const context = yield* conversationContext(
       command.actorAccountId,
@@ -93,18 +93,12 @@ const make = Effect.gen(function* () {
     if (topic === undefined) {
       return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
     }
-    const current = topic.contributions.find(
-      ({ contribution }) => contribution.id === command.contributionId,
-    );
-    if (current === undefined || current.contribution.deletedAt !== undefined) {
-      return yield* Effect.fail(
-        new ContributionUnavailable({ contributionId: command.contributionId }),
-      );
+    const current = topic.messages.find(({ message }) => message.id === command.messageId);
+    if (current === undefined || current.message.deletedAt !== undefined) {
+      return yield* Effect.fail(new MessageUnavailable({ messageId: command.messageId }));
     }
-    if (current.contribution.authorIdentityId !== context.actor.id) {
-      return yield* Effect.fail(
-        new ContributionMutationForbidden({ contributionId: command.contributionId }),
-      );
+    if (current.message.authorIdentityId !== context.actor.id) {
+      return yield* Effect.fail(new MessageMutationForbidden({ messageId: command.messageId }));
     }
     return current;
   });
@@ -152,8 +146,8 @@ const make = Effect.gen(function* () {
               openedByIdentityId: context.actor.id,
               createdAt: now,
             });
-            const openingBrief = Contribution.make({
-              id: command.openingBriefContributionId,
+            const openingBrief = Message.make({
+              id: command.openingBriefMessageId,
               workspaceId: command.workspaceId,
               topicId: command.topicId,
               authorIdentityId: context.actor.id,
@@ -163,13 +157,13 @@ const make = Effect.gen(function* () {
             });
 
             yield* repository.insertTopic(topic);
-            yield* repository.insertContribution(openingBrief);
+            yield* repository.insertMessage(openingBrief);
 
             return TopicView.make({
               topic,
-              contributions: [
-                TopicContributionView.make({
-                  contribution: openingBrief,
+              messages: [
+                TopicMessageView.make({
+                  message: openingBrief,
                   author: context.actor,
                 }),
               ],
@@ -178,8 +172,8 @@ const make = Effect.gen(function* () {
         ),
       (effect) => recoverFailure("TopicAccess.create", effect),
     ),
-    addContribution: Effect.fn("TopicAccess.addContribution")(
-      (command: AddContributionCommand) =>
+    addMessage: Effect.fn("TopicAccess.addMessage")(
+      (command: AddMessageCommand) =>
         transactions.run(
           Effect.gen(function* () {
             const context = yield* conversationContext(
@@ -200,53 +194,53 @@ const make = Effect.gen(function* () {
               return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
             }
 
-            const contribution = yield* repository.appendContribution({
-              id: command.contributionId,
+            const message = yield* repository.appendMessage({
+              id: command.messageId,
               workspaceId: command.workspaceId,
               topicId: command.topicId,
               authorIdentityId: context.actor.id,
               body: command.body,
               createdAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicContributionView.make({ contribution, author: context.actor });
+            return TopicMessageView.make({ message, author: context.actor });
           }),
         ),
-      (effect) => recoverFailure("TopicAccess.addContribution", effect),
+      (effect) => recoverFailure("TopicAccess.addMessage", effect),
     ),
-    editContribution: Effect.fn("TopicAccess.editContribution")(
-      (command: EditContributionCommand) =>
+    editMessage: Effect.fn("TopicAccess.editMessage")(
+      (command: EditMessageCommand) =>
         transactions.run(
           Effect.gen(function* () {
-            const current = yield* contributionMutationTarget(command);
+            const current = yield* messageMutationTarget(command);
 
-            const contribution = yield* repository.editContribution({
+            const message = yield* repository.editMessage({
               workspaceId: command.workspaceId,
               topicId: command.topicId,
-              contributionId: command.contributionId,
+              messageId: command.messageId,
               body: command.body,
               editedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicContributionView.make({ contribution, author: current.author });
+            return TopicMessageView.make({ message, author: current.author });
           }),
         ),
-      (effect) => recoverFailure("TopicAccess.editContribution", effect),
+      (effect) => recoverFailure("TopicAccess.editMessage", effect),
     ),
-    deleteContribution: Effect.fn("TopicAccess.deleteContribution")(
-      (command: DeleteContributionCommand) =>
+    deleteMessage: Effect.fn("TopicAccess.deleteMessage")(
+      (command: DeleteMessageCommand) =>
         transactions.run(
           Effect.gen(function* () {
-            const current = yield* contributionMutationTarget(command);
+            const current = yield* messageMutationTarget(command);
 
-            const contribution = yield* repository.tombstoneContribution({
+            const message = yield* repository.tombstoneMessage({
               workspaceId: command.workspaceId,
               topicId: command.topicId,
-              contributionId: command.contributionId,
+              messageId: command.messageId,
               deletedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicContributionView.make({ contribution, author: current.author });
+            return TopicMessageView.make({ message, author: current.author });
           }),
         ),
-      (effect) => recoverFailure("TopicAccess.deleteContribution", effect),
+      (effect) => recoverFailure("TopicAccess.deleteMessage", effect),
     ),
   });
 });

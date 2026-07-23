@@ -38,14 +38,12 @@ const AuthPortsTest = Layer.mergeAll(
         unmockedTopicAccess("getForActor"),
       ),
       create: Effect.fn("TopicAccess.Test.create")(() => unmockedTopicAccess("create")),
-      addContribution: Effect.fn("TopicAccess.Test.addContribution")(() =>
-        unmockedTopicAccess("addContribution"),
+      addMessage: Effect.fn("TopicAccess.Test.addMessage")(() => unmockedTopicAccess("addMessage")),
+      editMessage: Effect.fn("TopicAccess.Test.editMessage")(() =>
+        unmockedTopicAccess("editMessage"),
       ),
-      editContribution: Effect.fn("TopicAccess.Test.editContribution")(() =>
-        unmockedTopicAccess("editContribution"),
-      ),
-      deleteContribution: Effect.fn("TopicAccess.Test.deleteContribution")(() =>
-        unmockedTopicAccess("deleteContribution"),
+      deleteMessage: Effect.fn("TopicAccess.Test.deleteMessage")(() =>
+        unmockedTopicAccess("deleteMessage"),
       ),
     }),
   ),

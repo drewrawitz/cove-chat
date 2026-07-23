@@ -1,9 +1,9 @@
 import { expect, it } from "@effect/vitest";
 import {
-  InvalidContributionBody,
+  InvalidMessageBody,
   InvalidTopicTitle,
   TopicIntent,
-  makeContributionBody,
+  makeMessageBody,
   makeTopicTitle,
 } from "../../src/index.ts";
 import { Effect, Schema } from "effect";
@@ -11,16 +11,16 @@ import { Effect, Schema } from "effect";
 it.effect("requires a title and Opening Brief for a Topic", () =>
   Effect.gen(function* () {
     const title = yield* makeTopicTitle("  Release readiness  ");
-    const openingBrief = yield* makeContributionBody("  Capture the remaining launch risks.  ");
+    const openingBrief = yield* makeMessageBody("  Capture the remaining launch risks.  ");
 
     expect(title).toBe("Release readiness");
     expect(openingBrief).toBe("Capture the remaining launch risks.");
 
     const titleError = yield* makeTopicTitle("   ").pipe(Effect.flip);
-    const openingBriefError = yield* makeContributionBody("   ").pipe(Effect.flip);
+    const openingBriefError = yield* makeMessageBody("   ").pipe(Effect.flip);
 
     expect(titleError).toBeInstanceOf(InvalidTopicTitle);
-    expect(openingBriefError).toBeInstanceOf(InvalidContributionBody);
+    expect(openingBriefError).toBeInstanceOf(InvalidMessageBody);
   }),
 );
 

@@ -3,6 +3,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
+import { SnackbarProvider } from "../components/snackbar.tsx";
 
 import appCss from "../styles.css?url";
 
@@ -43,7 +44,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <SnackbarProvider>{children}</SnackbarProvider>
         <TanStackDevtools
           config={{
             position: "bottom-right",

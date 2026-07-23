@@ -8,19 +8,19 @@ import { CsrfHeaders } from "../auth/logout-headers.ts";
 import { SessionAuth } from "../auth/session-auth.ts";
 import { ChannelUnavailableResponse } from "../channels/channel-error-response.ts";
 import {
-  ContributionMutationForbiddenResponse,
-  ContributionUnavailableResponse,
+  MessageMutationForbiddenResponse,
+  MessageUnavailableResponse,
   TopicUnavailableResponse,
 } from "./topic-error-response.ts";
-import { ContributionMutationRequest, CreateTopicRequest } from "./topic-request.ts";
-import { TopicContributionResponse, TopicListResponse, TopicResponse } from "./topic-response.ts";
+import { MessageMutationRequest, CreateTopicRequest } from "./topic-request.ts";
+import { TopicMessageResponse, TopicListResponse, TopicResponse } from "./topic-response.ts";
 
 const ChannelParams = {
   workspaceId: Schema.NonEmptyString,
   channelId: Schema.NonEmptyString,
 };
 const TopicParams = { ...ChannelParams, topicId: Schema.NonEmptyString };
-const ContributionParams = { ...TopicParams, contributionId: Schema.NonEmptyString };
+const MessageParams = { ...TopicParams, messageId: Schema.NonEmptyString };
 
 const ListTopicsEndpoint = HttpApiEndpoint.get(
   "listTopics",
@@ -54,54 +54,54 @@ const GetTopicEndpoint = HttpApiEndpoint.get(
   },
 ).middleware(SessionAuth);
 
-const addContributionErrors = [
+const addMessageErrors = [
   CsrfValidationFailedResponse,
   TopicUnavailableResponse,
   ChannelUnavailableResponse,
   InternalServerErrorResponse,
 ];
 
-const contributionChangeErrors = [
+const messageChangeErrors = [
   CsrfValidationFailedResponse,
-  ContributionMutationForbiddenResponse,
-  ContributionUnavailableResponse,
+  MessageMutationForbiddenResponse,
+  MessageUnavailableResponse,
   TopicUnavailableResponse,
   ChannelUnavailableResponse,
   InternalServerErrorResponse,
 ];
 
-const AddContributionEndpoint = HttpApiEndpoint.post(
-  "addContribution",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/contributions",
+const AddMessageEndpoint = HttpApiEndpoint.post(
+  "addMessage",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/messages",
   {
     params: TopicParams,
     headers: CsrfHeaders,
-    payload: ContributionMutationRequest,
-    success: TopicContributionResponse,
-    error: addContributionErrors,
+    payload: MessageMutationRequest,
+    success: TopicMessageResponse,
+    error: addMessageErrors,
   },
 ).middleware(SessionAuth);
 
-const EditContributionEndpoint = HttpApiEndpoint.patch(
-  "editContribution",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/contributions/:contributionId",
+const EditMessageEndpoint = HttpApiEndpoint.patch(
+  "editMessage",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/messages/:messageId",
   {
-    params: ContributionParams,
+    params: MessageParams,
     headers: CsrfHeaders,
-    payload: ContributionMutationRequest,
-    success: TopicContributionResponse,
-    error: contributionChangeErrors,
+    payload: MessageMutationRequest,
+    success: TopicMessageResponse,
+    error: messageChangeErrors,
   },
 ).middleware(SessionAuth);
 
-const DeleteContributionEndpoint = HttpApiEndpoint.delete(
-  "deleteContribution",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/contributions/:contributionId",
+const DeleteMessageEndpoint = HttpApiEndpoint.delete(
+  "deleteMessage",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId/messages/:messageId",
   {
-    params: ContributionParams,
+    params: MessageParams,
     headers: CsrfHeaders,
-    success: TopicContributionResponse,
-    error: contributionChangeErrors,
+    success: TopicMessageResponse,
+    error: messageChangeErrors,
   },
 ).middleware(SessionAuth);
 
@@ -109,7 +109,7 @@ export const TopicApiGroup = HttpApiGroup.make("topics").add(
   ListTopicsEndpoint,
   CreateTopicEndpoint,
   GetTopicEndpoint,
-  AddContributionEndpoint,
-  EditContributionEndpoint,
-  DeleteContributionEndpoint,
+  AddMessageEndpoint,
+  EditMessageEndpoint,
+  DeleteMessageEndpoint,
 );

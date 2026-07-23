@@ -1,19 +1,19 @@
-import type { TopicContributionView, TopicSummaryView, TopicView } from "@cove/application";
+import type { TopicMessageView, TopicSummaryView, TopicView } from "@cove/application";
 import {
-  TopicContributionResponse,
+  TopicMessageResponse,
   TopicListResponse,
   TopicResponse,
   TopicSummaryResponse,
 } from "@cove/protocol";
 
-export const topicResponseContribution = (view: TopicContributionView): TopicContributionResponse =>
-  TopicContributionResponse.make({
-    id: view.contribution.id,
-    ...(view.contribution.body === undefined ? {} : { body: view.contribution.body }),
-    position: view.contribution.position,
-    createdAt: view.contribution.createdAt,
-    edited: view.contribution.editedAt !== undefined,
-    deleted: view.contribution.deletedAt !== undefined,
+export const topicResponseMessage = (view: TopicMessageView): TopicMessageResponse =>
+  TopicMessageResponse.make({
+    id: view.message.id,
+    ...(view.message.body === undefined ? {} : { body: view.message.body }),
+    position: view.message.position,
+    createdAt: view.message.createdAt,
+    edited: view.message.editedAt !== undefined,
+    deleted: view.message.deletedAt !== undefined,
     author: {
       id: view.author.id,
       name: view.author.name,
@@ -33,14 +33,14 @@ const topicResponseFields = (view: TopicView | TopicSummaryView) => ({
 export const topicResponse = (view: TopicView): TopicResponse =>
   TopicResponse.make({
     ...topicResponseFields(view),
-    contributions: view.contributions.map(topicResponseContribution),
+    messages: view.messages.map(topicResponseMessage),
   });
 
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({
     ...topicResponseFields(view),
-    openingBrief: topicResponseContribution(view.openingBrief),
-    contributionCount: view.contributionCount,
+    openingBrief: topicResponseMessage(view.openingBrief),
+    messageCount: view.messageCount,
   });
 
 export const topicListResponse = (topics: ReadonlyArray<TopicSummaryView>): TopicListResponse =>

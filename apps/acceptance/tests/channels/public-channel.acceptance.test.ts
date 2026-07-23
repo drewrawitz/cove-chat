@@ -114,6 +114,9 @@ it.live(
       yield* browserAction(() => page.getByRole("button", { name: "Join channel" }).click());
       yield* browserAction(() => page.getByText("You joined Product Lab.").waitFor());
       yield* browserAction(() =>
+        page.getByRole("button", { name: "Dismiss notification" }).waitFor(),
+      );
+      yield* browserAction(() =>
         page
           .getByRole("navigation", { name: "Your channels" })
           .getByRole("link", { name: "Product Lab" })

@@ -28,12 +28,16 @@ _Avoid_: Endless DM stream, group channel
 A named, bounded asynchronous conversation inside a channel or direct space. The topic itself is the thread, and it inherits access from its container.
 _Avoid_: Thread, top-level message
 
-**Contribution**:
-An authored entry in a topic, either its opening brief or a flat reply. Contributions cannot contain nested reply threads.
-_Avoid_: Message, nested reply
+**Message**:
+An authored entry in a topic, either its opening brief or a flat reply.
+_Avoid_: Contribution, post
+
+**Reply**:
+A message added after the opening brief that responds to the topic as a whole. Replies cannot contain nested reply threads.
+_Avoid_: Comment, nested reply
 
 **Opening Brief**:
-The first contribution in a topic, which establishes the subject and context for the conversation.
+The first message in a topic, which establishes the subject and context for the conversation.
 _Avoid_: Root message
 
 **Topic Intent**:
@@ -51,7 +55,7 @@ A request to move an entire direct topic into a channel, naming the destination 
 _Avoid_: Share request, automatic publication
 
 **Topic Move**:
-The atomic transfer of an approved topic and all its contributions from a direct space to a channel. It changes the topic's audience without cloning the conversation.
+The atomic transfer of an approved topic and all its messages from a direct space to a channel. It changes the topic's audience without cloning the conversation.
 _Avoid_: Copy, publish, cross-post
 
 **Move Tombstone**:

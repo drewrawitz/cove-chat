@@ -12,9 +12,7 @@ export const CreateTopicRequest = Schema.Struct({
 }).annotate({ identifier: "CreateTopicRequest" });
 export interface CreateTopicRequest extends Schema.Schema.Type<typeof CreateTopicRequest> {}
 
-export const ContributionMutationRequest = Schema.Struct({
+export const MessageMutationRequest = Schema.Struct({
   body: TopicRequestValue,
-}).annotate({ identifier: "ContributionMutationRequest" });
-export interface ContributionMutationRequest extends Schema.Schema.Type<
-  typeof ContributionMutationRequest
-> {}
+}).annotate({ identifier: "MessageMutationRequest" });
+export interface MessageMutationRequest extends Schema.Schema.Type<typeof MessageMutationRequest> {}

@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect";
 import { TopicListResponse, TopicResponse } from "../../src/index.ts";
 
 const openingBrief = {
-  id: "contribution-1",
+  id: "message-1",
   body: "Capture the remaining launch risks.",
   position: 1,
   createdAt: new Date("2026-07-22T12:00:00.000Z"),
@@ -27,7 +27,7 @@ it.effect("encodes Topic summaries with an optional intent and required Opening 
           title: "Release readiness",
           intent: "question",
           openingBrief,
-          contributionCount: 1,
+          messageCount: 1,
           createdAt: new Date("2026-07-22T12:00:00.000Z"),
         },
         {
@@ -36,7 +36,7 @@ it.effect("encodes Topic summaries with an optional intent and required Opening 
           channelId: "channel-1",
           title: "Launch notes",
           openingBrief,
-          contributionCount: 1,
+          messageCount: 1,
           createdAt: new Date("2026-07-22T13:00:00.000Z"),
         },
       ],
@@ -45,23 +45,23 @@ it.effect("encodes Topic summaries with an optional intent and required Opening 
       id: "topic-1",
       intent: "question",
       openingBrief: { body: "Capture the remaining launch risks." },
-      contributionCount: 1,
+      messageCount: 1,
     });
     expect(encoded.topics[1]).not.toHaveProperty("intent");
   }),
 );
 
-it.effect("encodes the complete Topic as a flat Contribution list", () =>
+it.effect("encodes the complete Topic as a flat Message list", () =>
   Effect.gen(function* () {
     const encoded = yield* Schema.encodeUnknownEffect(TopicResponse)({
       id: "topic-1",
       workspaceId: "workspace-1",
       channelId: "channel-1",
       title: "Release readiness",
-      contributions: [
+      messages: [
         openingBrief,
         {
-          id: "contribution-2",
+          id: "message-2",
           position: 2,
           createdAt: new Date("2026-07-22T12:05:00.000Z"),
           edited: true,
@@ -74,12 +74,12 @@ it.effect("encodes the complete Topic as a flat Contribution list", () =>
 
     expect(encoded).toMatchObject({
       id: "topic-1",
-      contributions: [
-        { id: "contribution-1", position: 1, edited: false, deleted: false },
-        { id: "contribution-2", position: 2, edited: true, deleted: true },
+      messages: [
+        { id: "message-1", position: 1, edited: false, deleted: false },
+        { id: "message-2", position: 2, edited: true, deleted: true },
       ],
     });
-    expect(encoded.contributions[1]).not.toHaveProperty("body");
+    expect(encoded.messages[1]).not.toHaveProperty("body");
     expect(encoded).not.toHaveProperty("intent");
   }),
 );

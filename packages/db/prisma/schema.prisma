@@ -123,7 +123,7 @@ model WorkspaceIdentity {
   channelMemberships  ChannelMembership[]
   maintainedChannels  Channel[]           @relation("ChannelMaintainer")
   openedTopics        Topic[]             @relation("TopicOpener")
-  contributions       Contribution[]      @relation("ContributionAuthor")
+  messages            Message[]           @relation("MessageAuthor")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -174,7 +174,7 @@ model Topic {
   openedByIdentityId String            @map("opened_by_identity_id")
   channel            Channel           @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
   openedBy           WorkspaceIdentity @relation("TopicOpener", fields: [workspaceId, openedByIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  contributions      Contribution[]
+  messages           Message[]
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -183,7 +183,7 @@ model Topic {
   @@map("topics")
 }
 
-model Contribution {
+model Message {
   id               String
   workspaceId      String            @map("workspace_id")
   topicId          String            @map("topic_id")
@@ -191,33 +191,33 @@ model Contribution {
   body             String?
   position         Int
   topic            Topic             @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade)
-  author           WorkspaceIdentity @relation("ContributionAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  author           WorkspaceIdentity @relation("MessageAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
   createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
   editedAt         DateTime?         @map("edited_at") @db.Timestamptz(6)
   deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6)
-  revisions        ContributionRevision[]
+  revisions        MessageRevision[]
 
   @@id([workspaceId, topicId, id])
   @@unique([workspaceId, topicId, position])
   @@index([workspaceId, authorIdentityId])
-  @@map("contributions")
+  @@map("messages")
 }
 
-model ContributionRevision {
-  id             BigInt       @id @default(autoincrement())
-  workspaceId    String       @map("workspace_id")
-  topicId        String       @map("topic_id")
-  contributionId String       @map("contribution_id")
-  body           String
-  operation      ContributionRevisionOperation
-  revisedAt      DateTime     @map("revised_at") @db.Timestamptz(6)
-  contribution   Contribution @relation(fields: [workspaceId, topicId, contributionId], references: [workspaceId, topicId, id], onDelete: Restrict)
+model MessageRevision {
+  id          BigInt                   @id @default(autoincrement())
+  workspaceId String                   @map("workspace_id")
+  topicId     String                   @map("topic_id")
+  messageId   String                   @map("message_id")
+  body        String
+  operation   MessageRevisionOperation
+  revisedAt   DateTime                 @map("revised_at") @db.Timestamptz(6)
+  message     Message                  @relation(fields: [workspaceId, topicId, messageId], references: [workspaceId, topicId, id], onDelete: Restrict)
 
-  @@index([workspaceId, topicId, contributionId, id])
-  @@map("contribution_revisions")
+  @@index([workspaceId, topicId, messageId, id])
+  @@map("message_revisions")
 }
 
-enum ContributionRevisionOperation {
+enum MessageRevisionOperation {
   edit
   delete
 }

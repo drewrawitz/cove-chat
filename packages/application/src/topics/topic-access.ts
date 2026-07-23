@@ -1,8 +1,8 @@
 import {
   ChannelId,
-  Contribution,
-  ContributionBody,
-  ContributionId,
+  Message,
+  MessageBody,
+  MessageId,
   Topic,
   TopicId,
   TopicIntent,
@@ -14,22 +14,22 @@ import { Context, type Effect, Schema } from "effect";
 import { WorkspaceIdentityView } from "../channels/channel-access.ts";
 import type { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
 
-export const TopicContributionView = Schema.Struct({
-  contribution: Contribution,
+export const TopicMessageView = Schema.Struct({
+  message: Message,
   author: WorkspaceIdentityView,
 });
-export interface TopicContributionView extends Schema.Schema.Type<typeof TopicContributionView> {}
+export interface TopicMessageView extends Schema.Schema.Type<typeof TopicMessageView> {}
 
 export const TopicSummaryView = Schema.Struct({
   topic: Topic,
-  openingBrief: TopicContributionView,
-  contributionCount: Schema.Int.check(Schema.isGreaterThan(0)),
+  openingBrief: TopicMessageView,
+  messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export interface TopicSummaryView extends Schema.Schema.Type<typeof TopicSummaryView> {}
 
 export const TopicView = Schema.Struct({
   topic: Topic,
-  contributions: Schema.Array(TopicContributionView),
+  messages: Schema.Array(TopicMessageView),
 });
 export interface TopicView extends Schema.Schema.Type<typeof TopicView> {}
 
@@ -38,45 +38,41 @@ export const CreateTopicCommand = Schema.Struct({
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   topicId: TopicId,
-  openingBriefContributionId: ContributionId,
+  openingBriefMessageId: MessageId,
   title: TopicTitle,
-  openingBrief: ContributionBody,
+  openingBrief: MessageBody,
   intent: Schema.optionalKey(TopicIntent),
 });
 export interface CreateTopicCommand extends Schema.Schema.Type<typeof CreateTopicCommand> {}
 
-export const AddContributionCommand = Schema.Struct({
+export const AddMessageCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   topicId: TopicId,
-  contributionId: ContributionId,
-  body: ContributionBody,
+  messageId: MessageId,
+  body: MessageBody,
 });
-export interface AddContributionCommand extends Schema.Schema.Type<typeof AddContributionCommand> {}
+export interface AddMessageCommand extends Schema.Schema.Type<typeof AddMessageCommand> {}
 
-export const EditContributionCommand = Schema.Struct({
+export const EditMessageCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   topicId: TopicId,
-  contributionId: ContributionId,
-  body: ContributionBody,
+  messageId: MessageId,
+  body: MessageBody,
 });
-export interface EditContributionCommand extends Schema.Schema.Type<
-  typeof EditContributionCommand
-> {}
+export interface EditMessageCommand extends Schema.Schema.Type<typeof EditMessageCommand> {}
 
-export const DeleteContributionCommand = Schema.Struct({
+export const DeleteMessageCommand = Schema.Struct({
   actorAccountId: UserId,
   workspaceId: WorkspaceId,
   channelId: ChannelId,
   topicId: TopicId,
-  contributionId: ContributionId,
+  messageId: MessageId,
 });
-export interface DeleteContributionCommand extends Schema.Schema.Type<
-  typeof DeleteContributionCommand
-> {}
+export interface DeleteMessageCommand extends Schema.Schema.Type<typeof DeleteMessageCommand> {}
 
 export class TopicAccessFailure extends Schema.TaggedErrorClass<TopicAccessFailure>()(
   "Application.TopicAccessFailure",
@@ -88,14 +84,14 @@ export class TopicUnavailable extends Schema.TaggedErrorClass<TopicUnavailable>(
   { topicId: TopicId },
 ) {}
 
-export class ContributionMutationForbidden extends Schema.TaggedErrorClass<ContributionMutationForbidden>()(
-  "Application.ContributionMutationForbidden",
-  { contributionId: ContributionId },
+export class MessageMutationForbidden extends Schema.TaggedErrorClass<MessageMutationForbidden>()(
+  "Application.MessageMutationForbidden",
+  { messageId: MessageId },
 ) {}
 
-export class ContributionUnavailable extends Schema.TaggedErrorClass<ContributionUnavailable>()(
-  "Application.ContributionUnavailable",
-  { contributionId: ContributionId },
+export class MessageUnavailable extends Schema.TaggedErrorClass<MessageUnavailable>()(
+  "Application.MessageUnavailable",
+  { messageId: MessageId },
 ) {}
 
 export interface TopicAccessService {
@@ -113,30 +109,27 @@ export interface TopicAccessService {
   readonly create: (
     command: CreateTopicCommand,
   ) => Effect.Effect<TopicView, ChannelUnavailable | TopicAccessFailure>;
-  readonly addContribution: (
-    command: AddContributionCommand,
+  readonly addMessage: (
+    command: AddMessageCommand,
+  ) => Effect.Effect<TopicMessageView, ChannelUnavailable | TopicUnavailable | TopicAccessFailure>;
+  readonly editMessage: (
+    command: EditMessageCommand,
   ) => Effect.Effect<
-    TopicContributionView,
-    ChannelUnavailable | TopicUnavailable | TopicAccessFailure
-  >;
-  readonly editContribution: (
-    command: EditContributionCommand,
-  ) => Effect.Effect<
-    TopicContributionView,
+    TopicMessageView,
     | ChannelUnavailable
     | TopicUnavailable
-    | ContributionUnavailable
-    | ContributionMutationForbidden
+    | MessageUnavailable
+    | MessageMutationForbidden
     | TopicAccessFailure
   >;
-  readonly deleteContribution: (
-    command: DeleteContributionCommand,
+  readonly deleteMessage: (
+    command: DeleteMessageCommand,
   ) => Effect.Effect<
-    TopicContributionView,
+    TopicMessageView,
     | ChannelUnavailable
     | TopicUnavailable
-    | ContributionUnavailable
-    | ContributionMutationForbidden
+    | MessageUnavailable
+    | MessageMutationForbidden
     | TopicAccessFailure
   >;
 }

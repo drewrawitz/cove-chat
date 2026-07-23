@@ -11,7 +11,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { PageMessage } from "../components/page-message.tsx";
-import { TopicContributions } from "../components/topic-contributions.tsx";
+import { TopicMessages } from "../components/topic-messages.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
 
 export const Route = createFileRoute(
@@ -91,10 +91,10 @@ function TopicPage(): ReactElement {
           </h2>
         </header>
 
-        <TopicContributions
-          canContribute={channel.data.hasChannelMembership}
+        <TopicMessages
+          canReply={channel.data.hasChannelMembership}
           channelId={channelId}
-          contributions={topic.data.contributions}
+          messages={topic.data.messages}
           currentIdentityId={workspace.data.identity.id}
           refresh={refreshTopic}
           topicId={topicId}

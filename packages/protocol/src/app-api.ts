@@ -27,8 +27,8 @@ import {
   WorkspaceUnavailableResponse,
 } from "./workspaces/index.ts";
 import {
-  ContributionMutationForbiddenResponse,
-  ContributionUnavailableResponse,
+  MessageMutationForbiddenResponse,
+  MessageUnavailableResponse,
   TopicApiGroup,
   TopicUnavailableResponse,
 } from "./topics/index.ts";
@@ -52,8 +52,8 @@ export const CoveAppErrorResponse = Schema.Union([
   ChannelMemberUnavailableResponse,
   ChannelUnavailableResponse,
   TopicUnavailableResponse,
-  ContributionUnavailableResponse,
-  ContributionMutationForbiddenResponse,
+  MessageUnavailableResponse,
+  MessageMutationForbiddenResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 
 export const CoveAppApi = HttpApi.make("CoveAppApi")

@@ -50,7 +50,7 @@ export {
   CreateTopicRequest,
   TopicApiGroup,
   TopicAuthorResponse,
-  TopicContributionResponse,
+  TopicMessageResponse,
   TopicErrorResponses,
   TopicIntentRequest,
   TopicIntentValue,

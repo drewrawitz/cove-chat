@@ -3,13 +3,13 @@ import {
   Channel,
   ChannelName,
   ChannelPurpose,
-  Contribution,
-  ContributionBody,
+  Message,
+  MessageBody,
   Topic,
   WorkspaceAvatarUrl,
   WorkspaceIdentityName,
   makeChannelId,
-  makeContributionId,
+  makeMessageId,
   makeTopicId,
   makeTopicTitle,
   makeUserId,
@@ -19,13 +19,13 @@ import {
 import { TopicRepository, TransactionManager, type TopicRepositoryService } from "@cove/ports";
 import { Effect, Layer, Ref } from "effect";
 import {
-  AddContributionCommand,
+  AddMessageCommand,
   ChannelAccess,
-  ContributionMutationForbidden,
-  DeleteContributionCommand,
-  EditContributionCommand,
+  MessageMutationForbidden,
+  DeleteMessageCommand,
+  EditMessageCommand,
   CreateTopicCommand,
-  ContributionUnavailable,
+  MessageUnavailable,
   TopicAccess,
   TopicAccessLive,
   ChannelUnavailable,
@@ -60,10 +60,10 @@ const makeRepository = (overrides: Partial<TopicRepositoryService>): TopicReposi
     listSummariesInChannel: () => unexpected("TopicRepository", "listSummariesInChannel"),
     findById: () => unexpected("TopicRepository", "findById"),
     insertTopic: () => unexpected("TopicRepository", "insertTopic"),
-    insertContribution: () => unexpected("TopicRepository", "insertContribution"),
-    appendContribution: () => unexpected("TopicRepository", "appendContribution"),
-    editContribution: () => unexpected("TopicRepository", "editContribution"),
-    tombstoneContribution: () => unexpected("TopicRepository", "tombstoneContribution"),
+    insertMessage: () => unexpected("TopicRepository", "insertMessage"),
+    appendMessage: () => unexpected("TopicRepository", "appendMessage"),
+    editMessage: () => unexpected("TopicRepository", "editMessage"),
+    tombstoneMessage: () => unexpected("TopicRepository", "tombstoneMessage"),
     ...overrides,
   });
 
@@ -88,7 +88,7 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-1");
+    const messageId = yield* makeMessageId("message-1");
     const title = yield* makeTopicTitle("Release readiness");
     const channel = Channel.make({
       id: channelId,
@@ -99,7 +99,7 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
       maintainerIdentityId: actorIdentityId,
     });
     const insertedTopics = yield* Ref.make<ReadonlyArray<unknown>>([]);
-    const insertedContributions = yield* Ref.make<ReadonlyArray<unknown>>([]);
+    const insertedMessages = yield* Ref.make<ReadonlyArray<unknown>>([]);
     const channelAccess = makeChannelAccess({
       getConversationContextForActor: () =>
         Effect.succeed({
@@ -114,8 +114,8 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
     });
     const repository = makeRepository({
       insertTopic: (topic) => Ref.update(insertedTopics, (topics) => [...topics, topic]),
-      insertContribution: (contribution) =>
-        Ref.update(insertedContributions, (contributions) => [...contributions, contribution]),
+      insertMessage: (message) =>
+        Ref.update(insertedMessages, (messages) => [...messages, message]),
     });
 
     const created = yield* Effect.gen(function* () {
@@ -126,9 +126,9 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
           workspaceId,
           channelId,
           topicId,
-          openingBriefContributionId: contributionId,
+          openingBriefMessageId: messageId,
           title,
-          openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+          openingBrief: MessageBody.make("Capture the remaining launch risks."),
           intent: "question",
         }),
       );
@@ -141,28 +141,28 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
       intent: "question",
       openedByIdentityId: actorIdentityId,
     });
-    expect(created.contributions).toHaveLength(1);
-    expect(created.contributions[0]?.contribution).toMatchObject({
-      id: contributionId,
+    expect(created.messages).toHaveLength(1);
+    expect(created.messages[0]?.message).toMatchObject({
+      id: messageId,
       topicId,
       body: "Capture the remaining launch risks.",
       position: 1,
     });
     const topics = yield* Ref.get(insertedTopics);
-    const contributions = yield* Ref.get(insertedContributions);
+    const messages = yield* Ref.get(insertedMessages);
     expect(topics).toHaveLength(1);
-    expect(contributions).toHaveLength(1);
+    expect(messages).toHaveLength(1);
   }),
 );
 
-it.effect("adds a flat Contribution at the next Topic position for a Channel Member", () =>
+it.effect("adds a flat Message at the next Topic position for a Channel Member", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("member-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("member-identity");
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-2");
+    const messageId = yield* makeMessageId("message-2");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const channel = Channel.make({
       id: channelId,
@@ -193,11 +193,11 @@ it.effect("adds a flat Contribution at the next Topic position for a Channel Mem
         }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, contributions: [] }),
-      appendContribution: (contribution) =>
+      findById: () => Effect.succeed({ topic, messages: [] }),
+      appendMessage: (message) =>
         Effect.succeed(
-          Contribution.make({
-            ...contribution,
+          Message.make({
+            ...message,
             position: 2,
           }),
         ),
@@ -205,21 +205,21 @@ it.effect("adds a flat Contribution at the next Topic position for a Channel Mem
 
     const added = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
-      return yield* topics.addContribution(
-        AddContributionCommand.make({
+      return yield* topics.addMessage(
+        AddMessageCommand.make({
           actorAccountId,
           workspaceId,
           channelId,
           topicId,
-          contributionId,
-          body: ContributionBody.make("The release candidate passed smoke testing."),
+          messageId,
+          body: MessageBody.make("The release candidate passed smoke testing."),
         }),
       );
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
     expect(added).toMatchObject({
-      contribution: {
-        id: contributionId,
+      message: {
+        id: messageId,
         topicId,
         authorIdentityId: actorIdentityId,
         body: "The release candidate passed smoke testing.",
@@ -230,14 +230,14 @@ it.effect("adds a flat Contribution at the next Topic position for a Channel Mem
   }),
 );
 
-it.effect("lets a Contribution author correct their writing with an edited marker", () =>
+it.effect("lets a Message author correct their writing with an edited marker", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("author-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("author-identity");
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-2");
+    const messageId = yield* makeMessageId("message-2");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const editedAt = new Date("2026-07-22T12:05:00.000Z");
     const channel = Channel.make({
@@ -256,18 +256,18 @@ it.effect("lets a Contribution author correct their writing with an edited marke
       openedByIdentityId: actorIdentityId,
       createdAt,
     });
-    const original = Contribution.make({
-      id: contributionId,
+    const original = Message.make({
+      id: messageId,
       workspaceId,
       topicId,
       authorIdentityId: actorIdentityId,
-      body: ContributionBody.make("The release candidate passed smoke testng."),
+      body: MessageBody.make("The release candidate passed smoke testng."),
       position: 2,
       createdAt,
     });
     const author = {
       id: actorIdentityId,
-      name: WorkspaceIdentityName.make("Contribution Author"),
+      name: WorkspaceIdentityName.make("Message Author"),
       avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
     };
     const channelAccess = makeChannelAccess({
@@ -275,11 +275,10 @@ it.effect("lets a Contribution author correct their writing with an edited marke
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () =>
-        Effect.succeed({ topic, contributions: [{ contribution: original, author }] }),
-      editContribution: (edit) =>
+      findById: () => Effect.succeed({ topic, messages: [{ message: original, author }] }),
+      editMessage: (edit) =>
         Effect.succeed(
-          Contribution.make({
+          Message.make({
             ...original,
             body: edit.body,
             editedAt,
@@ -289,20 +288,20 @@ it.effect("lets a Contribution author correct their writing with an edited marke
 
     const corrected = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
-      return yield* topics.editContribution(
-        EditContributionCommand.make({
+      return yield* topics.editMessage(
+        EditMessageCommand.make({
           actorAccountId,
           workspaceId,
           channelId,
           topicId,
-          contributionId,
-          body: ContributionBody.make("The release candidate passed smoke testing."),
+          messageId,
+          body: MessageBody.make("The release candidate passed smoke testing."),
         }),
       );
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
-    expect(corrected.contribution).toMatchObject({
-      id: contributionId,
+    expect(corrected.message).toMatchObject({
+      id: messageId,
       body: "The release candidate passed smoke testing.",
       position: 2,
       editedAt,
@@ -310,14 +309,14 @@ it.effect("lets a Contribution author correct their writing with an edited marke
   }),
 );
 
-it.effect("lets a Contribution author leave a tombstone without removing its position", () =>
+it.effect("lets a Message author leave a tombstone without removing its position", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("author-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("author-identity");
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-2");
+    const messageId = yield* makeMessageId("message-2");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const deletedAt = new Date("2026-07-22T12:05:00.000Z");
     const channel = Channel.make({
@@ -336,18 +335,18 @@ it.effect("lets a Contribution author leave a tombstone without removing its pos
       openedByIdentityId: actorIdentityId,
       createdAt,
     });
-    const original = Contribution.make({
-      id: contributionId,
+    const original = Message.make({
+      id: messageId,
       workspaceId,
       topicId,
       authorIdentityId: actorIdentityId,
-      body: ContributionBody.make("This Contribution will be removed."),
+      body: MessageBody.make("This Message will be removed."),
       position: 2,
       createdAt,
     });
     const author = {
       id: actorIdentityId,
-      name: WorkspaceIdentityName.make("Contribution Author"),
+      name: WorkspaceIdentityName.make("Message Author"),
       avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
     };
     const channelAccess = makeChannelAccess({
@@ -355,12 +354,11 @@ it.effect("lets a Contribution author leave a tombstone without removing its pos
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () =>
-        Effect.succeed({ topic, contributions: [{ contribution: original, author }] }),
-      tombstoneContribution: () =>
+      findById: () => Effect.succeed({ topic, messages: [{ message: original, author }] }),
+      tombstoneMessage: () =>
         Effect.succeed(
-          Contribution.make({
-            id: contributionId,
+          Message.make({
+            id: messageId,
             workspaceId,
             topicId,
             authorIdentityId: actorIdentityId,
@@ -373,34 +371,34 @@ it.effect("lets a Contribution author leave a tombstone without removing its pos
 
     const tombstone = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
-      return yield* topics.deleteContribution(
-        DeleteContributionCommand.make({
+      return yield* topics.deleteMessage(
+        DeleteMessageCommand.make({
           actorAccountId,
           workspaceId,
           channelId,
           topicId,
-          contributionId,
+          messageId,
         }),
       );
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
-    expect(tombstone.contribution).toMatchObject({
-      id: contributionId,
+    expect(tombstone.message).toMatchObject({
+      id: messageId,
       position: 2,
       deletedAt,
     });
-    expect(tombstone.contribution).not.toHaveProperty("body");
+    expect(tombstone.message).not.toHaveProperty("body");
   }),
 );
 
-it.effect("does not let an author edit a tombstoned Contribution", () =>
+it.effect("does not let an author edit a tombstoned Message", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("author-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("author-identity");
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-2");
+    const messageId = yield* makeMessageId("message-2");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const channel = Channel.make({
       id: channelId,
@@ -418,8 +416,8 @@ it.effect("does not let an author edit a tombstoned Contribution", () =>
       openedByIdentityId: actorIdentityId,
       createdAt,
     });
-    const tombstone = Contribution.make({
-      id: contributionId,
+    const tombstone = Message.make({
+      id: messageId,
       workspaceId,
       topicId,
       authorIdentityId: actorIdentityId,
@@ -429,7 +427,7 @@ it.effect("does not let an author edit a tombstoned Contribution", () =>
     });
     const author = {
       id: actorIdentityId,
-      name: WorkspaceIdentityName.make("Contribution Author"),
+      name: WorkspaceIdentityName.make("Message Author"),
       avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
     };
     const editCount = yield* Ref.make(0);
@@ -438,34 +436,32 @@ it.effect("does not let an author edit a tombstoned Contribution", () =>
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () =>
-        Effect.succeed({ topic, contributions: [{ contribution: tombstone, author }] }),
-      editContribution: () =>
-        Ref.update(editCount, (count) => count + 1).pipe(Effect.as(tombstone)),
+      findById: () => Effect.succeed({ topic, messages: [{ message: tombstone, author }] }),
+      editMessage: () => Ref.update(editCount, (count) => count + 1).pipe(Effect.as(tombstone)),
     });
 
     const error = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
       return yield* topics
-        .editContribution(
-          EditContributionCommand.make({
+        .editMessage(
+          EditMessageCommand.make({
             actorAccountId,
             workspaceId,
             channelId,
             topicId,
-            contributionId,
-            body: ContributionBody.make("Restored content."),
+            messageId,
+            body: MessageBody.make("Restored content."),
           }),
         )
         .pipe(Effect.flip);
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
-    expect(error).toBeInstanceOf(ContributionUnavailable);
+    expect(error).toBeInstanceOf(MessageUnavailable);
     expect(yield* Ref.get(editCount)).toBe(0);
   }),
 );
 
-it.effect("does not let a Channel participant change another author's Contribution", () =>
+it.effect("does not let a Channel participant change another author's Message", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("participant-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("participant-identity");
@@ -473,7 +469,7 @@ it.effect("does not let a Channel participant change another author's Contributi
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-2");
+    const messageId = yield* makeMessageId("message-2");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const channel = Channel.make({
       id: channelId,
@@ -491,18 +487,18 @@ it.effect("does not let a Channel participant change another author's Contributi
       openedByIdentityId: authorIdentityId,
       createdAt,
     });
-    const contribution = Contribution.make({
-      id: contributionId,
+    const message = Message.make({
+      id: messageId,
       workspaceId,
       topicId,
       authorIdentityId,
-      body: ContributionBody.make("The author's Contribution."),
+      body: MessageBody.make("The author's Message."),
       position: 2,
       createdAt,
     });
     const author = {
       id: authorIdentityId,
-      name: WorkspaceIdentityName.make("Contribution Author"),
+      name: WorkspaceIdentityName.make("Message Author"),
       avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
     };
     const mutationCount = yield* Ref.make(0);
@@ -519,44 +515,43 @@ it.effect("does not let a Channel participant change another author's Contributi
         }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, contributions: [{ contribution, author }] }),
-      editContribution: () =>
-        Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(contribution)),
-      tombstoneContribution: () =>
-        Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(contribution)),
+      findById: () => Effect.succeed({ topic, messages: [{ message, author }] }),
+      editMessage: () => Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(message)),
+      tombstoneMessage: () =>
+        Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(message)),
     });
 
     const errors = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
       return yield* Effect.all([
         topics
-          .editContribution(
-            EditContributionCommand.make({
+          .editMessage(
+            EditMessageCommand.make({
               actorAccountId,
               workspaceId,
               channelId,
               topicId,
-              contributionId,
-              body: ContributionBody.make("Unauthorized edit."),
+              messageId,
+              body: MessageBody.make("Unauthorized edit."),
             }),
           )
           .pipe(Effect.flip),
         topics
-          .deleteContribution(
-            DeleteContributionCommand.make({
+          .deleteMessage(
+            DeleteMessageCommand.make({
               actorAccountId,
               workspaceId,
               channelId,
               topicId,
-              contributionId,
+              messageId,
             }),
           )
           .pipe(Effect.flip),
       ]);
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
-    expect(errors[0]).toBeInstanceOf(ContributionMutationForbidden);
-    expect(errors[1]).toBeInstanceOf(ContributionMutationForbidden);
+    expect(errors[0]).toBeInstanceOf(MessageMutationForbidden);
+    expect(errors[1]).toBeInstanceOf(MessageMutationForbidden);
     expect(yield* Ref.get(mutationCount)).toBe(0);
   }),
 );
@@ -569,7 +564,7 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-1");
+    const messageId = yield* makeMessageId("message-1");
     const title = yield* makeTopicTitle("Release readiness");
     const channel = Channel.make({
       id: channelId,
@@ -594,7 +589,7 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
     });
     const repository = makeRepository({
       insertTopic: () => Ref.update(insertCount, (count) => count + 1),
-      insertContribution: () => Ref.update(insertCount, (count) => count + 1),
+      insertMessage: () => Ref.update(insertCount, (count) => count + 1),
     });
 
     const error = yield* Effect.gen(function* () {
@@ -607,21 +602,21 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
               workspaceId,
               channelId,
               topicId,
-              openingBriefContributionId: contributionId,
+              openingBriefMessageId: messageId,
               title,
-              openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+              openingBrief: MessageBody.make("Capture the remaining launch risks."),
             }),
           )
           .pipe(Effect.flip),
         topics
-          .addContribution(
-            AddContributionCommand.make({
+          .addMessage(
+            AddMessageCommand.make({
               actorAccountId,
               workspaceId,
               channelId,
               topicId,
-              contributionId,
-              body: ContributionBody.make("Readers cannot add Contributions."),
+              messageId,
+              body: MessageBody.make("Readers cannot add Messages."),
             }),
           )
           .pipe(Effect.flip),
@@ -643,7 +638,7 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
     const workspaceId = yield* makeWorkspaceId("workspace");
     const channelId = yield* makeChannelId("general");
     const topicId = yield* makeTopicId("topic-1");
-    const contributionId = yield* makeContributionId("contribution-1");
+    const messageId = yield* makeMessageId("message-1");
     const title = yield* makeTopicTitle("Release readiness");
     const createdAt = new Date("2026-07-22T12:00:00.000Z");
     const channel = Channel.make({
@@ -664,12 +659,12 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
       createdAt,
     });
     const openingBrief = {
-      contribution: Contribution.make({
-        id: contributionId,
+      message: Message.make({
+        id: messageId,
         workspaceId,
         topicId,
         authorIdentityId,
-        body: ContributionBody.make("Capture the remaining launch risks."),
+        body: MessageBody.make("Capture the remaining launch risks."),
         position: 1,
         createdAt,
       }),
@@ -692,8 +687,8 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
         }),
     });
     const repository = makeRepository({
-      listSummariesInChannel: () => Effect.succeed([{ topic, openingBrief, contributionCount: 1 }]),
-      findById: () => Effect.succeed({ topic, contributions: [openingBrief] }),
+      listSummariesInChannel: () => Effect.succeed([{ topic, openingBrief, messageCount: 1 }]),
+      findById: () => Effect.succeed({ topic, messages: [openingBrief] }),
     });
 
     const result = yield* Effect.gen(function* () {
@@ -705,11 +700,11 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
     expect(result.summaries).toHaveLength(1);
-    expect(result.summaries[0]?.openingBrief.contribution.body).toBe(
+    expect(result.summaries[0]?.openingBrief.message.body).toBe(
       "Capture the remaining launch risks.",
     );
     expect(result.detail.topic.id).toBe(topicId);
-    expect(result.detail.contributions).toHaveLength(1);
+    expect(result.detail.messages).toHaveLength(1);
   }),
 );
 

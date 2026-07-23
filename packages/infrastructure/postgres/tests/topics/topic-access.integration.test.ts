@@ -1,17 +1,17 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  AddContributionCommand,
+  AddMessageCommand,
   ChannelUnavailable,
   CreateTopicCommand,
-  DeleteContributionCommand,
-  EditContributionCommand,
+  DeleteMessageCommand,
+  EditMessageCommand,
   TopicAccess,
   TopicUnavailable,
 } from "@cove/application";
 import {
-  ContributionBody,
+  MessageBody,
   makeChannelId,
-  makeContributionId,
+  makeMessageId,
   makeTopicId,
   makeTopicTitle,
   makeUserId,
@@ -34,7 +34,7 @@ const makeFixtures = Effect.gen(function* () {
     publicChannelId: yield* makeChannelId(`topic-public-${suffix}`),
     privateChannelId: yield* makeChannelId(`topic-private-${suffix}`),
     topicId: yield* makeTopicId(`topic-${suffix}`),
-    contributionId: yield* makeContributionId(`opening-brief-${suffix}`),
+    messageId: yield* makeMessageId(`opening-brief-${suffix}`),
   };
 });
 
@@ -102,9 +102,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            openingBriefContributionId: fixtures.contributionId,
+            openingBriefMessageId: fixtures.messageId,
             title: yield* makeTopicTitle("Release readiness"),
-            openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+            openingBrief: MessageBody.make("Capture the remaining launch risks."),
             intent: "question",
           }),
         );
@@ -127,11 +127,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               workspaceId: fixtures.workspaceId,
               channelId: fixtures.publicChannelId,
               topicId: yield* makeTopicId(`reader-${fixtures.topicId}`),
-              openingBriefContributionId: yield* makeContributionId(
-                `reader-${fixtures.contributionId}`,
-              ),
+              openingBriefMessageId: yield* makeMessageId(`reader-${fixtures.messageId}`),
               title: yield* makeTopicTitle("Reader topic"),
-              openingBrief: ContributionBody.make("This should not be persisted."),
+              openingBrief: MessageBody.make("This should not be persisted."),
             }),
           )
           .pipe(Effect.flip);
@@ -147,15 +145,13 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           )
           .pipe(Effect.flip);
 
-        expect(created.contributions).toHaveLength(1);
+        expect(created.messages).toHaveLength(1);
         expect(summaries).toHaveLength(1);
         expect(summaries[0]).toMatchObject({
           topic: { id: fixtures.topicId, intent: "question" },
-          contributionCount: 1,
+          messageCount: 1,
         });
-        expect(detail.contributions[0]?.contribution.body).toBe(
-          "Capture the remaining launch risks.",
-        );
+        expect(detail.messages[0]?.message.body).toBe("Capture the remaining launch risks.");
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);
         expect(hiddenPrivateChannel).toBeInstanceOf(ChannelUnavailable);
         expect(wrongChannel).toBeInstanceOf(TopicUnavailable);
@@ -163,7 +159,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
     ),
   );
 
-  it.effect("appends concurrent flat Contributions in a stable Topic order", () =>
+  it.effect("appends concurrent flat Messages in a stable Topic order", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
@@ -173,34 +169,34 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            openingBriefContributionId: fixtures.contributionId,
+            openingBriefMessageId: fixtures.messageId,
             title: yield* makeTopicTitle("Release readiness"),
-            openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+            openingBrief: MessageBody.make("Capture the remaining launch risks."),
           }),
         );
-        const firstReplyId = yield* makeContributionId(`first-${fixtures.contributionId}`);
-        const secondReplyId = yield* makeContributionId(`second-${fixtures.contributionId}`);
+        const firstReplyId = yield* makeMessageId(`first-${fixtures.messageId}`);
+        const secondReplyId = yield* makeMessageId(`second-${fixtures.messageId}`);
 
         yield* Effect.all(
           [
-            topics.addContribution(
-              AddContributionCommand.make({
+            topics.addMessage(
+              AddMessageCommand.make({
                 actorAccountId: fixtures.authorAccountId,
                 workspaceId: fixtures.workspaceId,
                 channelId: fixtures.publicChannelId,
                 topicId: fixtures.topicId,
-                contributionId: firstReplyId,
-                body: ContributionBody.make("The release candidate passed smoke testing."),
+                messageId: firstReplyId,
+                body: MessageBody.make("The release candidate passed smoke testing."),
               }),
             ),
-            topics.addContribution(
-              AddContributionCommand.make({
+            topics.addMessage(
+              AddMessageCommand.make({
                 actorAccountId: fixtures.authorAccountId,
                 workspaceId: fixtures.workspaceId,
                 channelId: fixtures.publicChannelId,
                 topicId: fixtures.topicId,
-                contributionId: secondReplyId,
-                body: ContributionBody.make("Documentation review is complete."),
+                messageId: secondReplyId,
+                body: MessageBody.make("Documentation review is complete."),
               }),
             ),
           ],
@@ -213,10 +209,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           fixtures.topicId,
         );
-        expect(detail.contributions.map(({ contribution }) => contribution.position)).toEqual([
-          1, 2, 3,
-        ]);
-        expect(detail.contributions.slice(1).map(({ contribution }) => contribution.body)).toEqual(
+        expect(detail.messages.map(({ message }) => message.position)).toEqual([1, 2, 3]);
+        expect(detail.messages.slice(1).map(({ message }) => message.body)).toEqual(
           expect.arrayContaining([
             "The release candidate passed smoke testing.",
             "Documentation review is complete.",
@@ -237,39 +231,39 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            openingBriefContributionId: fixtures.contributionId,
+            openingBriefMessageId: fixtures.messageId,
             title: yield* makeTopicTitle("Release readiness"),
-            openingBrief: ContributionBody.make("Capture the remaining launch risks."),
+            openingBrief: MessageBody.make("Capture the remaining launch risks."),
           }),
         );
-        const replyId = yield* makeContributionId(`reply-${fixtures.contributionId}`);
-        yield* topics.addContribution(
-          AddContributionCommand.make({
+        const replyId = yield* makeMessageId(`reply-${fixtures.messageId}`);
+        yield* topics.addMessage(
+          AddMessageCommand.make({
             actorAccountId: fixtures.authorAccountId,
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            contributionId: replyId,
-            body: ContributionBody.make("The release candidate passed smoke testng."),
+            messageId: replyId,
+            body: MessageBody.make("The release candidate passed smoke testng."),
           }),
         );
-        const edited = yield* topics.editContribution(
-          EditContributionCommand.make({
+        const edited = yield* topics.editMessage(
+          EditMessageCommand.make({
             actorAccountId: fixtures.authorAccountId,
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            contributionId: replyId,
-            body: ContributionBody.make("The release candidate passed smoke testing."),
+            messageId: replyId,
+            body: MessageBody.make("The release candidate passed smoke testing."),
           }),
         );
-        const deleted = yield* topics.deleteContribution(
-          DeleteContributionCommand.make({
+        const deleted = yield* topics.deleteMessage(
+          DeleteMessageCommand.make({
             actorAccountId: fixtures.authorAccountId,
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
             topicId: fixtures.topicId,
-            contributionId: replyId,
+            messageId: replyId,
           }),
         );
         const detail = yield* topics.getForActor(
@@ -280,20 +274,20 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         );
         const revisions = yield* sql<{ readonly body: string; readonly operation: string }>`
           SELECT body, operation
-          FROM contribution_revisions
+          FROM message_revisions
           WHERE workspace_id = ${fixtures.workspaceId}
-            AND contribution_id = ${replyId}
+            AND message_id = ${replyId}
           ORDER BY id
         `;
 
-        expect(edited.contribution.editedAt).toBeInstanceOf(Date);
-        expect(deleted.contribution).toMatchObject({ id: replyId, position: 2 });
-        expect(deleted.contribution).not.toHaveProperty("body");
-        expect(detail.contributions[1]?.contribution).toMatchObject({
+        expect(edited.message.editedAt).toBeInstanceOf(Date);
+        expect(deleted.message).toMatchObject({ id: replyId, position: 2 });
+        expect(deleted.message).not.toHaveProperty("body");
+        expect(detail.messages[1]?.message).toMatchObject({
           id: replyId,
           position: 2,
         });
-        expect(detail.contributions[1]?.contribution).not.toHaveProperty("body");
+        expect(detail.messages[1]?.message).not.toHaveProperty("body");
         expect(revisions).toEqual([
           { body: "The release candidate passed smoke testng.", operation: "edit" },
           { body: "The release candidate passed smoke testing.", operation: "delete" },
