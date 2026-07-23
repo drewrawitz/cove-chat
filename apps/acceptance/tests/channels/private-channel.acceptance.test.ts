@@ -134,6 +134,9 @@ it.live(
       );
       yield* browserAction(() => page.getByText("You joined Compensation.").waitFor());
       yield* browserAction(() =>
+        page.getByRole("button", { name: "Dismiss notification" }).waitFor(),
+      );
+      yield* browserAction(() =>
         administration.getByRole("link", { name: "Open Compensation" }).click(),
       );
       yield* browserAction(() => page.getByRole("heading", { name: "Compensation" }).waitFor());

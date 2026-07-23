@@ -44,11 +44,16 @@ export {
   type ChannelAccessService,
 } from "./channels/index.ts";
 export {
+  AddMessageCommand,
+  MessageMutationForbidden,
+  MessageUnavailable,
   CreateTopicCommand,
+  DeleteMessageCommand,
+  EditMessageCommand,
   TopicAccess,
   TopicAccessFailure,
   TopicAccessLive,
-  TopicContributionView,
+  TopicMessageView,
   TopicSummaryView,
   TopicUnavailable,
   TopicView,

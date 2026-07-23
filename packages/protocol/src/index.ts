@@ -48,9 +48,12 @@ export {
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
 export {
   CreateTopicRequest,
+  MessageMutationForbiddenResponse,
+  MessageMutationRequest,
+  MessageUnavailableResponse,
   TopicApiGroup,
   TopicAuthorResponse,
-  TopicContributionResponse,
+  TopicMessageResponse,
   TopicErrorResponses,
   TopicIntentRequest,
   TopicIntentValue,

@@ -1,8 +1,14 @@
-import { CreateTopicCommand, TopicAccess } from "@cove/application";
 import {
-  ContributionBody,
+  AddMessageCommand,
+  CreateTopicCommand,
+  DeleteMessageCommand,
+  EditMessageCommand,
+  TopicAccess,
+} from "@cove/application";
+import {
+  MessageBody,
   makeChannelId,
-  makeContributionId,
+  makeMessageId,
   makeTopicId,
   makeTopicTitle,
   makeUserId,
@@ -19,7 +25,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
-import { topicListResponse, topicResponse } from "./topic-response.ts";
+import { topicListResponse, topicResponse, topicResponseMessage } from "./topic-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -50,6 +56,27 @@ const createTopicErrorResponse = (error: unknown) => {
   return channelErrorResponse(error);
 };
 
+const messageMutationErrorResponse = (error: unknown) => {
+  if (error === AuthErrorResponses.csrfValidationFailed) {
+    return AuthErrorResponses.csrfValidationFailed;
+  }
+  if (errorTag(error) === "Application.MessageMutationForbidden") {
+    return TopicErrorResponses.messageMutationForbidden;
+  }
+  if (
+    errorTag(error) === "Application.MessageUnavailable" ||
+    invalidIdentifier(error) === "message"
+  ) {
+    return TopicErrorResponses.messageUnavailable;
+  }
+  return topicErrorResponse(error);
+};
+
+const addMessageErrorResponse = (error: unknown) =>
+  error === AuthErrorResponses.csrfValidationFailed
+    ? AuthErrorResponses.csrfValidationFailed
+    : topicErrorResponse(error);
+
 const resolveActorAndChannel = Effect.fn("TopicApi.resolveActorAndChannel")(function* (params: {
   readonly workspaceId: string;
   readonly channelId: string;
@@ -75,7 +102,7 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(randomUUID());
-        const openingBriefContributionId = yield* makeContributionId(randomUUID());
+        const openingBriefMessageId = yield* makeMessageId(randomUUID());
         const title = yield* makeTopicTitle(payload.title);
         const topics = yield* TopicAccess;
         return topicResponse(
@@ -85,9 +112,9 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
               workspaceId,
               channelId,
               topicId,
-              openingBriefContributionId,
+              openingBriefMessageId,
               title,
-              openingBrief: ContributionBody.make(payload.openingBrief),
+              openingBrief: MessageBody.make(payload.openingBrief),
               ...(payload.intent === undefined ? {} : { intent: payload.intent }),
             }),
           ),
@@ -101,5 +128,67 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const topics = yield* TopicAccess;
         return topicResponse(yield* topics.getForActor(actorId, workspaceId, channelId, topicId));
       }).pipe(Effect.mapError(topicErrorResponse)),
+    )
+    .handle("addMessage", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const messageId = yield* makeMessageId(randomUUID());
+        const topics = yield* TopicAccess;
+        return topicResponseMessage(
+          yield* topics.addMessage(
+            AddMessageCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              messageId,
+              body: MessageBody.make(payload.body),
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(addMessageErrorResponse)),
+    )
+    .handle("editMessage", ({ headers, params, payload }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const messageId = yield* makeMessageId(params.messageId);
+        const topics = yield* TopicAccess;
+        return topicResponseMessage(
+          yield* topics.editMessage(
+            EditMessageCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              messageId,
+              body: MessageBody.make(payload.body),
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(messageMutationErrorResponse)),
+    )
+    .handle("deleteMessage", ({ headers, params }) =>
+      Effect.gen(function* () {
+        yield* validateMutationCsrf(headers["x-csrf-token"]);
+        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
+        const topicId = yield* makeTopicId(params.topicId);
+        const messageId = yield* makeMessageId(params.messageId);
+        const topics = yield* TopicAccess;
+        return topicResponseMessage(
+          yield* topics.deleteMessage(
+            DeleteMessageCommand.make({
+              actorAccountId: actorId,
+              workspaceId,
+              channelId,
+              topicId,
+              messageId,
+            }),
+          ),
+        );
+      }).pipe(Effect.mapError(messageMutationErrorResponse)),
     ),
 );

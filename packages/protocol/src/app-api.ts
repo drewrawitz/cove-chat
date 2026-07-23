@@ -26,7 +26,12 @@ import {
   WorkspaceInvitationUnavailableResponse,
   WorkspaceUnavailableResponse,
 } from "./workspaces/index.ts";
-import { TopicApiGroup, TopicUnavailableResponse } from "./topics/index.ts";
+import {
+  MessageMutationForbiddenResponse,
+  MessageUnavailableResponse,
+  TopicApiGroup,
+  TopicUnavailableResponse,
+} from "./topics/index.ts";
 
 export const CoveAppErrorResponse = Schema.Union([
   CsrfValidationFailedResponse,
@@ -47,6 +52,8 @@ export const CoveAppErrorResponse = Schema.Union([
   ChannelMemberUnavailableResponse,
   ChannelUnavailableResponse,
   TopicUnavailableResponse,
+  MessageUnavailableResponse,
+  MessageMutationForbiddenResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 
 export const CoveAppApi = HttpApi.make("CoveAppApi")

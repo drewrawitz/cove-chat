@@ -1,17 +1,19 @@
-import type { TopicContributionView, TopicSummaryView, TopicView } from "@cove/application";
+import type { TopicMessageView, TopicSummaryView, TopicView } from "@cove/application";
 import {
-  TopicContributionResponse,
+  TopicMessageResponse,
   TopicListResponse,
   TopicResponse,
   TopicSummaryResponse,
 } from "@cove/protocol";
 
-const contributionResponse = (view: TopicContributionView): TopicContributionResponse =>
-  TopicContributionResponse.make({
-    id: view.contribution.id,
-    body: view.contribution.body,
-    position: view.contribution.position,
-    createdAt: view.contribution.createdAt,
+export const topicResponseMessage = (view: TopicMessageView): TopicMessageResponse =>
+  TopicMessageResponse.make({
+    id: view.message.id,
+    ...(view.message.body === undefined ? {} : { body: view.message.body }),
+    position: view.message.position,
+    createdAt: view.message.createdAt,
+    edited: view.message.editedAt !== undefined,
+    deleted: view.message.deletedAt !== undefined,
     author: {
       id: view.author.id,
       name: view.author.name,
@@ -31,14 +33,14 @@ const topicResponseFields = (view: TopicView | TopicSummaryView) => ({
 export const topicResponse = (view: TopicView): TopicResponse =>
   TopicResponse.make({
     ...topicResponseFields(view),
-    contributions: view.contributions.map(contributionResponse),
+    messages: view.messages.map(topicResponseMessage),
   });
 
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({
     ...topicResponseFields(view),
-    openingBrief: contributionResponse(view.openingBrief),
-    contributionCount: view.contributionCount,
+    latestMessage: topicResponseMessage(view.latestMessage),
+    messageCount: view.messageCount,
   });
 
 export const topicListResponse = (topics: ReadonlyArray<TopicSummaryView>): TopicListResponse =>

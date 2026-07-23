@@ -11,3 +11,8 @@ export const CreateTopicRequest = Schema.Struct({
   intent: Schema.optionalKey(TopicIntentRequest),
 }).annotate({ identifier: "CreateTopicRequest" });
 export interface CreateTopicRequest extends Schema.Schema.Type<typeof CreateTopicRequest> {}
+
+export const MessageMutationRequest = Schema.Struct({
+  body: TopicRequestValue,
+}).annotate({ identifier: "MessageMutationRequest" });
+export interface MessageMutationRequest extends Schema.Schema.Type<typeof MessageMutationRequest> {}

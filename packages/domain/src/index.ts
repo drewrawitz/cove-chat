@@ -20,7 +20,7 @@ export {
 
 export {
   ChannelId,
-  ContributionId,
+  MessageId,
   InvalidIdentifier,
   TopicId,
   UserId,
@@ -28,7 +28,7 @@ export {
   WorkspaceIdentityId,
   WorkspaceInvitationId,
   makeChannelId,
-  makeContributionId,
+  makeMessageId,
   makeTopicId,
   makeUserId,
   makeWorkspaceId,
@@ -37,15 +37,15 @@ export {
 } from "./identifiers.ts";
 
 export {
-  Contribution,
-  ContributionBody,
-  ContributionPosition,
-  InvalidContributionBody,
+  Message,
+  MessageBody,
+  MessagePosition,
+  InvalidMessageBody,
   InvalidTopicTitle,
   Topic,
   TopicIntent,
   TopicTitle,
-  makeContributionBody,
+  makeMessageBody,
   makeTopicTitle,
 } from "./topics/index.ts";
 

@@ -24,6 +24,7 @@
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
+    "date-fns": "catalog:",
     "nitro": "npm:nitro-nightly@3.0.1-20260715-190547-7af4fee3",
     "react": "catalog:",
     "react-dom": "catalog:",

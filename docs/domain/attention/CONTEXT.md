@@ -5,15 +5,15 @@ This context separates passive awareness, deliberate delivery, and an explicit r
 ## Attention choices
 
 **Follow**:
-A workspace identity's passive interest in a topic, keeping its activity available without placing every contribution in the inbox.
+A workspace identity's passive interest in a topic, keeping its activity available without placing every message in the inbox.
 _Avoid_: Subscribe to notifications, watch for alerts
 
 **Notification**:
-The deliberate delivery of one contribution to a recipient's workspace inbox. A notification does not imply urgency or external push delivery.
+The deliberate delivery of one message to a recipient's workspace inbox. A notification does not imply urgency or external push delivery.
 _Avoid_: Alert, push notification, unread activity
 
 **Everyone Involved**:
-A notification audience containing the topic author and every workspace identity that has contributed to the topic. Reading, following, or receiving an earlier notification does not make someone involved.
+A notification audience containing the topic author and every workspace identity that has authored a message in the topic. Reading, following, or receiving an earlier notification does not make someone involved.
 _Avoid_: Everyone who viewed, topic followers
 
 **Everyone in Channel**:
@@ -25,7 +25,7 @@ An explicit request for a named recipient to respond to a topic. It remains pend
 _Avoid_: Mention, assignment, urgent notification
 
 **Inbox**:
-A workspace-scoped view of deliberately delivered contributions, direct-topic activity, and pending response requests.
+A workspace-scoped view of deliberately delivered messages, direct-topic activity, and pending response requests.
 _Avoid_: Global inbox, unread counter
 
 ## Availability signals

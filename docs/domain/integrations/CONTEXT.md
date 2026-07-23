@@ -5,7 +5,7 @@ This context defines how external capabilities participate in Cove without repla
 ## Language
 
 **Plugin**:
-A workspace-installed extension that can add commands, actions, structured contributions, external records, or automations within explicitly granted capabilities.
+A workspace-installed extension that can add commands, actions, structured messages, external records, or automations within explicitly granted capabilities.
 _Avoid_: Unrestricted extension, built-in feature
 
 **Plugin Installation**:
@@ -20,6 +20,6 @@ _Avoid_: Plugin installation, workspace approval
 An explicit user invocation of a plugin from within Cove, such as using `/meet` inside a topic.
 _Avoid_: Automatic action
 
-**Plugin Contribution**:
-A structured topic contribution produced by a plugin and attributed to the workspace identity that invoked it.
+**Plugin Message**:
+A structured topic message produced by a plugin and attributed to the workspace identity that invoked it.
 _Avoid_: Bot message

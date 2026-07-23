@@ -1,5 +1,4 @@
 import { Button } from "@cove/ui/components/button";
-import { useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { type ReactElement } from "react";
 import {
@@ -18,6 +17,9 @@ import { ChannelMembership } from "../components/channel-membership.tsx";
 import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { CreateTopic } from "../components/create-topic.tsx";
+import { LocalTimestamp } from "../components/local-timestamp.tsx";
+import { useJoinChannel } from "../components/use-join-channel.ts";
+import { topicMessageKindLabel } from "../topic-message-kind.ts";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel, type TopicIntent } from "../topic-intent.ts";
 
@@ -27,14 +29,20 @@ export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channel
 
 function ChannelPage(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
-  const queryClient = useQueryClient();
   const account = useAuthMe({ query: { retry: false } });
   const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
   const channel = useChannelsGetChannel(workspaceId, channelId, {
     query: { retry: false },
   });
-  const joinChannel = useChannelsJoinPublicChannel();
+  const joinChannelMutation = useChannelsJoinPublicChannel();
   const topics = useTopicsListTopics(workspaceId, channelId, { query: { retry: false } });
+  const joinChannel = useJoinChannel({
+    queriesToInvalidate: [
+      getChannelsGetChannelQueryKey(workspaceId, channelId),
+      getChannelsListPublicChannelsQueryKey(workspaceId),
+    ],
+    successMessage: (channelName) => `You joined ${channelName}.`,
+  });
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -56,20 +64,11 @@ function ChannelPage(): ReactElement {
     );
   }
 
-  const join = (): void => {
-    joinChannel.mutate(
+  const join = (displayName: string): void => {
+    joinChannelMutation.mutate(
       { workspaceId, channelId },
       {
-        onSuccess: async () => {
-          await Promise.all([
-            queryClient.invalidateQueries({
-              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
-            }),
-            queryClient.invalidateQueries({
-              queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
-            }),
-          ]);
-        },
+        onSuccess: () => joinChannel.onJoined(displayName),
       },
     );
   };
@@ -145,19 +144,19 @@ function ChannelPage(): ReactElement {
                 Joined
               </span>
             ) : channel.data.visibility === "public" ? (
-              <Button type="button" size="lg" disabled={joinChannel.isPending} onClick={join}>
-                {joinChannel.isPending ? "Joining…" : "Join channel"}
+              <Button
+                type="button"
+                size="lg"
+                disabled={joinChannelMutation.isPending}
+                onClick={() => join(displayName)}
+              >
+                {joinChannelMutation.isPending ? "Joining…" : "Join channel"}
               </Button>
             ) : null}
           </div>
         </header>
 
-        {channel.data.visibility === "public" && joinChannel.isSuccess ? (
-          <p className="-mt-6 mb-6 text-sm text-muted-foreground" role="status">
-            You joined {displayName}.
-          </p>
-        ) : null}
-        {channel.data.visibility === "public" && joinChannel.isError ? (
+        {channel.data.visibility === "public" && joinChannelMutation.isError ? (
           <p className="-mt-6 mb-6 text-sm text-destructive" role="alert">
             Cove could not join this channel. Refresh and try again.
           </p>
@@ -208,10 +207,16 @@ interface TopicSummary {
   readonly id: string;
   readonly title: string;
   readonly intent?: TopicIntent;
-  readonly contributionCount: number;
-  readonly openingBrief: {
-    readonly body: string;
-    readonly author: { readonly name: string };
+  readonly messageCount: number;
+  readonly latestMessage: {
+    readonly body?: string;
+    readonly position: number;
+    readonly createdAt: string;
+    readonly deleted: boolean;
+    readonly author: {
+      readonly name: string;
+      readonly avatarUrl: string;
+    };
   };
 }
 
@@ -268,28 +273,44 @@ function TopicList({
           <Link
             to="/workspaces/$workspaceId/channels/$channelId/topics/$topicId"
             params={{ workspaceId, channelId, topicId: topic.id }}
-            className="group block px-4 py-6 transition-colors hover:bg-muted/30 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:px-6"
+            className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-4 py-5 transition-colors hover:bg-muted/30 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:px-6"
           >
-            <div className="flex flex-wrap items-center gap-2">
-              {topic.intent === undefined ? null : (
-                <span className="rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
-                  {topicIntentLabel(topic.intent)}
+            <img
+              className="size-10 rounded-full border border-border bg-muted object-cover"
+              src={topic.latestMessage.author.avatarUrl}
+              alt=""
+            />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="truncate text-base font-semibold group-hover:text-primary">
+                  {topic.title}
+                </h4>
+                {topic.intent === undefined ? null : (
+                  <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {topicIntentLabel(topic.intent)}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {topic.messageCount} {topic.messageCount === 1 ? "message" : "messages"}
                 </span>
-              )}
-              <span className="text-xs text-muted-foreground">
-                {topic.contributionCount}{" "}
-                {topic.contributionCount === 1 ? "contribution" : "contributions"}
-              </span>
+              </div>
+              <p className="mt-1 truncate text-sm text-muted-foreground">
+                <span className="font-medium text-foreground/80">
+                  {topic.latestMessage.author.name}
+                </span>
+                <span aria-hidden="true">: </span>
+                <span>
+                  {topic.latestMessage.deleted
+                    ? `${topicMessageKindLabel(topic.latestMessage.position)} deleted`
+                    : topic.latestMessage.body}
+                </span>
+              </p>
             </div>
-            <h4 className="mt-3 text-xl font-semibold tracking-tight group-hover:text-primary">
-              {topic.title}
-            </h4>
-            <p className="mt-2 line-clamp-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-              {topic.openingBrief.body}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Opened by {topic.openingBrief.author.name}
-            </p>
+            <LocalTimestamp
+              className="text-xs tabular-nums text-muted-foreground"
+              mode="relative"
+              value={topic.latestMessage.createdAt}
+            />
           </Link>
         </li>
       ))}
