@@ -59,7 +59,7 @@ it.live(
           .getByLabel("Edit opening brief")
           .fill("Capture the remaining launch risks and owners."),
       );
-      yield* browserAction(() => page.getByRole("button", { name: "Save edit" }).click());
+      yield* browserAction(() => page.getByRole("button", { name: "Save" }).click());
       yield* browserAction(() =>
         page.getByText("Capture the remaining launch risks and owners.", { exact: true }).waitFor(),
       );
