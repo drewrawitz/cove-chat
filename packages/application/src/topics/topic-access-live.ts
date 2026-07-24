@@ -161,6 +161,9 @@ const make = Effect.gen(function* () {
               messageCount: 1,
               latestMessageId: command.openingBriefMessageId,
               latestMessagePreview: makeTopicSummaryPreview(command.openingBrief),
+              latestMessageAuthorIdentityId: context.actor.id,
+              latestMessagePosition: 1,
+              latestMessageCreatedAt: now,
               lastActivityAt: now,
               createdAt: now,
             });

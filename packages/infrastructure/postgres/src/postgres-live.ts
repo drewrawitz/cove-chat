@@ -9,7 +9,7 @@ import {
 import { PostgresChannelAccessRepository, PostgresChannelRepository } from "./channels/index.ts";
 import { PostgresMembershipRepository } from "./memberships/index.ts";
 import { PostgresTransactionManager } from "./transaction-manager.ts";
-import { PostgresTopicRepository } from "./topics/index.ts";
+import { PostgresTopicRepository, TopicArchiveCursorCodecLive } from "./topics/index.ts";
 import { PostgresWorkspaceAccess } from "./workspaces/index.ts";
 
 export const PostgresClientLive = PgClient.layerConfig({
@@ -29,4 +29,7 @@ export const PostgresRepositories = Layer.mergeAll(
   PostgresTopicRepository,
 );
 
-export const PostgresLive = PostgresRepositories.pipe(Layer.provide(PostgresClientLive));
+export const PostgresLive = PostgresRepositories.pipe(
+  Layer.provide(PostgresClientLive),
+  Layer.provide(TopicArchiveCursorCodecLive),
+);

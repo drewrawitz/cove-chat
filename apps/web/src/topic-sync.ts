@@ -23,8 +23,13 @@ export interface SynchronizedTopic {
   readonly messageCount: number;
   readonly latestMessageId: string;
   readonly latestMessagePreview?: string | null;
+  readonly latestMessagePosition: number;
+  readonly latestMessageCreatedAt: number;
+  readonly latestMessageEditedAt?: number | null;
+  readonly latestMessageDeletedAt?: number | null;
   readonly lastActivityAt: number;
-  readonly messages: ReadonlyArray<SynchronizedTopicMessage>;
+  readonly messages?: ReadonlyArray<SynchronizedTopicMessage>;
+  readonly latestMessageAuthor?: SynchronizedTopicAuthor;
 }
 
 export interface TopicMessageView {
@@ -130,7 +135,7 @@ const topicMessageView = (message: SynchronizedTopicMessage): TopicMessageView |
 export function synchronizedTopicDetail(
   topic: SynchronizedTopic | undefined,
 ): TopicDetailView | undefined {
-  if (topic === undefined) return undefined;
+  if (topic === undefined || topic.messages === undefined) return undefined;
 
   const fields = {
     id: topic.id,
@@ -147,10 +152,7 @@ export function synchronizedTopicSummaries(
   topics: ReadonlyArray<SynchronizedTopic>,
 ): ReadonlyArray<TopicSummaryView> {
   return topics.flatMap((topic) => {
-    const latestMessage = topic.messages.find(({ id }) => id === topic.latestMessageId);
-    const latestMessageView =
-      latestMessage === undefined ? undefined : topicMessageView(latestMessage);
-    if (latestMessageView === undefined) return [];
+    if (topic.latestMessageAuthor === undefined) return [];
 
     const fields = {
       id: topic.id,
@@ -159,10 +161,10 @@ export function synchronizedTopicSummaries(
       lastActivityAt: new Date(topic.lastActivityAt).toISOString(),
       latestMessage: {
         ...(topic.latestMessagePreview == null ? {} : { preview: topic.latestMessagePreview }),
-        position: latestMessageView.position,
-        createdAt: latestMessageView.createdAt,
-        deleted: latestMessageView.deleted,
-        author: latestMessageView.author,
+        position: topic.latestMessagePosition,
+        createdAt: new Date(topic.latestMessageCreatedAt).toISOString(),
+        deleted: topic.latestMessageDeletedAt != null,
+        author: topic.latestMessageAuthor,
       },
     };
     return topic.intent == null ? [fields] : [{ ...fields, intent: topic.intent }];

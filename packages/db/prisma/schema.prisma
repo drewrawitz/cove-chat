@@ -6,7 +6,7 @@ generator zero {
   provider      = "prisma-zero"
   output        = "../../sync/src/generated"
   camelCase     = true
-  excludeTables = ["User", "MagicLink", "Session", "AuditEvent", "WorkspaceInvitation", "MessageRevision", "TopicActivityVersion", "TopicArchiveCursor"]
+  excludeTables = ["User", "MagicLink", "Session", "AuditEvent", "WorkspaceInvitation", "MessageRevision"]
 }
 
 enum WorkspaceRole {
@@ -39,7 +39,6 @@ model User {
   auditEvents         AuditEvent[]
   invitationsSent     WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
   invitationsAccepted WorkspaceInvitation[] @relation("WorkspaceInvitationAccepter")
-  topicArchiveCursors TopicArchiveCursor[]
   createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("users")
@@ -131,6 +130,7 @@ model WorkspaceIdentity {
   channelMemberships  ChannelMembership[]
   maintainedChannels  Channel[]           @relation("ChannelMaintainer")
   openedTopics        Topic[]             @relation("TopicOpener")
+  latestMessageTopics Topic[]             @relation("TopicLatestMessageAuthor")
   messages            Message[]           @relation("MessageAuthor")
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -152,7 +152,6 @@ model Channel {
   maintainer           WorkspaceIdentity    @relation("ChannelMaintainer", fields: [workspaceId, maintainerIdentityId], references: [workspaceId, id], onDelete: Restrict)
   memberships          ChannelMembership[]
   topics               Topic[]
-  topicArchiveCursors  TopicArchiveCursor[]
   createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -175,42 +174,33 @@ model ChannelMembership {
 }
 
 model Topic {
-  id                   String
-  workspaceId          String                 @map("workspace_id")
-  channelId            String                 @map("channel_id")
-  title                String
-  intent               TopicIntent?
-  openedByIdentityId   String                 @map("opened_by_identity_id")
-  messageCount         Int                    @map("message_count")
-  latestMessageId      String                 @map("latest_message_id")
-  latestMessagePreview String?                @map("latest_message_preview")
-  lastActivityAt       DateTime               @map("last_activity_at") @db.Timestamptz(6)
-  channel              Channel                @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
-  openedBy             WorkspaceIdentity      @relation("TopicOpener", fields: [workspaceId, openedByIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  messages             Message[]
-  activityVersions     TopicActivityVersion[]
-  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                              String
+  workspaceId                     String            @map("workspace_id")
+  channelId                       String            @map("channel_id")
+  title                           String
+  intent                          TopicIntent?
+  openedByIdentityId              String            @map("opened_by_identity_id")
+  messageCount                    Int               @map("message_count")
+  latestMessageId                 String            @map("latest_message_id")
+  latestMessagePreview            String?           @map("latest_message_preview")
+  latestMessageAuthorIdentityId   String            @map("latest_message_author_identity_id")
+  latestMessagePosition           Int               @map("latest_message_position")
+  latestMessageCreatedAt          DateTime          @map("latest_message_created_at") @db.Timestamptz(6)
+  latestMessageEditedAt           DateTime?         @map("latest_message_edited_at") @db.Timestamptz(6)
+  latestMessageDeletedAt          DateTime?         @map("latest_message_deleted_at") @db.Timestamptz(6)
+  lastActivityAt                  DateTime          @map("last_activity_at") @db.Timestamptz(6)
+  channel                         Channel           @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade)
+  openedBy                        WorkspaceIdentity @relation("TopicOpener", fields: [workspaceId, openedByIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  latestMessageAuthor             WorkspaceIdentity @relation("TopicLatestMessageAuthor", fields: [workspaceId, latestMessageAuthorIdentityId], references: [workspaceId, id], onDelete: Restrict, map: "topics_latest_message_author_fkey")
+  messages                        Message[]
+  createdAt                       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
   @@index([workspaceId, channelId, createdAt])
   @@index([workspaceId, channelId, lastActivityAt(sort: Desc), id], map: "topics_channel_activity_idx")
   @@index([workspaceId, openedByIdentityId])
+  @@index([workspaceId, latestMessageAuthorIdentityId], map: "topics_latest_message_author_idx")
   @@map("topics")
-}
-
-model TopicActivityVersion {
-  id             BigInt    @id @default(autoincrement())
-  workspaceId    String    @map("workspace_id")
-  channelId      String    @map("channel_id")
-  topicId        String    @map("topic_id")
-  lastActivityAt DateTime  @map("last_activity_at") @db.Timestamptz(6)
-  validFrom      DateTime  @map("valid_from") @db.Timestamptz(6)
-  validTo        DateTime? @map("valid_to") @db.Timestamptz(6)
-  topic          Topic     @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade, map: "topic_activity_versions_topic_fkey")
-
-  @@index([workspaceId, channelId, lastActivityAt(sort: Desc), topicId, validFrom, validTo], map: "topic_activity_versions_archive_idx")
-  @@index([validTo], map: "topic_activity_versions_valid_to_idx")
-  @@map("topic_activity_versions")
 }
 
 model Message {
@@ -245,29 +235,6 @@ model MessageRevision {
 
   @@index([workspaceId, topicId, messageId, id])
   @@map("message_revisions")
-}
-
-model TopicArchiveCursor {
-  id                     String   @id
-  snapshotId             String   @map("snapshot_id")
-  pageOffset             Int      @map("page_offset")
-  workspaceId            String   @map("workspace_id")
-  channelId              String   @map("channel_id")
-  accountId              String   @map("account_id")
-  snapshotAt             DateTime @map("snapshot_at") @db.Timestamptz(6)
-  snapshotLastActivityAt DateTime @map("snapshot_last_activity_at") @db.Timestamptz(6)
-  snapshotTopicId        String   @map("snapshot_topic_id")
-  afterLastActivityAt    DateTime @map("after_last_activity_at") @db.Timestamptz(6)
-  afterTopicId           String   @map("after_topic_id")
-  channel                Channel  @relation(fields: [workspaceId, channelId], references: [workspaceId, id], onDelete: Cascade, map: "topic_archive_cursors_channel_fkey")
-  account                User     @relation(fields: [accountId], references: [id], onDelete: Cascade, map: "topic_archive_cursors_account_fkey")
-  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  expiresAt              DateTime @map("expires_at") @db.Timestamptz(6)
-
-  @@unique([snapshotId, pageOffset], map: "topic_archive_cursors_snapshot_page_key")
-  @@index([expiresAt])
-  @@index([workspaceId, channelId, expiresAt, snapshotAt], map: "topic_archive_cursors_snapshot_scope_idx")
-  @@map("topic_archive_cursors")
 }
 
 enum MessageRevisionOperation {

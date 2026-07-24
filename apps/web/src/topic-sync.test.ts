@@ -62,6 +62,12 @@ const topic = {
   messageCount: 2,
   latestMessageId: "message-2",
   latestMessagePreview: null,
+  latestMessageAuthorIdentityId: "identity-2",
+  latestMessagePosition: 2,
+  latestMessageCreatedAt: Date.UTC(2026, 6, 23, 13),
+  latestMessageEditedAt: Date.UTC(2026, 6, 23, 14),
+  latestMessageDeletedAt: Date.UTC(2026, 6, 23, 15),
+  latestMessageAuthor: messages[1]!.author,
   lastActivityAt: Date.UTC(2026, 6, 23, 13),
   createdAt: Date.UTC(2026, 6, 23, 12),
   messages,
@@ -102,7 +108,7 @@ describe("synchronized Topic views", () => {
     ]);
   });
 
-  it("starts a fresh archive snapshot after a cursor fails", () => {
+  it("starts a fresh archive traversal after a cursor fails", () => {
     const loading = startTopicArchiveRequest({
       cursor: "expired-cursor",
       started: true,

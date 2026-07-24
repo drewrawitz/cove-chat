@@ -9,7 +9,6 @@ import {
   TopicIntent,
   TopicSummaryPreview,
   TopicTitle,
-  UserId,
   WorkspaceAvatarUrl,
   WorkspaceId,
   WorkspaceIdentityId,
@@ -27,8 +26,8 @@ import {
 } from "@cove/ports";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { randomUUID } from "node:crypto";
 import { persistenceError } from "../persistence-error.ts";
+import { TopicArchiveCursorCodec } from "./topic-archive-cursor.ts";
 
 const TopicRow = Schema.Struct({
   id: TopicId,
@@ -40,6 +39,11 @@ const TopicRow = Schema.Struct({
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
   latestMessageId: MessageId,
   latestMessagePreview: Schema.NullOr(TopicSummaryPreview),
+  latestMessageAuthorIdentityId: WorkspaceIdentityId,
+  latestMessagePosition: MessagePosition,
+  latestMessageCreatedAt: Schema.Date,
+  latestMessageEditedAt: Schema.NullOr(Schema.Date),
+  latestMessageDeletedAt: Schema.NullOr(Schema.Date),
   lastActivityAt: Schema.Date,
   createdAt: Schema.Date,
 });
@@ -52,80 +56,24 @@ const TopicRequest = Schema.Struct({
 });
 interface TopicRequest extends Schema.Schema.Type<typeof TopicRequest> {}
 
-const ArchiveCursorInsert = Schema.Struct({
-  cursor: Schema.String,
-  snapshotId: Schema.String,
-  pageOffset: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  actorAccountId: UserId,
-  workspaceId: WorkspaceId,
-  channelId: ChannelId,
-  snapshotAt: Schema.Date,
-  snapshotLastActivityAt: Schema.Date,
-  snapshotTopicId: TopicId,
-  afterLastActivityAt: Schema.Date,
-  afterTopicId: TopicId,
-});
-
-const ArchiveNextCursorInsert = Schema.Struct({
-  ...ArchiveCursorInsert.fields,
-  expiresAt: Schema.Date,
-});
-
-const ArchiveCursorRequest = Schema.Struct({
-  cursor: Schema.String,
-  actorAccountId: UserId,
+const ArchiveFirstPageRequest = Schema.Struct({
   workspaceId: WorkspaceId,
   channelId: ChannelId,
 });
-
-const ArchiveCursorPosition = Schema.Struct({
-  snapshotId: Schema.String,
-  pageOffset: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  snapshotAt: Schema.Date,
-  snapshotLastActivityAt: Schema.Date,
-  snapshotTopicId: TopicId,
-  afterLastActivityAt: Schema.Date,
-  afterTopicId: TopicId,
-  expiresAt: Schema.Date,
-});
-interface ArchiveCursorPosition extends Schema.Schema.Type<typeof ArchiveCursorPosition> {}
 
 const ArchivePageRequest = Schema.Struct({
   workspaceId: WorkspaceId,
   channelId: ChannelId,
-  snapshotAt: Schema.Date,
-  snapshotLastActivityAt: Schema.Date,
-  snapshotTopicId: TopicId,
-  hasAfter: Schema.Boolean,
   afterLastActivityAt: Schema.Date,
   afterTopicId: TopicId,
 });
 
-const ArchiveNextCursor = Schema.Struct({ cursor: Schema.String });
-const ArchiveCleanupResult = Schema.Struct({ deletedCount: Schema.Int });
-const ArchiveSnapshotLock = Schema.Struct({ locked: Schema.Boolean });
-
 const TopicSummaryRow = Schema.Struct({
   ...TopicRow.fields,
-  archiveLastActivityAt: Schema.Date,
-  messageId: MessageId,
-  messagePosition: MessagePosition,
-  messageCreatedAt: Schema.Date,
-  messageEditedAt: Schema.NullOr(Schema.Date),
-  messageDeletedAt: Schema.NullOr(Schema.Date),
-  authorIdentityId: WorkspaceIdentityId,
   authorName: WorkspaceIdentityName,
   authorAvatarUrl: WorkspaceAvatarUrl,
 });
 interface TopicSummaryRow extends Schema.Schema.Type<typeof TopicSummaryRow> {}
-
-const FirstTopicSummaryRow = Schema.Struct({
-  ...TopicSummaryRow.fields,
-  snapshotAt: Schema.Date,
-  snapshotLastActivityAt: Schema.Date,
-  snapshotTopicId: TopicId,
-});
-interface FirstTopicSummaryRow extends Schema.Schema.Type<typeof FirstTopicSummaryRow> {}
 
 const MessageRow = Schema.Struct({
   id: MessageId,
@@ -178,6 +126,15 @@ function topic(row: TopicRow): TopicType {
     ...(row.latestMessagePreview === null
       ? {}
       : { latestMessagePreview: row.latestMessagePreview }),
+    latestMessageAuthorIdentityId: row.latestMessageAuthorIdentityId,
+    latestMessagePosition: row.latestMessagePosition,
+    latestMessageCreatedAt: row.latestMessageCreatedAt,
+    ...(row.latestMessageEditedAt === null
+      ? {}
+      : { latestMessageEditedAt: row.latestMessageEditedAt }),
+    ...(row.latestMessageDeletedAt === null
+      ? {}
+      : { latestMessageDeletedAt: row.latestMessageDeletedAt }),
     lastActivityAt: row.lastActivityAt,
     createdAt: row.createdAt,
   };
@@ -227,15 +184,15 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
   return TopicSummaryRecord.make({
     topic: topic(row),
     latestMessage: messageRecord({
-      id: row.messageId,
+      id: row.latestMessageId,
       workspaceId: row.workspaceId,
       topicId: row.id,
-      authorIdentityId: row.authorIdentityId,
+      authorIdentityId: row.latestMessageAuthorIdentityId,
       body: null,
-      position: row.messagePosition,
-      createdAt: row.messageCreatedAt,
-      editedAt: row.messageEditedAt,
-      deletedAt: row.messageDeletedAt,
+      position: row.latestMessagePosition,
+      createdAt: row.latestMessageCreatedAt,
+      editedAt: row.latestMessageEditedAt,
+      deletedAt: row.latestMessageDeletedAt,
       authorName: row.authorName,
       authorAvatarUrl: row.authorAvatarUrl,
     }),
@@ -245,6 +202,7 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const archiveCursors = yield* TopicArchiveCursorCodec;
 
   const findTopicRow = SqlSchema.findOneOption({
     Request: TopicRequest,
@@ -260,6 +218,11 @@ const make = Effect.gen(function* () {
         message_count AS "messageCount",
         latest_message_id AS "latestMessageId",
         latest_message_preview AS "latestMessagePreview",
+        latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        latest_message_position AS "latestMessagePosition",
+        latest_message_created_at AS "latestMessageCreatedAt",
+        latest_message_edited_at AS "latestMessageEditedAt",
+        latest_message_deleted_at AS "latestMessageDeletedAt",
         last_activity_at AS "lastActivityAt",
         created_at AS "createdAt"
       FROM topics
@@ -270,120 +233,18 @@ const make = Effect.gen(function* () {
     `,
   });
 
-  const deleteExpiredArchiveCursors = SqlSchema.findOne({
-    Request: Schema.Struct({}),
-    Result: ArchiveCleanupResult,
-    execute: () => sql<{ readonly deletedCount: number }>`
-      WITH expired AS (
-        SELECT id
-        FROM topic_archive_cursors
-        WHERE expires_at <= CURRENT_TIMESTAMP
-        ORDER BY expires_at, id
-        LIMIT 100
-      ), deleted AS (
-        DELETE FROM topic_archive_cursors AS cursor
-        USING expired
-        WHERE cursor.id = expired.id
-        RETURNING cursor.id
-      )
-      SELECT count(*)::integer AS "deletedCount"
-      FROM deleted
-    `,
-  });
-
-  const deleteStaleActivityVersions = SqlSchema.findOne({
-    Request: Schema.Struct({}),
-    Result: ArchiveCleanupResult,
-    execute: () => sql<{ readonly deletedCount: number }>`
-      WITH stale_versions AS (
-        SELECT version.id
-        FROM topic_activity_versions AS version
-        WHERE version.valid_to IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM topic_archive_cursors AS cursor
-            WHERE cursor.workspace_id = version.workspace_id
-              AND cursor.channel_id = version.channel_id
-              AND cursor.expires_at > CURRENT_TIMESTAMP
-              AND cursor.snapshot_at >= version.valid_from
-              AND cursor.snapshot_at < version.valid_to
-          )
-        ORDER BY version.valid_to, version.id
-        LIMIT 100
-      ), deleted AS (
-        DELETE FROM topic_activity_versions AS version
-        USING stale_versions
-        WHERE version.id = stale_versions.id
-        RETURNING version.id
-      )
-      SELECT count(*)::integer AS "deletedCount"
-      FROM deleted
-    `,
-  });
-
-  const lockArchiveSnapshot = SqlSchema.findOne({
-    Request: Schema.Struct({
-      workspaceId: WorkspaceId,
-      channelId: ChannelId,
-    }),
-    Result: ArchiveSnapshotLock,
-    execute: ({ workspaceId, channelId }) => sql<{ readonly locked: boolean }>`
-      SELECT TRUE AS locked
-      FROM (
-        SELECT pg_advisory_xact_lock(
-          hashtextextended(${workspaceId} || chr(31) || ${channelId}, 0)
-        )
-      ) AS snapshot_lock
-    `,
-  });
-
-  const resolveArchiveCursor = SqlSchema.findOneOption({
-    Request: ArchiveCursorRequest,
-    Result: ArchiveCursorPosition,
-    execute: ({ cursor, actorAccountId, workspaceId, channelId }) =>
-      sql<ArchiveCursorPosition>`
-      SELECT
-        snapshot_id AS "snapshotId",
-        page_offset AS "pageOffset",
-        snapshot_at AS "snapshotAt",
-        snapshot_last_activity_at AS "snapshotLastActivityAt",
-        snapshot_topic_id AS "snapshotTopicId",
-        after_last_activity_at AS "afterLastActivityAt",
-        after_topic_id AS "afterTopicId",
-        expires_at AS "expiresAt"
-      FROM topic_archive_cursors
-      WHERE id = ${cursor}
-        AND account_id = ${actorAccountId}
-        AND workspace_id = ${workspaceId}
-        AND channel_id = ${channelId}
-        AND expires_at > CURRENT_TIMESTAMP
-      LIMIT 1
-    `,
-  });
-
   const listFirstArchiveRows = SqlSchema.findAll({
-    Request: Schema.Struct({
-      workspaceId: WorkspaceId,
-      channelId: ChannelId,
-    }),
-    Result: FirstTopicSummaryRow,
-    execute: ({ workspaceId, channelId }) => sql<FirstTopicSummaryRow>`
-      WITH snapshot_clock AS MATERIALIZED (
-        SELECT statement_timestamp() AS snapshot_at
-      ), snapshot_boundary AS (
+    Request: ArchiveFirstPageRequest,
+    Result: TopicSummaryRow,
+    execute: ({ workspaceId, channelId }) => sql<TopicSummaryRow>`
+      WITH live_boundary AS (
         SELECT
-          activity.last_activity_at,
-          activity.topic_id
-        FROM topic_activity_versions AS activity
-        CROSS JOIN snapshot_clock
-        WHERE activity.workspace_id = ${workspaceId}
-          AND activity.channel_id = ${channelId}
-          AND activity.valid_from <= snapshot_clock.snapshot_at
-          AND (
-            activity.valid_to IS NULL
-            OR activity.valid_to > snapshot_clock.snapshot_at
-          )
-        ORDER BY activity.last_activity_at DESC, activity.topic_id
+          last_activity_at,
+          id
+        FROM topics
+        WHERE workspace_id = ${workspaceId}
+          AND channel_id = ${channelId}
+        ORDER BY last_activity_at DESC, id
         OFFSET 499
         LIMIT 1
       )
@@ -397,48 +258,30 @@ const make = Effect.gen(function* () {
         topic.message_count AS "messageCount",
         topic.latest_message_id AS "latestMessageId",
         topic.latest_message_preview AS "latestMessagePreview",
+        topic.latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        topic.latest_message_position AS "latestMessagePosition",
+        topic.latest_message_created_at AS "latestMessageCreatedAt",
+        topic.latest_message_edited_at AS "latestMessageEditedAt",
+        topic.latest_message_deleted_at AS "latestMessageDeletedAt",
         topic.last_activity_at AS "lastActivityAt",
-        activity.last_activity_at AS "archiveLastActivityAt",
         topic.created_at AS "createdAt",
-        latest.id AS "messageId",
-        latest.position AS "messagePosition",
-        latest.created_at AS "messageCreatedAt",
-        latest.edited_at AS "messageEditedAt",
-        latest.deleted_at AS "messageDeletedAt",
-        latest.author_identity_id AS "authorIdentityId",
         author.name AS "authorName",
-        author.avatar_url AS "authorAvatarUrl",
-        snapshot_clock.snapshot_at AS "snapshotAt",
-        snapshot_boundary.last_activity_at AS "snapshotLastActivityAt",
-        snapshot_boundary.topic_id AS "snapshotTopicId"
-      FROM snapshot_clock
-      CROSS JOIN snapshot_boundary
-      INNER JOIN topic_activity_versions AS activity
-        ON activity.workspace_id = ${workspaceId}
-        AND activity.channel_id = ${channelId}
-        AND activity.valid_from <= snapshot_clock.snapshot_at
+        author.avatar_url AS "authorAvatarUrl"
+      FROM topics AS topic
+      CROSS JOIN live_boundary
+      INNER JOIN workspace_identities AS author
+        ON author.workspace_id = topic.workspace_id
+        AND author.id = topic.latest_message_author_identity_id
+      WHERE topic.workspace_id = ${workspaceId}
+        AND topic.channel_id = ${channelId}
         AND (
-          activity.valid_to IS NULL
-          OR activity.valid_to > snapshot_clock.snapshot_at
-        )
-        AND (
-          activity.last_activity_at < snapshot_boundary.last_activity_at
+          topic.last_activity_at < live_boundary.last_activity_at
           OR (
-            activity.last_activity_at = snapshot_boundary.last_activity_at
-            AND activity.topic_id > snapshot_boundary.topic_id
+            topic.last_activity_at = live_boundary.last_activity_at
+            AND topic.id > live_boundary.id
           )
         )
-      INNER JOIN topics AS topic
-        ON topic.workspace_id = activity.workspace_id
-        AND topic.id = activity.topic_id
-      INNER JOIN messages AS latest
-        ON latest.workspace_id = topic.workspace_id
-        AND latest.topic_id = topic.id
-        AND latest.id = topic.latest_message_id
-      INNER JOIN workspace_identities AS author
-        ON author.workspace_id = latest.workspace_id
-        AND author.id = latest.author_identity_id
-      ORDER BY activity.last_activity_at DESC, activity.topic_id
+      ORDER BY topic.last_activity_at DESC, topic.id
       LIMIT 101
     `,
   });
@@ -457,93 +300,30 @@ const make = Effect.gen(function* () {
         topic.message_count AS "messageCount",
         topic.latest_message_id AS "latestMessageId",
         topic.latest_message_preview AS "latestMessagePreview",
+        topic.latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        topic.latest_message_position AS "latestMessagePosition",
+        topic.latest_message_created_at AS "latestMessageCreatedAt",
+        topic.latest_message_edited_at AS "latestMessageEditedAt",
+        topic.latest_message_deleted_at AS "latestMessageDeletedAt",
         topic.last_activity_at AS "lastActivityAt",
-        activity.last_activity_at AS "archiveLastActivityAt",
         topic.created_at AS "createdAt",
-        latest.id AS "messageId",
-        latest.position AS "messagePosition",
-        latest.created_at AS "messageCreatedAt",
-        latest.edited_at AS "messageEditedAt",
-        latest.deleted_at AS "messageDeletedAt",
-        latest.author_identity_id AS "authorIdentityId",
         author.name AS "authorName",
         author.avatar_url AS "authorAvatarUrl"
-      FROM topic_activity_versions AS activity
-      INNER JOIN topics AS topic
-        ON topic.workspace_id = activity.workspace_id
-        AND topic.id = activity.topic_id
-      INNER JOIN messages AS latest
-        ON latest.workspace_id = topic.workspace_id
-        AND latest.topic_id = topic.id
-        AND latest.id = topic.latest_message_id
+      FROM topics AS topic
       INNER JOIN workspace_identities AS author
-        ON author.workspace_id = latest.workspace_id
-        AND author.id = latest.author_identity_id
-      WHERE activity.workspace_id = ${value.workspaceId}
-        AND activity.channel_id = ${value.channelId}
-        AND activity.valid_from <= ${value.snapshotAt}
+        ON author.workspace_id = topic.workspace_id
+        AND author.id = topic.latest_message_author_identity_id
+      WHERE topic.workspace_id = ${value.workspaceId}
+        AND topic.channel_id = ${value.channelId}
         AND (
-          activity.valid_to IS NULL
-          OR activity.valid_to > ${value.snapshotAt}
-        )
-        AND (
-          activity.last_activity_at < ${value.snapshotLastActivityAt}
+          topic.last_activity_at < ${value.afterLastActivityAt}
           OR (
-            activity.last_activity_at = ${value.snapshotLastActivityAt}
-            AND activity.topic_id > ${value.snapshotTopicId}
+            topic.last_activity_at = ${value.afterLastActivityAt}
+            AND topic.id > ${value.afterTopicId}
           )
         )
-        AND (
-          ${value.hasAfter} = FALSE
-          OR activity.last_activity_at < ${value.afterLastActivityAt}
-          OR (
-            activity.last_activity_at = ${value.afterLastActivityAt}
-            AND activity.topic_id > ${value.afterTopicId}
-          )
-        )
-      ORDER BY activity.last_activity_at DESC, activity.topic_id
+      ORDER BY topic.last_activity_at DESC, topic.id
       LIMIT 101
-    `,
-  });
-
-  const createInitialArchiveCursor = SqlSchema.findOne({
-    Request: ArchiveCursorInsert,
-    Result: ArchiveNextCursor,
-    execute: (value) => sql<{ readonly cursor: string }>`
-      INSERT INTO topic_archive_cursors (
-        id, snapshot_id, page_offset, workspace_id, channel_id, account_id,
-        snapshot_at, snapshot_last_activity_at, snapshot_topic_id,
-        after_last_activity_at, after_topic_id, expires_at
-      )
-      VALUES (
-        ${value.cursor}, ${value.snapshotId}, ${value.pageOffset},
-        ${value.workspaceId}, ${value.channelId}, ${value.actorAccountId},
-        ${value.snapshotAt}, ${value.snapshotLastActivityAt}, ${value.snapshotTopicId},
-        ${value.afterLastActivityAt}, ${value.afterTopicId},
-        CURRENT_TIMESTAMP + INTERVAL '1 hour'
-      )
-      RETURNING id AS cursor
-    `,
-  });
-
-  const createNextArchiveCursor = SqlSchema.findOne({
-    Request: ArchiveNextCursorInsert,
-    Result: ArchiveNextCursor,
-    execute: (value) => sql<{ readonly cursor: string }>`
-      INSERT INTO topic_archive_cursors (
-        id, snapshot_id, page_offset, workspace_id, channel_id, account_id,
-        snapshot_at, snapshot_last_activity_at, snapshot_topic_id,
-        after_last_activity_at, after_topic_id, expires_at
-      )
-      VALUES (
-        ${value.cursor}, ${value.snapshotId}, ${value.pageOffset},
-        ${value.workspaceId}, ${value.channelId}, ${value.actorAccountId},
-        ${value.snapshotAt}, ${value.snapshotLastActivityAt}, ${value.snapshotTopicId},
-        ${value.afterLastActivityAt}, ${value.afterTopicId}, ${value.expiresAt}
-      )
-      ON CONFLICT (snapshot_id, page_offset)
-      DO UPDATE SET snapshot_id = EXCLUDED.snapshot_id
-      RETURNING id AS cursor
     `,
   });
 
@@ -579,12 +359,18 @@ const make = Effect.gen(function* () {
     execute: (value) => sql<TopicRow>`
       INSERT INTO topics (
         id, workspace_id, channel_id, title, intent, opened_by_identity_id,
-        message_count, latest_message_id, latest_message_preview, last_activity_at, created_at
+        message_count, latest_message_id, latest_message_preview,
+        latest_message_author_identity_id, latest_message_position,
+        latest_message_created_at, latest_message_edited_at, latest_message_deleted_at,
+        last_activity_at, created_at
       )
       VALUES (
         ${value.id}, ${value.workspaceId}, ${value.channelId}, ${value.title},
         ${value.intent ?? null}, ${value.openedByIdentityId}, ${value.messageCount},
         ${value.latestMessageId}, ${value.latestMessagePreview ?? null},
+        ${value.latestMessageAuthorIdentityId}, ${value.latestMessagePosition},
+        ${value.latestMessageCreatedAt}, ${value.latestMessageEditedAt ?? null},
+        ${value.latestMessageDeletedAt ?? null},
         ${value.lastActivityAt}, ${value.createdAt}
       )
       RETURNING
@@ -597,6 +383,11 @@ const make = Effect.gen(function* () {
         message_count AS "messageCount",
         latest_message_id AS "latestMessageId",
         latest_message_preview AS "latestMessagePreview",
+        latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        latest_message_position AS "latestMessagePosition",
+        latest_message_created_at AS "latestMessageCreatedAt",
+        latest_message_edited_at AS "latestMessageEditedAt",
+        latest_message_deleted_at AS "latestMessageDeletedAt",
         last_activity_at AS "lastActivityAt",
         created_at AS "createdAt"
     `,
@@ -663,7 +454,12 @@ const make = Effect.gen(function* () {
           message_count = topic.message_count + 1,
           latest_message_id = inserted_message.id,
           latest_message_preview = ${makeTopicSummaryPreview(value.body)},
-          last_activity_at = inserted_message.created_at
+          latest_message_author_identity_id = inserted_message.author_identity_id,
+          latest_message_position = inserted_message.position,
+          latest_message_created_at = inserted_message.created_at,
+          latest_message_edited_at = inserted_message.edited_at,
+          latest_message_deleted_at = inserted_message.deleted_at,
+          last_activity_at = greatest(topic.last_activity_at, inserted_message.created_at)
         FROM inserted_message
         WHERE topic.workspace_id = inserted_message.workspace_id
           AND topic.id = inserted_message.topic_id
@@ -728,9 +524,12 @@ const make = Effect.gen(function* () {
         RETURNING message.*
       ), updated_topic AS (
         UPDATE topics AS topic
-        SET latest_message_preview = ${
-          value.body === null ? null : makeTopicSummaryPreview(value.body)
-        }
+        SET
+          latest_message_preview = ${
+            value.body === null ? null : makeTopicSummaryPreview(value.body)
+          },
+          latest_message_edited_at = revised_message.edited_at,
+          latest_message_deleted_at = revised_message.deleted_at
         FROM revised_message
         WHERE topic.workspace_id = revised_message.workspace_id
           AND topic.id = revised_message.topic_id
@@ -758,98 +557,53 @@ const make = Effect.gen(function* () {
   return TopicRepository.of({
     listArchivePageInChannel: Effect.fn("PostgresTopicRepository.listArchivePageInChannel")(
       function* (actorAccountId, workspaceId, channelId, cursor) {
-        return yield* sql.withTransaction(
-          Effect.gen(function* () {
-            yield* deleteExpiredArchiveCursors({});
-            yield* deleteStaleActivityVersions({});
-
-            if (cursor === undefined) {
-              yield* lockArchiveSnapshot({ workspaceId, channelId });
-              const rows = yield* listFirstArchiveRows({ workspaceId, channelId });
-              const hasMore = rows.length > 100;
-              const pageRows = rows.slice(0, 100);
-              if (!hasMore) {
-                return {
-                  summaries: pageRows.map(summaryRecord),
-                  cursorValid: true,
-                };
-              }
-
-              const boundary = rows[0]!;
-              const after = pageRows.at(-1)!;
-              const nextCursor = yield* createInitialArchiveCursor({
-                cursor: randomUUID(),
-                snapshotId: randomUUID(),
-                pageOffset: 100,
-                actorAccountId,
-                workspaceId,
-                channelId,
-                snapshotAt: boundary.snapshotAt,
-                snapshotLastActivityAt: boundary.snapshotLastActivityAt,
-                snapshotTopicId: boundary.snapshotTopicId,
-                afterLastActivityAt: after.archiveLastActivityAt,
-                afterTopicId: after.id,
+        const rows =
+          cursor === undefined
+            ? yield* listFirstArchiveRows({ workspaceId, channelId })
+            : yield* Effect.gen(function* () {
+                const position = Option.getOrUndefined(
+                  archiveCursors.decodeForScope(cursor, {
+                    actorAccountId,
+                    workspaceId,
+                    channelId,
+                  }),
+                );
+                if (position === undefined) {
+                  return undefined;
+                }
+                return yield* listArchiveRows({
+                  workspaceId,
+                  channelId,
+                  afterLastActivityAt: position.afterLastActivityAt,
+                  afterTopicId: position.afterTopicId,
+                });
               });
-              return {
-                summaries: pageRows.map(summaryRecord),
-                cursorValid: true,
-                nextCursor: nextCursor.cursor,
-              };
-            }
+        if (rows === undefined) {
+          return { summaries: [], cursorValid: false };
+        }
 
-            const position = Option.getOrUndefined(
-              yield* resolveArchiveCursor({
-                cursor,
-                actorAccountId,
-                workspaceId,
-                channelId,
-              }),
-            );
-            if (position === undefined) {
-              return { summaries: [], cursorValid: false };
-            }
+        const hasMore = rows.length > 100;
+        const pageRows = rows.slice(0, 100);
+        if (!hasMore) {
+          return {
+            summaries: pageRows.map(summaryRecord),
+            cursorValid: true,
+          };
+        }
 
-            const rows = yield* listArchiveRows({
-              workspaceId,
-              channelId,
-              snapshotAt: position.snapshotAt,
-              snapshotLastActivityAt: position.snapshotLastActivityAt,
-              snapshotTopicId: position.snapshotTopicId,
-              hasAfter: true,
-              afterLastActivityAt: position.afterLastActivityAt,
-              afterTopicId: position.afterTopicId,
-            });
-            const hasMore = rows.length > 100;
-            const pageRows = rows.slice(0, 100);
-            if (!hasMore) {
-              return {
-                summaries: pageRows.map(summaryRecord),
-                cursorValid: true,
-              };
-            }
-
-            const after = pageRows.at(-1)!;
-            const nextCursor = yield* createNextArchiveCursor({
-              cursor: randomUUID(),
-              snapshotId: position.snapshotId,
-              pageOffset: position.pageOffset + 100,
-              actorAccountId,
-              workspaceId,
-              channelId,
-              snapshotAt: position.snapshotAt,
-              snapshotLastActivityAt: position.snapshotLastActivityAt,
-              snapshotTopicId: position.snapshotTopicId,
-              afterLastActivityAt: after.archiveLastActivityAt,
-              afterTopicId: after.id,
-              expiresAt: position.expiresAt,
-            });
-            return {
-              summaries: pageRows.map(summaryRecord),
-              cursorValid: true,
-              nextCursor: nextCursor.cursor,
-            };
+        const after = pageRows.at(-1)!;
+        return {
+          summaries: pageRows.map(summaryRecord),
+          cursorValid: true,
+          nextCursor: archiveCursors.encode({
+            version: 1,
+            actorAccountId,
+            workspaceId,
+            channelId,
+            afterLastActivityAt: after.lastActivityAt,
+            afterTopicId: after.id,
           }),
-        );
+        };
       },
       (effect) => mapFailure("TopicRepository.listArchivePageInChannel", effect),
     ),

@@ -73,7 +73,7 @@ describe("bounded Topic summary migration", () => {
     await container?.stop();
   });
 
-  it("backfills count, latest-message, preview, tombstone, and activity projections", async () => {
+  it("rejects oversized content without truncation, then backfills bounded Topic summaries", async () => {
     const multibyteLatestBody = "é".repeat(5000);
     const multibyteTitle = "é".repeat(300);
     const multibytePurpose = "é".repeat(1500);
@@ -126,7 +126,36 @@ describe("bounded Topic summary migration", () => {
           );
       `);
 
-    await runFile(join(migrationsDirectory, TARGET_MIGRATION, "migration.sql"));
+    const migration = join(migrationsDirectory, TARGET_MIGRATION, "migration.sql");
+    await expect(runFile(migration)).rejects.toThrow(
+      "Cannot enforce the 512-byte Topic title limit while oversized titles exist",
+    );
+    expect(
+      await runSql(`
+        SELECT concat(
+          octet_length(topic.title),
+          '|',
+          octet_length(channel.purpose)
+        )
+        FROM topics AS topic
+        INNER JOIN channels AS channel
+          ON channel.workspace_id = topic.workspace_id
+          AND channel.id = topic.channel_id
+        WHERE topic.id = 'active-topic';
+      `),
+    ).toBe("600|3000");
+
+    await runSql(`
+      UPDATE topics
+      SET title = 'Release readiness'
+      WHERE workspace_id = 'migration-workspace'
+        AND id = 'active-topic';
+      UPDATE channels
+      SET purpose = 'Coordinate migration coverage.'
+      WHERE workspace_id = 'migration-workspace'
+        AND id = 'migration-channel';
+    `);
+    await runFile(migration);
 
     const projections = await runSql(`
         SELECT concat_ws(
@@ -135,6 +164,13 @@ describe("bounded Topic summary migration", () => {
           message_count,
           latest_message_id,
           coalesce(latest_message_preview, '<null>'),
+          latest_message_author_identity_id,
+          latest_message_position,
+          to_char(latest_message_created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS'),
+          coalesce(
+            to_char(latest_message_deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS'),
+            '<null>'
+          ),
           to_char(last_activity_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS'),
           coalesce(octet_length(latest_message_preview)::text, '<null>')
         )
@@ -143,8 +179,8 @@ describe("bounded Topic summary migration", () => {
         ORDER BY id;
       `);
     expect(projections.split("\n")).toEqual([
-      `active-topic|2|active-latest|${"é".repeat(256)}|2026-07-20T12:00:00|512`,
-      "deleted-topic|1|deleted-latest|<null>|2026-07-20T13:00:00|<null>",
+      `active-topic|2|active-latest|${"é".repeat(256)}|migration-identity|2|2026-07-20T12:00:00|<null>|2026-07-20T12:00:00|512`,
+      "deleted-topic|1|deleted-latest|<null>|migration-identity|1|2026-07-20T13:00:00|2026-07-20T13:05:00|2026-07-20T13:00:00|<null>",
     ]);
     expect(
       await runSql(`
@@ -159,7 +195,7 @@ describe("bounded Topic summary migration", () => {
             AND channel.id = topic.channel_id
           WHERE topic.id = 'active-topic';
         `),
-    ).toBe("512|2048");
+    ).toBe("17|30");
 
     expect(
       await runSql(`
@@ -177,68 +213,11 @@ describe("bounded Topic summary migration", () => {
     ).toBe("f");
     expect(
       await runSql(`
-          SELECT concat(
-            count(*),
-            '|',
-            count(*) FILTER (WHERE valid_to IS NULL)
-          )
-          FROM topic_activity_versions
-          WHERE workspace_id = 'migration-workspace';
-        `),
-    ).toBe("2|2");
-
-    await runSql(`
-        INSERT INTO topic_activity_versions (
-          workspace_id,
-          channel_id,
-          topic_id,
-          last_activity_at,
-          valid_from,
-          valid_to
-        )
-        SELECT
-          'migration-workspace',
-          'migration-channel',
-          'active-topic',
-          '2020-01-01T00:00:00Z',
-          '2020-01-01T00:00:00Z',
-          '2020-01-02T00:00:00Z'
-        FROM generate_series(1, 150);
-        UPDATE topics
-        SET last_activity_at = '2026-07-20T14:00:00Z'
-        WHERE workspace_id = 'migration-workspace'
-          AND id = 'active-topic';
-      `);
-    expect(
-      await runSql(`
-          SELECT concat(
-            count(*),
-            '|',
-            count(*) FILTER (WHERE valid_to IS NULL)
-          )
-          FROM topic_activity_versions
-          WHERE workspace_id = 'migration-workspace'
-            AND topic_id = 'active-topic';
-        `),
-    ).toBe("52|1");
-
-    await runSql(`
-        UPDATE topics
-        SET last_activity_at = '2026-07-20T15:00:00Z'
-        WHERE workspace_id = 'migration-workspace'
-          AND id = 'active-topic';
-      `);
-    expect(
-      await runSql(`
-          SELECT concat(
-            count(*),
-            '|',
-            count(*) FILTER (WHERE valid_to IS NULL)
-          )
-          FROM topic_activity_versions
-          WHERE workspace_id = 'migration-workspace'
-            AND topic_id = 'active-topic';
-        `),
-    ).toBe("1|1");
+        SELECT count(*)
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name IN ('topic_activity_versions', 'topic_archive_cursors');
+      `),
+    ).toBe("0");
   }, 60_000);
 });

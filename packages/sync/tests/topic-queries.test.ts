@@ -26,9 +26,8 @@ describe("authorized Topic queries", () => {
     expect(serialized).toContain('"lastActivityAt","desc"');
     expect(serialized).toContain('"id","asc"');
     expect(serialized).toContain('"limit":50');
-    expect(serialized).toContain('"alias":"messages"');
-    expect(serialized).toContain('"alias":"author"');
-    expect(serialized).toContain('"limit":1');
+    expect(serialized).toContain('"alias":"latestMessageAuthor"');
+    expect(serialized).not.toContain('"alias":"messages"');
   });
 
   it("accepts only 50-Topic live-window increments through 500", () => {

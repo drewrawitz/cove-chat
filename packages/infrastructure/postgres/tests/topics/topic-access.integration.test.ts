@@ -20,6 +20,7 @@ import {
   makeWorkspaceId,
   makeWorkspaceIdentityId,
 } from "@cove/domain";
+import { TopicRepository } from "@cove/ports";
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { randomUUID } from "node:crypto";
@@ -222,6 +223,60 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             "Documentation review is complete.",
           ]),
         );
+      }),
+    ),
+  );
+
+  it.effect("keeps Topic activity monotonic across out-of-order append timestamps", () =>
+    withFixtures((fixtures) =>
+      Effect.gen(function* () {
+        const topics = yield* TopicAccess;
+        const repository = yield* TopicRepository;
+        yield* topics.create(
+          CreateTopicCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: fixtures.topicId,
+            openingBriefMessageId: fixtures.messageId,
+            title: yield* makeTopicTitle("Monotonic activity"),
+            openingBrief: MessageBody.make("Capture append ordering."),
+          }),
+        );
+        const newerActivity = new Date("2026-07-24T12:05:00.000Z");
+        const olderActivity = new Date("2026-07-24T12:04:00.000Z");
+        const newerMessageId = yield* makeMessageId(`newer-${fixtures.messageId}`);
+        const olderMessageId = yield* makeMessageId(`older-${fixtures.messageId}`);
+
+        yield* repository.appendMessage({
+          id: newerMessageId,
+          workspaceId: fixtures.workspaceId,
+          topicId: fixtures.topicId,
+          authorIdentityId: fixtures.authorIdentityId,
+          body: MessageBody.make("Captured later."),
+          createdAt: newerActivity,
+        });
+        yield* repository.appendMessage({
+          id: olderMessageId,
+          workspaceId: fixtures.workspaceId,
+          topicId: fixtures.topicId,
+          authorIdentityId: fixtures.authorIdentityId,
+          body: MessageBody.make("Committed later with an earlier timestamp."),
+          createdAt: olderActivity,
+        });
+
+        const detail = yield* topics.getForActor(
+          fixtures.authorAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          fixtures.topicId,
+        );
+        expect(detail.topic).toMatchObject({
+          latestMessageId: olderMessageId,
+          latestMessagePosition: 3,
+          latestMessageCreatedAt: olderActivity,
+          lastActivityAt: newerActivity,
+        });
       }),
     ),
   );
@@ -446,7 +501,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
       ),
   );
 
-  it.effect("pages Topics after the 500-Topic live window in deterministic stable snapshots", () =>
+  it.effect("pages Topics after the live window with scope-bound stateless keysets", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
@@ -463,6 +518,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               message_count,
               latest_message_id,
               latest_message_preview,
+              latest_message_author_identity_id,
+              latest_message_position,
+              latest_message_created_at,
+              latest_message_edited_at,
+              latest_message_deleted_at,
               last_activity_at,
               created_at
             )
@@ -475,6 +535,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               1,
               'archive-message-' || lpad(number::text, 3, '0'),
               'Archived summary ' || lpad(number::text, 3, '0'),
+              ${fixtures.authorIdentityId},
+              1,
+              ${activityAt},
+              NULL,
+              NULL,
               ${activityAt},
               ${activityAt}
             FROM generate_series(1, 702) AS number
@@ -510,20 +575,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         expect(first.topics.at(-1)?.topic.id).toBe("archive-topic-600");
         expect(first.nextCursor).toEqual(expect.any(String));
 
-        const [cursorStorage] = yield* sql<{
-          readonly cursorCount: number;
-          readonly snapshotCount: number;
-        }>`
-          SELECT
-            count(*)::integer AS "cursorCount",
-            count(DISTINCT snapshot_id)::integer AS "snapshotCount"
-          FROM topic_archive_cursors
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND channel_id = ${fixtures.publicChannelId}
-            AND account_id = ${fixtures.readerAccountId}
-        `;
-        expect(cursorStorage).toEqual({ cursorCount: 1, snapshotCount: 1 });
-
         const crossActorCursor = yield* topics
           .listArchiveForActor(
             fixtures.authorAccountId,
@@ -554,8 +605,8 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           first.nextCursor,
         );
-        expect(second.topics.at(0)?.topic.id).toBe("archive-topic-601");
-        expect(second.topics.at(-1)?.topic.id).toBe("archive-topic-700");
+        expect(second.topics.at(0)?.topic.id).toBe("archive-topic-602");
+        expect(second.topics.at(-1)?.topic.id).toBe("archive-topic-701");
         expect(second.nextCursor).toEqual(expect.any(String));
         const [{ liveAfterActivity }] = yield* sql<{ readonly liveAfterActivity: boolean }>`
           SELECT EXISTS (
@@ -589,22 +640,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           first.nextCursor,
         );
-        expect(repeatedSecond.topics.map(({ topic }) => topic.id)).toEqual(
-          second.topics.map(({ topic }) => topic.id),
+        expect(repeatedSecond.topics.map(({ topic }) => topic.id)).not.toContain(
+          "archive-topic-650",
         );
-        expect(repeatedSecond.nextCursor).toBe(second.nextCursor);
-        expect(
-          second.topics.find(({ topic }) => topic.id === "archive-topic-650")?.topic,
-        ).toMatchObject({
-          messageCount: 1,
-          latestMessageId: "archive-message-650",
-        });
-        expect(
-          repeatedSecond.topics.find(({ topic }) => topic.id === "archive-topic-650")?.topic,
-        ).toMatchObject({
-          messageCount: 2,
-          latestMessagePreview: "Snapshot-visible activity",
-        });
+        expect(repeatedSecond.topics.at(-1)?.topic.id).toBe("archive-topic-702");
+        expect(repeatedSecond.nextCursor).toBeUndefined();
 
         const third = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
@@ -612,42 +652,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           second.nextCursor,
         );
-        expect(third.topics.map(({ topic }) => topic.id)).toEqual([
-          "archive-topic-701",
-          "archive-topic-702",
-        ]);
+        expect(third.topics.map(({ topic }) => topic.id)).toEqual(["archive-topic-702"]);
         expect(third.nextCursor).toBeUndefined();
-
-        yield* sql`
-          UPDATE topic_archive_cursors
-          SET expires_at = ${new Date("2020-01-01T00:00:00.000Z")}
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND channel_id = ${fixtures.publicChannelId}
-            AND account_id = ${fixtures.readerAccountId}
-        `;
-        const expiredCursor = yield* topics
-          .listArchiveForActor(
-            fixtures.readerAccountId,
-            fixtures.workspaceId,
-            fixtures.publicChannelId,
-            first.nextCursor,
-          )
-          .pipe(Effect.flip);
-        expect(expiredCursor).toBeInstanceOf(TopicArchiveCursorInvalid);
-
-        yield* topics.listArchiveForActor(
-          fixtures.readerAccountId,
-          fixtures.workspaceId,
-          fixtures.publicChannelId,
+        const traversedTopicIds = [...first.topics, ...second.topics, ...third.topics].map(
+          ({ topic }) => topic.id,
         );
-        const [{ snapshotCount }] = yield* sql<{ readonly snapshotCount: number }>`
-          SELECT count(DISTINCT snapshot_id)::integer AS "snapshotCount"
-          FROM topic_archive_cursors
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND channel_id = ${fixtures.publicChannelId}
-            AND account_id = ${fixtures.readerAccountId}
-        `;
-        expect(snapshotCount).toBe(1);
+        expect(new Set(traversedTopicIds).size).toBe(traversedTopicIds.length);
 
         const invalidCursor = yield* topics
           .listArchiveForActor(

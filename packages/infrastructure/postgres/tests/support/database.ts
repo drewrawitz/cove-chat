@@ -12,7 +12,7 @@ import {
   type WorkspaceInvitationNotifierService,
 } from "@cove/ports";
 import { Context, Effect, Layer, Queue, Redacted, Ref } from "effect";
-import { PostgresRepositories } from "../../src/index.ts";
+import { PostgresRepositories, topicArchiveCursorCodecLayer } from "../../src/index.ts";
 
 const execFileAsync = promisify(execFile);
 const POSTGRES_IMAGE = "postgres:18.4-alpine";
@@ -42,7 +42,7 @@ const seedDatabase = Effect.fn("PostgresTest.seedDatabase")((databaseUrl: string
   ),
 );
 
-export const TestDatabase = Layer.unwrap(
+const TestDatabaseClient = Layer.unwrap(
   Effect.gen(function* () {
     const container = yield* startedContainer;
     const databaseUrl = container.getConnectionUri();
@@ -52,6 +52,11 @@ export const TestDatabase = Layer.unwrap(
 
     return PgClient.layer({ url: Redacted.make(databaseUrl) });
   }),
+);
+
+export const TestDatabase = Layer.mergeAll(
+  TestDatabaseClient,
+  topicArchiveCursorCodecLayer(Redacted.make("test-only-topic-archive-cursor-signing-key")),
 );
 
 export interface TestWorkspaceInvitationNotifierService extends WorkspaceInvitationNotifierService {

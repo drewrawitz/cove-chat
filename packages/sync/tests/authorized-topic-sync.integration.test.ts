@@ -230,6 +230,11 @@ beforeAll(async () => {
       message_count,
       latest_message_id,
       latest_message_preview,
+      latest_message_author_identity_id,
+      latest_message_position,
+      latest_message_created_at,
+      latest_message_edited_at,
+      latest_message_deleted_at,
       last_activity_at
     )
     VALUES
@@ -242,6 +247,11 @@ beforeAll(async () => {
         1,
         'private-message',
         'Only explicit Channel members can synchronize this Message.',
+        'sync-alice-identity',
+        1,
+        now(),
+        NULL,
+        NULL,
         now()
       ),
       (
@@ -253,6 +263,11 @@ beforeAll(async () => {
         1,
         'other-message',
         'Cross-Workspace Message.',
+        'other-alice-identity',
+        1,
+        now(),
+        NULL,
+        NULL,
         now()
       );
 
@@ -291,6 +306,11 @@ beforeAll(async () => {
       message_count,
       latest_message_id,
       latest_message_preview,
+      latest_message_author_identity_id,
+      latest_message_position,
+      latest_message_created_at,
+      latest_message_edited_at,
+      latest_message_deleted_at,
       last_activity_at
     )
     SELECT
@@ -302,6 +322,11 @@ beforeAll(async () => {
       1,
       'bounded-message-' || lpad(number::text, 2, '0'),
       'Bounded summary',
+      'sync-alice-identity',
+      1,
+      now() - make_interval(secs => number),
+      NULL,
+      NULL,
       now() - make_interval(secs => number)
     FROM generate_series(1, 51) AS number;
 
@@ -435,7 +460,12 @@ describe("authorized Topic synchronization", () => {
       expect(privateForOwnerWithoutMembership).toBeUndefined();
       expect(crossWorkspaceForUnknownActor).toBeUndefined();
       expect(boundedForMember).toHaveLength(50);
-      expect(boundedForMember.every(({ messages }) => messages.length === 1)).toBe(true);
+      expect(
+        boundedForMember.every(
+          (topic) =>
+            !("messages" in topic) && topic.latestMessageAuthor?.id === "sync-alice-identity",
+        ),
+      ).toBe(true);
       expect(boundedForOwnerWithoutMembership).toEqual([]);
     } finally {
       await Promise.all([alice.close(), bob.close()]);

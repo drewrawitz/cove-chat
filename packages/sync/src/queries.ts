@@ -76,20 +76,14 @@ const authorizedTopics = (args: z.output<typeof ChannelScopeArguments>, context:
 const withMessages = (query: ReturnType<typeof authorizedTopics>) =>
   query.related("messages", (message) => message.orderBy("position", "asc").related("author"));
 
-const withLatestMessage = (query: ReturnType<typeof authorizedTopics>) =>
-  query.related("messages", (message) =>
-    message.orderBy("position", "desc").limit(1).related("author"),
-  );
-
 export const queries = defineQueries({
   topics: {
     inChannel: defineQuery(ChannelTopicsArguments, ({ args, ctx }) =>
-      withLatestMessage(
-        authorizedTopics(args, ctx)
-          .orderBy("lastActivityAt", "desc")
-          .orderBy("id", "asc")
-          .limit(args.limit),
-      ),
+      authorizedTopics(args, ctx)
+        .orderBy("lastActivityAt", "desc")
+        .orderBy("id", "asc")
+        .limit(args.limit)
+        .related("latestMessageAuthor"),
     ),
     byId: defineQuery(TopicArguments, ({ args, ctx }) =>
       withMessages(authorizedTopics(args, ctx).where("id", args.topicId)).one(),
