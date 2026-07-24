@@ -7,6 +7,17 @@ export interface CoveQueryRequest {
   readonly userID: string;
 }
 
+export const COVE_QUERY_REQUEST_MAX_BYTES = 256 * 1024;
+
+export class CoveQueryRequestTooLargeError extends Error {
+  readonly _tag = "CoveQueryRequest.TooLarge";
+
+  constructor() {
+    super("Cove query request exceeds 256 KiB.");
+    this.name = "CoveQueryRequestTooLargeError";
+  }
+}
+
 export class InvalidCoveQueryRequestError extends Error {
   readonly _tag = "CoveQueryRequest.Invalid";
   readonly reason: "QueryNotFound" | "InputValidation";
@@ -37,7 +48,47 @@ const getCoveQuery = (name: string) => {
   }
 };
 
+const boundedRequest = async (request: Request): Promise<Request> => {
+  const declaredLength = request.headers.get("content-length");
+  if (
+    declaredLength !== null &&
+    Number.isFinite(Number(declaredLength)) &&
+    Number(declaredLength) > COVE_QUERY_REQUEST_MAX_BYTES
+  ) {
+    throw new CoveQueryRequestTooLargeError();
+  }
+  if (request.body === null) return request;
+
+  const reader = request.body.getReader();
+  const chunks: Array<Uint8Array> = [];
+  let byteLength = 0;
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    byteLength += chunk.value.byteLength;
+    if (byteLength > COVE_QUERY_REQUEST_MAX_BYTES) {
+      await reader.cancel();
+      throw new CoveQueryRequestTooLargeError();
+    }
+    chunks.push(chunk.value);
+  }
+
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body,
+    signal: request.signal,
+  });
+};
+
 export const handleCoveQueryRequest = async ({ request, userID }: CoveQueryRequest) => {
+  const requestWithinBounds = await boundedRequest(request);
   let handlerFailure: { readonly cause: unknown } | undefined;
   const result = await handleQueryRequest({
     handler: (name, args) => {
@@ -59,7 +110,7 @@ export const handleCoveQueryRequest = async ({ request, userID }: CoveQueryReque
         throw cause;
       }
     },
-    request,
+    request: requestWithinBounds,
     schema,
     userID,
   });

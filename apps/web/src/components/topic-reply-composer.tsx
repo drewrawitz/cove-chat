@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@cove/ui/components/dialog";
 import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { applyMessageBodyValidity } from "../content-bounds.ts";
 import { handleComposerKeyboardShortcut } from "./composer-keyboard-shortcuts.ts";
 
 interface ReplyIdentity {
@@ -145,8 +146,12 @@ export function TopicReplyComposer({
                 className="min-h-[clamp(10rem,30dvh,20rem)] w-full resize-y bg-transparent text-base leading-7 outline-none placeholder:text-muted-foreground"
                 placeholder="Write a reply…"
                 aria-keyshortcuts="Meta+Enter Control+Enter Escape"
-                onChange={(event) => setDraft(event.currentTarget.value)}
+                onChange={(event) => {
+                  applyMessageBodyValidity(event.currentTarget);
+                  setDraft(event.currentTarget.value);
+                }}
               />
+              <p className="mt-2 text-xs text-muted-foreground">Up to 8 KiB of UTF-8 text.</p>
               {hasError ? (
                 <p className="mt-2 text-sm text-destructive" role="alert">
                   Cove could not add this reply. Refresh and try again.

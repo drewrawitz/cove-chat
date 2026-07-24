@@ -20,6 +20,10 @@ export interface SynchronizedTopic {
   readonly id: string;
   readonly title: string;
   readonly intent?: TopicIntent | null;
+  readonly messageCount: number;
+  readonly latestMessageId: string;
+  readonly latestMessagePreview?: string | null;
+  readonly lastActivityAt: number;
   readonly messages: ReadonlyArray<SynchronizedTopicMessage>;
 }
 
@@ -45,8 +49,9 @@ export interface TopicSummaryView {
   readonly title: string;
   readonly intent?: TopicIntent;
   readonly messageCount: number;
+  readonly lastActivityAt: string;
   readonly latestMessage: {
-    readonly body?: string;
+    readonly preview?: string;
     readonly position: number;
     readonly createdAt: string;
     readonly deleted: boolean;
@@ -55,6 +60,42 @@ export interface TopicSummaryView {
 }
 
 export type TopicProjectionState = "syncing" | "available" | "unavailable";
+
+export interface TopicArchivePagination {
+  readonly cursor?: string;
+  readonly started: boolean;
+  readonly pending: boolean;
+  readonly error: boolean;
+}
+
+export const initialTopicArchivePagination: TopicArchivePagination = {
+  started: false,
+  pending: false,
+  error: false,
+};
+
+export const startTopicArchiveRequest = (
+  state: TopicArchivePagination,
+): TopicArchivePagination => ({
+  ...state,
+  pending: true,
+  error: false,
+});
+
+export const completeTopicArchiveRequest = (
+  nextCursor: string | undefined,
+): TopicArchivePagination => ({
+  ...(nextCursor === undefined ? {} : { cursor: nextCursor }),
+  started: true,
+  pending: false,
+  error: false,
+});
+
+export const failTopicArchiveRequest = (): TopicArchivePagination => ({
+  started: false,
+  pending: false,
+  error: true,
+});
 
 export function topicProjectionState({
   queryResultType,
@@ -106,7 +147,7 @@ export function synchronizedTopicSummaries(
   topics: ReadonlyArray<SynchronizedTopic>,
 ): ReadonlyArray<TopicSummaryView> {
   return topics.flatMap((topic) => {
-    const latestMessage = topic.messages.at(-1);
+    const latestMessage = topic.messages.find(({ id }) => id === topic.latestMessageId);
     const latestMessageView =
       latestMessage === undefined ? undefined : topicMessageView(latestMessage);
     if (latestMessageView === undefined) return [];
@@ -114,9 +155,10 @@ export function synchronizedTopicSummaries(
     const fields = {
       id: topic.id,
       title: topic.title,
-      messageCount: topic.messages.length,
+      messageCount: topic.messageCount,
+      lastActivityAt: new Date(topic.lastActivityAt).toISOString(),
       latestMessage: {
-        ...(latestMessageView.body === undefined ? {} : { body: latestMessageView.body }),
+        ...(topic.latestMessagePreview == null ? {} : { preview: topic.latestMessagePreview }),
         position: latestMessageView.position,
         createdAt: latestMessageView.createdAt,
         deleted: latestMessageView.deleted,
@@ -125,4 +167,12 @@ export function synchronizedTopicSummaries(
     };
     return topic.intent == null ? [fields] : [{ ...fields, intent: topic.intent }];
   });
+}
+
+export function combineTopicSummaries(
+  liveTopics: ReadonlyArray<TopicSummaryView>,
+  archivedTopics: ReadonlyArray<TopicSummaryView>,
+): ReadonlyArray<TopicSummaryView> {
+  const liveTopicIds = new Set(liveTopics.map(({ id }) => id));
+  return [...liveTopics, ...archivedTopics.filter(({ id }) => !liveTopicIds.has(id))];
 }

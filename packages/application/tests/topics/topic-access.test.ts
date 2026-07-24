@@ -11,6 +11,7 @@ import {
   makeChannelId,
   makeMessageId,
   makeTopicId,
+  makeTopicSummaryPreview,
   makeTopicTitle,
   makeUserId,
   makeWorkspaceId,
@@ -28,6 +29,7 @@ import {
   MessageUnavailable,
   TopicAccess,
   TopicAccessLive,
+  TopicArchiveCursorInvalid,
   ChannelUnavailable,
   TopicUnavailable,
   type ChannelAccessService,
@@ -57,7 +59,7 @@ const makeChannelAccess = (overrides: Partial<ChannelAccessService>): ChannelAcc
 
 const makeRepository = (overrides: Partial<TopicRepositoryService>): TopicRepositoryService =>
   TopicRepository.of({
-    listSummariesInChannel: () => unexpected("TopicRepository", "listSummariesInChannel"),
+    listArchivePageInChannel: () => unexpected("TopicRepository", "listArchivePageInChannel"),
     findById: () => unexpected("TopicRepository", "findById"),
     insertTopic: () => unexpected("TopicRepository", "insertTopic"),
     insertMessage: () => unexpected("TopicRepository", "insertMessage"),
@@ -140,6 +142,10 @@ it.effect("creates a Topic and its Opening Brief for a Channel Member", () =>
       title: "Release readiness",
       intent: "question",
       openedByIdentityId: actorIdentityId,
+      messageCount: 1,
+      latestMessageId: messageId,
+      latestMessagePreview: "Capture the remaining launch risks.",
+      lastActivityAt: expect.any(Date),
     });
     expect(created.messages).toHaveLength(1);
     expect(created.messages[0]?.message).toMatchObject({
@@ -178,6 +184,10 @@ it.effect("adds a flat Message at the next Topic position for a Channel Member",
       channelId,
       title: yield* makeTopicTitle("Release readiness"),
       openedByIdentityId: actorIdentityId,
+      messageCount: 1,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("Latest Message"),
+      lastActivityAt: createdAt,
       createdAt,
     });
     const channelAccess = makeChannelAccess({
@@ -254,6 +264,10 @@ it.effect("lets a Message author correct their writing with an edited marker", (
       channelId,
       title: yield* makeTopicTitle("Release readiness"),
       openedByIdentityId: actorIdentityId,
+      messageCount: 2,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("The release candidate passed smoke testng."),
+      lastActivityAt: createdAt,
       createdAt,
     });
     const original = Message.make({
@@ -333,6 +347,10 @@ it.effect("lets a Message author leave a tombstone without removing its position
       channelId,
       title: yield* makeTopicTitle("Release readiness"),
       openedByIdentityId: actorIdentityId,
+      messageCount: 2,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("This Message will be removed."),
+      lastActivityAt: createdAt,
       createdAt,
     });
     const original = Message.make({
@@ -414,6 +432,9 @@ it.effect("does not let an author edit a tombstoned Message", () =>
       channelId,
       title: yield* makeTopicTitle("Release readiness"),
       openedByIdentityId: actorIdentityId,
+      messageCount: 2,
+      latestMessageId: messageId,
+      lastActivityAt: createdAt,
       createdAt,
     });
     const tombstone = Message.make({
@@ -485,6 +506,10 @@ it.effect("does not let a Channel participant change another author's Message", 
       channelId,
       title: yield* makeTopicTitle("Release readiness"),
       openedByIdentityId: authorIdentityId,
+      messageCount: 2,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("The author's Message."),
+      lastActivityAt: createdAt,
       createdAt,
     });
     const message = Message.make({
@@ -630,7 +655,7 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
   }),
 );
 
-it.effect("inherits Channel read access when browsing and opening Topics", () =>
+it.effect("inherits Channel read access when opening a Topic", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("reader-account");
     const actorIdentityId = yield* makeWorkspaceIdentityId("reader-identity");
@@ -656,6 +681,10 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
       title,
       intent: "discussion",
       openedByIdentityId: authorIdentityId,
+      messageCount: 1,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("Capture the remaining launch risks."),
+      lastActivityAt: createdAt,
       createdAt,
     });
     const latestMessage = {
@@ -687,24 +716,125 @@ it.effect("inherits Channel read access when browsing and opening Topics", () =>
         }),
     });
     const repository = makeRepository({
-      listSummariesInChannel: () => Effect.succeed([{ topic, latestMessage, messageCount: 1 }]),
       findById: () => Effect.succeed({ topic, messages: [latestMessage] }),
+    });
+
+    const detail = yield* Effect.gen(function* () {
+      const topics = yield* TopicAccess;
+      return yield* topics.getForActor(actorAccountId, workspaceId, channelId, topicId);
+    }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
+
+    expect(detail.topic.id).toBe(topicId);
+    expect(detail.messages).toHaveLength(1);
+  }),
+);
+
+it.effect("carries one stable opaque cursor through authorized Topic archive pages", () =>
+  Effect.gen(function* () {
+    const actorAccountId = yield* makeUserId("reader-account");
+    const actorIdentityId = yield* makeWorkspaceIdentityId("reader-identity");
+    const authorIdentityId = yield* makeWorkspaceIdentityId("author-identity");
+    const workspaceId = yield* makeWorkspaceId("workspace");
+    const channelId = yield* makeChannelId("general");
+    const topicId = yield* makeTopicId("topic-501");
+    const messageId = yield* makeMessageId("message-501");
+    const activityAt = new Date("2026-07-22T12:00:00.000Z");
+    const channel = Channel.make({
+      id: channelId,
+      workspaceId,
+      name: ChannelName.make("general"),
+      purpose: ChannelPurpose.make("Coordinate workspace topics."),
+      visibility: "public",
+      maintainerIdentityId: authorIdentityId,
+    });
+    const topic = Topic.make({
+      id: topicId,
+      workspaceId,
+      channelId,
+      title: yield* makeTopicTitle("Archived release notes"),
+      openedByIdentityId: authorIdentityId,
+      messageCount: 1,
+      latestMessageId: messageId,
+      latestMessagePreview: makeTopicSummaryPreview("The archived release shipped."),
+      lastActivityAt: activityAt,
+      createdAt: activityAt,
+    });
+    const summary = {
+      topic,
+      latestMessage: {
+        message: Message.make({
+          id: messageId,
+          workspaceId,
+          topicId,
+          authorIdentityId,
+          body: MessageBody.make("The archived release shipped."),
+          position: 1,
+          createdAt: activityAt,
+        }),
+        author: {
+          id: authorIdentityId,
+          name: WorkspaceIdentityName.make("Topic Author"),
+          avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
+        },
+      },
+      messageCount: 1,
+    };
+    const requests = yield* Ref.make<ReadonlyArray<unknown>>([]);
+    const channelAccess = makeChannelAccess({
+      getConversationContextForActor: () =>
+        Effect.succeed({
+          channel,
+          actor: {
+            id: actorIdentityId,
+            name: WorkspaceIdentityName.make("Channel Reader"),
+            avatarUrl: WorkspaceAvatarUrl.make("/avatars/reader.svg"),
+          },
+          hasChannelMembership: false,
+        }),
+    });
+    const repository = makeRepository({
+      listArchivePageInChannel: (_actorAccountId, _workspaceId, _channelId, cursor) =>
+        Ref.updateAndGet(requests, (seen) => [...seen, cursor]).pipe(
+          Effect.map((seen) =>
+            seen.length === 1
+              ? {
+                  summaries: [summary],
+                  nextCursor: "server-owned-cursor",
+                  cursorValid: true,
+                }
+              : seen.length === 2
+                ? {
+                    summaries: [],
+                    cursorValid: true,
+                  }
+                : {
+                    summaries: [],
+                    cursorValid: false,
+                  },
+          ),
+        ),
     });
 
     const result = yield* Effect.gen(function* () {
       const topics = yield* TopicAccess;
-      return {
-        summaries: yield* topics.listForActor(actorAccountId, workspaceId, channelId),
-        detail: yield* topics.getForActor(actorAccountId, workspaceId, channelId, topicId),
-      };
+      const first = yield* topics.listArchiveForActor(actorAccountId, workspaceId, channelId);
+      const second = yield* topics.listArchiveForActor(
+        actorAccountId,
+        workspaceId,
+        channelId,
+        first.nextCursor,
+      );
+      const invalid = yield* topics
+        .listArchiveForActor(actorAccountId, workspaceId, channelId, "unknown-cursor")
+        .pipe(Effect.flip);
+      return { first, second, invalid };
     }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
 
-    expect(result.summaries).toHaveLength(1);
-    expect(result.summaries[0]?.latestMessage.message.body).toBe(
-      "Capture the remaining launch risks.",
-    );
-    expect(result.detail.topic.id).toBe(topicId);
-    expect(result.detail.messages).toHaveLength(1);
+    expect(result.first.topics.map(({ topic }) => topic.id)).toEqual([topicId]);
+    expect(result.first.nextCursor).toEqual(expect.any(String));
+    expect(result.second.topics).toEqual([]);
+    expect(result.invalid).toBeInstanceOf(TopicArchiveCursorInvalid);
+    expect(yield* Ref.get(requests)).toEqual([undefined, "server-owned-cursor", "unknown-cursor"]);
   }),
 );
 

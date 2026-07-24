@@ -21,6 +21,7 @@ import {
   useChannelsListPublicChannels,
 } from "../api/generated/cove-app.ts";
 import { channelDisplayName } from "../channel-display-name.ts";
+import { applyChannelPurposeValidity } from "../content-bounds.ts";
 import { requiredFormValue } from "../form-data.ts";
 
 interface ChannelSidebarProps {
@@ -170,10 +171,15 @@ export function ChannelSidebar({
                     id="channelPurpose"
                     name="channelPurpose"
                     required
+                    maxLength={2048}
+                    onInput={(event) => applyChannelPurposeValidity(event.currentTarget)}
                     rows={5}
                     className="mt-3 w-full resize-y rounded-lg border bg-background px-4 py-3 font-normal outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     placeholder="What’s this channel about?"
                   />
+                  <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                    Up to 2 KiB in UTF-8.
+                  </span>
                 </label>
                 <fieldset>
                   <legend className="text-base font-semibold">Visibility</legend>

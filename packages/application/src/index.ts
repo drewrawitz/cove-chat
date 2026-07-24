@@ -53,6 +53,8 @@ export {
   TopicAccess,
   TopicAccessFailure,
   TopicAccessLive,
+  TopicArchiveCursorInvalid,
+  TopicArchivePageView,
   TopicMessageView,
   TopicSummaryView,
   TopicUnavailable,

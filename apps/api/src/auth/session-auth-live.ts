@@ -13,6 +13,7 @@ import {
   SessionCookieTokenValue,
 } from "@cove/protocol";
 import { Effect, Layer, Redacted } from "effect";
+import { withConversationCommandBodyLimit } from "../support/conversation-command-body-limit.ts";
 
 const make = Effect.gen(function* () {
   const identities = yield* SessionIdentityResolver;
@@ -41,7 +42,7 @@ const make = Effect.gen(function* () {
             }),
           );
 
-          return httpEffect.pipe(
+          return withConversationCommandBodyLimit(httpEffect).pipe(
             Effect.provideService(AuthenticatedActor, actor),
             Effect.provideService(AuthenticatedSession, { actor, token }),
           );

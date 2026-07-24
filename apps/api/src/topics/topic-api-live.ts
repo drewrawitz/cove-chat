@@ -25,7 +25,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
-import { topicListResponse, topicResponse, topicResponseMessage } from "./topic-response.ts";
+import { topicArchivePageResponse, topicResponse, topicResponseMessage } from "./topic-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -47,6 +47,11 @@ const channelErrorResponse = (error: unknown) =>
 const topicErrorResponse = (error: unknown) =>
   errorTag(error) === "Application.TopicUnavailable" || invalidIdentifier(error) === "topic"
     ? TopicErrorResponses.unavailable
+    : channelErrorResponse(error);
+
+const topicArchiveErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.TopicArchiveCursorInvalid"
+    ? TopicErrorResponses.archiveCursorInvalid
     : channelErrorResponse(error);
 
 const createTopicErrorResponse = (error: unknown) => {
@@ -90,12 +95,14 @@ const resolveActorAndChannel = Effect.fn("TopicApi.resolveActorAndChannel")(func
 
 export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers) =>
   handlers
-    .handle("listTopics", ({ params }) =>
+    .handle("listArchivedTopics", ({ params, query }) =>
       Effect.gen(function* () {
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topics = yield* TopicAccess;
-        return topicListResponse(yield* topics.listForActor(actorId, workspaceId, channelId));
-      }).pipe(Effect.mapError(channelErrorResponse)),
+        return topicArchivePageResponse(
+          yield* topics.listArchiveForActor(actorId, workspaceId, channelId, query.cursor),
+        );
+      }).pipe(Effect.mapError(topicArchiveErrorResponse)),
     )
     .handle("createTopic", ({ headers, params, payload }) =>
       Effect.gen(function* () {

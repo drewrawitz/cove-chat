@@ -1,6 +1,5 @@
 import {
   ChannelId,
-  Message,
   MessageBody,
   MessageId,
   Topic,
@@ -10,12 +9,14 @@ import {
   UserId,
   WorkspaceId,
 } from "@cove/domain";
+import { StoredMessage } from "@cove/ports";
 import { Context, type Effect, Schema } from "effect";
 import { WorkspaceIdentityView } from "../channels/channel-access.ts";
 import type { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
+import { TopicArchiveCursorInvalid } from "./topic-archive-cursor.ts";
 
 export const TopicMessageView = Schema.Struct({
-  message: Message,
+  message: StoredMessage,
   author: WorkspaceIdentityView,
 });
 export interface TopicMessageView extends Schema.Schema.Type<typeof TopicMessageView> {}
@@ -26,6 +27,12 @@ export const TopicSummaryView = Schema.Struct({
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 export interface TopicSummaryView extends Schema.Schema.Type<typeof TopicSummaryView> {}
+
+export const TopicArchivePageView = Schema.Struct({
+  topics: Schema.Array(TopicSummaryView),
+  nextCursor: Schema.optionalKey(Schema.String),
+});
+export interface TopicArchivePageView extends Schema.Schema.Type<typeof TopicArchivePageView> {}
 
 export const TopicView = Schema.Struct({
   topic: Topic,
@@ -95,11 +102,15 @@ export class MessageUnavailable extends Schema.TaggedErrorClass<MessageUnavailab
 ) {}
 
 export interface TopicAccessService {
-  readonly listForActor: (
+  readonly listArchiveForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
     channelId: ChannelId,
-  ) => Effect.Effect<ReadonlyArray<TopicSummaryView>, ChannelUnavailable | TopicAccessFailure>;
+    cursor?: string,
+  ) => Effect.Effect<
+    TopicArchivePageView,
+    ChannelUnavailable | TopicArchiveCursorInvalid | TopicAccessFailure
+  >;
   readonly getForActor: (
     actorAccountId: UserId,
     workspaceId: WorkspaceId,

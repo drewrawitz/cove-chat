@@ -75,6 +75,10 @@ export const topicTable = table("topic")
     title: string(),
     intent: enumeration<TopicIntent>().optional(),
     openedByIdentityId: string().from('opened_by_identity_id'),
+    messageCount: number().from('message_count'),
+    latestMessageId: string().from('latest_message_id'),
+    latestMessagePreview: string().from('latest_message_preview').optional(),
+    lastActivityAt: number().from('last_activity_at'),
     createdAt: number().from('created_at'),
   })
   .primaryKey("workspaceId", "id");

@@ -2,8 +2,10 @@ import {
   Message,
   MessageBody,
   MessageId,
+  MessagePosition,
   Topic,
   TopicId,
+  UserId,
   WorkspaceAvatarUrl,
   WorkspaceId,
   WorkspaceIdentityId,
@@ -20,8 +22,21 @@ export const TopicAuthorRecord = Schema.Struct({
 });
 export interface TopicAuthorRecord extends Schema.Schema.Type<typeof TopicAuthorRecord> {}
 
+export const StoredMessage = Schema.Struct({
+  id: MessageId,
+  workspaceId: WorkspaceId,
+  topicId: TopicId,
+  authorIdentityId: WorkspaceIdentityId,
+  body: Schema.optionalKey(Schema.String),
+  position: MessagePosition,
+  createdAt: Schema.Date,
+  editedAt: Schema.optionalKey(Schema.Date),
+  deletedAt: Schema.optionalKey(Schema.Date),
+});
+export interface StoredMessage extends Schema.Schema.Type<typeof StoredMessage> {}
+
 export const TopicMessageRecord = Schema.Struct({
-  message: Message,
+  message: StoredMessage,
   author: TopicAuthorRecord,
 });
 export interface TopicMessageRecord extends Schema.Schema.Type<typeof TopicMessageRecord> {}
@@ -38,6 +53,12 @@ export const TopicRecord = Schema.Struct({
   messages: Schema.Array(TopicMessageRecord),
 });
 export interface TopicRecord extends Schema.Schema.Type<typeof TopicRecord> {}
+
+export interface TopicArchivePageRecord {
+  readonly summaries: ReadonlyArray<TopicSummaryRecord>;
+  readonly cursorValid: boolean;
+  readonly nextCursor?: string;
+}
 
 export interface MessageAppend {
   readonly id: MessageId;
@@ -64,10 +85,12 @@ export interface MessageTombstone {
 }
 
 export interface TopicRepositoryService {
-  readonly listSummariesInChannel: (
+  readonly listArchivePageInChannel: (
+    actorAccountId: UserId,
     workspaceId: WorkspaceId,
     channelId: ChannelId,
-  ) => Effect.Effect<ReadonlyArray<TopicSummaryRecord>, PersistenceError>;
+    cursor?: string,
+  ) => Effect.Effect<TopicArchivePageRecord, PersistenceError>;
   readonly findById: (
     workspaceId: WorkspaceId,
     channelId: ChannelId,

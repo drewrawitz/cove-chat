@@ -226,7 +226,11 @@ beforeAll(async () => {
       workspace_id,
       channel_id,
       title,
-      opened_by_identity_id
+      opened_by_identity_id,
+      message_count,
+      latest_message_id,
+      latest_message_preview,
+      last_activity_at
     )
     VALUES
       (
@@ -234,14 +238,22 @@ beforeAll(async () => {
         'sync-workspace',
         'private-channel',
         'Private synchronization contract',
-        'sync-alice-identity'
+        'sync-alice-identity',
+        1,
+        'private-message',
+        'Only explicit Channel members can synchronize this Message.',
+        now()
       ),
       (
         'other-topic',
         'other-workspace',
         'other-public-channel',
         'Cross-Workspace synchronization contract',
-        'other-alice-identity'
+        'other-alice-identity',
+        1,
+        'other-message',
+        'Cross-Workspace Message.',
+        now()
       );
 
     INSERT INTO messages (
@@ -252,14 +264,63 @@ beforeAll(async () => {
       body,
       position
     )
-    VALUES (
-      'private-message',
+    VALUES
+      (
+        'private-message',
+        'sync-workspace',
+        'private-topic',
+        'sync-alice-identity',
+        'Only explicit Channel members can synchronize this Message.',
+        1
+      ),
+      (
+        'other-message',
+        'other-workspace',
+        'other-topic',
+        'other-alice-identity',
+        'Cross-Workspace Message.',
+        1
+      );
+
+    INSERT INTO topics (
+      id,
+      workspace_id,
+      channel_id,
+      title,
+      opened_by_identity_id,
+      message_count,
+      latest_message_id,
+      latest_message_preview,
+      last_activity_at
+    )
+    SELECT
+      'bounded-topic-' || lpad(number::text, 2, '0'),
       'sync-workspace',
-      'private-topic',
+      'private-channel',
+      'Bounded Topic ' || lpad(number::text, 2, '0'),
       'sync-alice-identity',
-      'Only explicit Channel members can synchronize this Message.',
+      1,
+      'bounded-message-' || lpad(number::text, 2, '0'),
+      'Bounded summary',
+      now() - make_interval(secs => number)
+    FROM generate_series(1, 51) AS number;
+
+    INSERT INTO messages (
+      id,
+      workspace_id,
+      topic_id,
+      author_identity_id,
+      body,
+      position
+    )
+    SELECT
+      'bounded-message-' || lpad(number::text, 2, '0'),
+      'sync-workspace',
+      'bounded-topic-' || lpad(number::text, 2, '0'),
+      'sync-alice-identity',
+      'Only one Message belongs in each synchronized summary.',
       1
-    );
+    FROM generate_series(1, 51) AS number;
   `);
 
   const queryPort = await allocatePort();
@@ -353,10 +414,29 @@ describe("authorized Topic synchronization", () => {
         }),
         { type: "complete" },
       );
+      const boundedForMember = await alice.run(
+        queries.topics.inChannel({
+          workspaceId: "sync-workspace",
+          channelId: "private-channel",
+          limit: 50,
+        }),
+        { type: "complete" },
+      );
+      const boundedForOwnerWithoutMembership = await bob.run(
+        queries.topics.inChannel({
+          workspaceId: "sync-workspace",
+          channelId: "private-channel",
+          limit: 50,
+        }),
+        { type: "complete" },
+      );
       expect(privateForMember?.title).toBe("Private synchronization contract");
       expect(privateForMember?.messages).toHaveLength(1);
       expect(privateForOwnerWithoutMembership).toBeUndefined();
       expect(crossWorkspaceForUnknownActor).toBeUndefined();
+      expect(boundedForMember).toHaveLength(50);
+      expect(boundedForMember.every(({ messages }) => messages.length === 1)).toBe(true);
+      expect(boundedForOwnerWithoutMembership).toEqual([]);
     } finally {
       await Promise.all([alice.close(), bob.close()]);
     }

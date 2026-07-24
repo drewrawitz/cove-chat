@@ -4,7 +4,11 @@ import {
   makeSessionToken,
 } from "@cove/application";
 import { SessionCookie } from "@cove/protocol";
-import { handleCoveQueryRequest, InvalidCoveQueryRequestError } from "@cove/sync/server";
+import {
+  CoveQueryRequestTooLargeError,
+  handleCoveQueryRequest,
+  InvalidCoveQueryRequestError,
+} from "@cove/sync/server";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
@@ -12,6 +16,10 @@ const unauthorized = HttpServerResponse.jsonUnsafe({ error: "Unauthorized" }, { 
 const badRequest = HttpServerResponse.jsonUnsafe(
   { error: "Invalid query request" },
   { status: 400 },
+);
+const requestTooLarge = HttpServerResponse.jsonUnsafe(
+  { error: "Query request too large" },
+  { status: 413 },
 );
 const internalServerError = HttpServerResponse.jsonUnsafe(
   { error: "Internal Server Error" },
@@ -21,6 +29,10 @@ const internalServerError = HttpServerResponse.jsonUnsafe(
 export const respondToCoveQueryRequest = (request: Request, userID: string) =>
   Effect.tryPromise(() => handleCoveQueryRequest({ request, userID })).pipe(
     Effect.map((result) => HttpServerResponse.jsonUnsafe(result)),
+    Effect.catchIf(
+      (error) => error.cause instanceof CoveQueryRequestTooLargeError,
+      () => Effect.succeed(requestTooLarge),
+    ),
     Effect.catchIf(
       (error) => error.cause instanceof InvalidCoveQueryRequestError,
       () => Effect.succeed(badRequest),

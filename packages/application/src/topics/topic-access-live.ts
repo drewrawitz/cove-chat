@@ -1,4 +1,4 @@
-import { Message, Topic } from "@cove/domain";
+import { Message, Topic, makeTopicSummaryPreview } from "@cove/domain";
 import {
   type PersistenceError,
   type TopicMessageRecord,
@@ -14,6 +14,7 @@ import {
   type ChannelConversationContext,
 } from "../channels/channel-access.ts";
 import { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
+import { TopicArchiveCursorInvalid } from "./topic-archive-cursor.ts";
 import {
   type AddMessageCommand,
   type CreateTopicCommand,
@@ -23,6 +24,7 @@ import {
   type EditMessageCommand,
   TopicAccess,
   TopicAccessFailure,
+  TopicArchivePageView,
   TopicMessageView,
   TopicSummaryView,
   TopicUnavailable,
@@ -104,13 +106,25 @@ const make = Effect.gen(function* () {
   });
 
   return TopicAccess.of({
-    listForActor: Effect.fn("TopicAccess.listForActor")(
-      function* (actorAccountId, workspaceId, channelId) {
+    listArchiveForActor: Effect.fn("TopicAccess.listArchiveForActor")(
+      function* (actorAccountId, workspaceId, channelId, cursor) {
         yield* conversationContext(actorAccountId, workspaceId, channelId);
-        const summaries = yield* repository.listSummariesInChannel(workspaceId, channelId);
-        return summaries.map(topicSummaryView);
+        const page = yield* repository.listArchivePageInChannel(
+          actorAccountId,
+          workspaceId,
+          channelId,
+          cursor,
+        );
+        if (!page.cursorValid) {
+          return yield* Effect.fail(new TopicArchiveCursorInvalid());
+        }
+        const topics = page.summaries.map(topicSummaryView);
+        return TopicArchivePageView.make({
+          topics,
+          ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+        });
       },
-      (effect) => recoverFailure("TopicAccess.listForActor", effect),
+      (effect) => recoverFailure("TopicAccess.listArchiveForActor", effect),
     ),
     getForActor: Effect.fn("TopicAccess.getForActor")(
       function* (actorAccountId, workspaceId, channelId, topicId) {
@@ -144,6 +158,10 @@ const make = Effect.gen(function* () {
               title: command.title,
               ...(command.intent === undefined ? {} : { intent: command.intent }),
               openedByIdentityId: context.actor.id,
+              messageCount: 1,
+              latestMessageId: command.openingBriefMessageId,
+              latestMessagePreview: makeTopicSummaryPreview(command.openingBrief),
+              lastActivityAt: now,
               createdAt: now,
             });
             const openingBrief = Message.make({

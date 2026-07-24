@@ -15,4 +15,7 @@ Messages remain counted as stable tombstones. Loading older Topics expands one c
 from 50 to 100, then 150, and so on, instead of composing reactive cursor pages that can overlap or
 leave gaps when new activity reorders Topics. The reactive window stops at 500 Topics. Older Topics
 remain accessible through stable, non-reactive HTTP snapshot pages of 100; opening an archived
-result activates its normal Zero-backed Topic view.
+result activates its normal Zero-backed Topic view. Snapshot stability freezes Topic membership and
+ordering for cursor traversal, while each page reads the latest committed summary fields so edits,
+tombstones, and attribution corrections remain visible. Historical activity ordering is retained
+only while an unexpired archive cursor can reference it and is pruned in bounded batches.

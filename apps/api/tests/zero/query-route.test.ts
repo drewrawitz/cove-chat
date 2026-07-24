@@ -48,6 +48,30 @@ layer(Layer.empty)("Zero query response", (it) => {
       }
     }),
   );
+
+  it.effect("maps oversized Zero query bodies to a stable 413 response", () =>
+    Effect.gen(function* () {
+      const request = queryRequest("topics.byId", {
+        workspaceId: "workspace-1",
+        channelId: "channel-1",
+        topicId: "topic-1",
+      });
+      const response = yield* respondToCoveQueryRequest(
+        new Request(request, {
+          headers: {
+            ...Object.fromEntries(request.headers),
+            "content-length": String(256 * 1024 + 1),
+          },
+        }),
+        "account-1",
+      );
+
+      expect(response.status).toBe(413);
+      expect(response.body.toJSON()).toMatchObject({
+        body: JSON.stringify({ error: "Query request too large" }),
+      });
+    }),
+  );
 });
 
 layer(QueryApi)("Zero query route", (it) => {

@@ -15,16 +15,38 @@ declare module "@rocicorp/zero" {
 const defineQuery = defineQueryWithType<Schema, QueryContext>();
 const defineQueries = defineQueriesWithType<Schema>();
 
-const ChannelTopicsArguments = z.object({
+export const CHANNEL_TOPIC_LIVE_INITIAL = 50;
+export const CHANNEL_TOPIC_LIVE_INCREMENT = 50;
+export const CHANNEL_TOPIC_LIVE_MAXIMUM = 500;
+
+const ChannelTopicLiveLimit = z.union([
+  z.literal(50),
+  z.literal(100),
+  z.literal(150),
+  z.literal(200),
+  z.literal(250),
+  z.literal(300),
+  z.literal(350),
+  z.literal(400),
+  z.literal(450),
+  z.literal(500),
+]);
+export type ChannelTopicLiveLimit = z.output<typeof ChannelTopicLiveLimit>;
+
+const ChannelScopeArguments = z.object({
   workspaceId: z.string().min(1),
   channelId: z.string().min(1),
 });
 
-const TopicArguments = ChannelTopicsArguments.extend({
+const ChannelTopicsArguments = ChannelScopeArguments.extend({
+  limit: ChannelTopicLiveLimit,
+});
+
+const TopicArguments = ChannelScopeArguments.extend({
   topicId: z.string().min(1),
 });
 
-const authorizedTopics = (args: z.output<typeof ChannelTopicsArguments>, context: QueryContext) =>
+const authorizedTopics = (args: z.output<typeof ChannelScopeArguments>, context: QueryContext) =>
   zql.topic
     .where("workspaceId", args.workspaceId)
     .where("channelId", args.channelId)
@@ -54,10 +76,20 @@ const authorizedTopics = (args: z.output<typeof ChannelTopicsArguments>, context
 const withMessages = (query: ReturnType<typeof authorizedTopics>) =>
   query.related("messages", (message) => message.orderBy("position", "asc").related("author"));
 
+const withLatestMessage = (query: ReturnType<typeof authorizedTopics>) =>
+  query.related("messages", (message) =>
+    message.orderBy("position", "desc").limit(1).related("author"),
+  );
+
 export const queries = defineQueries({
   topics: {
     inChannel: defineQuery(ChannelTopicsArguments, ({ args, ctx }) =>
-      withMessages(authorizedTopics(args, ctx)).orderBy("createdAt", "desc"),
+      withLatestMessage(
+        authorizedTopics(args, ctx)
+          .orderBy("lastActivityAt", "desc")
+          .orderBy("id", "asc")
+          .limit(args.limit),
+      ),
     ),
     byId: defineQuery(TopicArguments, ({ args, ctx }) =>
       withMessages(authorizedTopics(args, ctx).where("id", args.topicId)).one(),

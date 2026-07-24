@@ -31,8 +31,8 @@ const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
     TopicAccess,
     TopicAccess.of({
-      listForActor: Effect.fn("TopicAccess.Test.listForActor")(() =>
-        unmockedTopicAccess("listForActor"),
+      listArchiveForActor: Effect.fn("TopicAccess.Test.listArchiveForActor")(() =>
+        unmockedTopicAccess("listArchiveForActor"),
       ),
       getForActor: Effect.fn("TopicAccess.Test.getForActor")(() =>
         unmockedTopicAccess("getForActor"),

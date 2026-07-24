@@ -2,3 +2,4 @@ export { MessageBody, InvalidMessageBody, makeMessageBody } from "./message-body
 export { Message, MessagePosition } from "./message.ts";
 export { Topic, TopicIntent } from "./topic.ts";
 export { InvalidTopicTitle, TopicTitle, makeTopicTitle } from "./topic-title.ts";
+export { TopicSummaryPreview, makeTopicSummaryPreview } from "./topic-summary-preview.ts";

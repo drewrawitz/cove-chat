@@ -1,7 +1,12 @@
-import type { TopicMessageView, TopicSummaryView, TopicView } from "@cove/application";
+import type {
+  TopicArchivePageView,
+  TopicMessageView,
+  TopicSummaryView,
+  TopicView,
+} from "@cove/application";
 import {
+  TopicArchivePageResponse,
   TopicMessageResponse,
-  TopicListResponse,
   TopicResponse,
   TopicSummaryResponse,
 } from "@cove/protocol";
@@ -39,9 +44,27 @@ export const topicResponse = (view: TopicView): TopicResponse =>
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({
     ...topicResponseFields(view),
-    latestMessage: topicResponseMessage(view.latestMessage),
+    latestMessage: {
+      id: view.latestMessage.message.id,
+      ...(view.topic.latestMessagePreview === undefined
+        ? {}
+        : { preview: view.topic.latestMessagePreview }),
+      position: view.latestMessage.message.position,
+      createdAt: view.latestMessage.message.createdAt,
+      edited: view.latestMessage.message.editedAt !== undefined,
+      deleted: view.latestMessage.message.deletedAt !== undefined,
+      author: {
+        id: view.latestMessage.author.id,
+        name: view.latestMessage.author.name,
+        avatarUrl: view.latestMessage.author.avatarUrl,
+      },
+    },
     messageCount: view.messageCount,
+    lastActivityAt: view.topic.lastActivityAt,
   });
 
-export const topicListResponse = (topics: ReadonlyArray<TopicSummaryView>): TopicListResponse =>
-  TopicListResponse.make({ topics: topics.map(topicSummaryResponse) });
+export const topicArchivePageResponse = (page: TopicArchivePageView): TopicArchivePageResponse =>
+  TopicArchivePageResponse.make({
+    topics: page.topics.map(topicSummaryResponse),
+    ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+  });

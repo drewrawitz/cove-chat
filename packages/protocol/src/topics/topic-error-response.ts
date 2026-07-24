@@ -16,6 +16,18 @@ const messageMutationForbiddenDefinition = {
   message: "Only the Message author can change it.",
 } as const;
 
+const archiveCursorInvalidDefinition = {
+  code: "TOPIC_ARCHIVE_CURSOR_INVALID",
+  message: "Topic archive cursor is invalid.",
+} as const;
+
+export const TopicArchiveCursorInvalidResponse = Schema.Struct({
+  code: Schema.Literals([archiveCursorInvalidDefinition.code]),
+  message: Schema.Literals([archiveCursorInvalidDefinition.message]),
+})
+  .annotate({ identifier: "TopicArchiveCursorInvalidResponse" })
+  .pipe(HttpApiSchema.status("BadRequest"));
+
 export const TopicUnavailableResponse = Schema.Struct({
   code: Schema.Literals([unavailableDefinition.code]),
   message: Schema.Literals([unavailableDefinition.message]),
@@ -38,6 +50,7 @@ export const MessageMutationForbiddenResponse = Schema.Struct({
   .pipe(HttpApiSchema.status("Forbidden"));
 
 export const TopicErrorResponses = {
+  archiveCursorInvalid: TopicArchiveCursorInvalidResponse.make(archiveCursorInvalidDefinition),
   messageMutationForbidden: MessageMutationForbiddenResponse.make(
     messageMutationForbiddenDefinition,
   ),

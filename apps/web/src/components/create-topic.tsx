@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { type FormEvent, type ReactElement, useRef, useState } from "react";
 import { useTopicsCreateTopic } from "../api/generated/cove-app.ts";
+import { applyMessageBodyValidity, applyTopicTitleValidity } from "../content-bounds.ts";
 import { requiredFormValue } from "../form-data.ts";
 import { topicIntentFromFormValue, topicIntentOptions } from "../topic-intent.ts";
 
@@ -90,9 +91,14 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
                   ref={titleInput}
                   name="topicTitle"
                   required
+                  maxLength={512}
+                  onInput={(event) => applyTopicTitleValidity(event.currentTarget)}
                   className="mt-3 h-12 w-full rounded-lg border bg-background px-4 font-normal outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   placeholder="What should people be able to find later?"
                 />
+                <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                  Up to 512 UTF-8 bytes.
+                </span>
               </label>
 
               <label className="text-base font-semibold" htmlFor="openingBrief">
@@ -102,9 +108,13 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
                   name="openingBrief"
                   required
                   rows={7}
+                  onInput={(event) => applyMessageBodyValidity(event.currentTarget)}
                   className="mt-3 w-full resize-y rounded-lg border bg-background px-4 py-3 font-normal leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   placeholder="Establish the subject, context, and what participants should consider."
                 />
+                <span className="mt-2 block text-xs font-normal text-muted-foreground">
+                  Up to 8 KiB of UTF-8 text.
+                </span>
               </label>
 
               <label className="text-base font-semibold" htmlFor="topicIntent">

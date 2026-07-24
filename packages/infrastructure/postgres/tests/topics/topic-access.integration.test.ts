@@ -6,6 +6,8 @@ import {
   DeleteMessageCommand,
   EditMessageCommand,
   TopicAccess,
+  TopicAccessFailure,
+  TopicArchiveCursorInvalid,
   TopicUnavailable,
 } from "@cove/application";
 import {
@@ -92,7 +94,7 @@ const withFixtures = <A, E, R>(use: (fixtures: Fixtures) => Effect.Effect<A, E, 
   );
 
 layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) => {
-  it.effect("creates, browses, and opens a Topic through inherited Channel access", () =>
+  it.effect("creates and opens a Topic through inherited Channel access", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
@@ -119,11 +121,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           }),
         );
 
-        const summaries = yield* topics.listForActor(
-          fixtures.readerAccountId,
-          fixtures.workspaceId,
-          fixtures.publicChannelId,
-        );
         const detail = yield* topics.getForActor(
           fixtures.readerAccountId,
           fixtures.workspaceId,
@@ -144,7 +141,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           )
           .pipe(Effect.flip);
         const hiddenPrivateChannel = yield* topics
-          .listForActor(fixtures.readerAccountId, fixtures.workspaceId, fixtures.privateChannelId)
+          .listArchiveForActor(
+            fixtures.readerAccountId,
+            fixtures.workspaceId,
+            fixtures.privateChannelId,
+          )
           .pipe(Effect.flip);
         const wrongChannel = yield* topics
           .getForActor(
@@ -156,18 +157,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           .pipe(Effect.flip);
 
         expect(created.messages).toHaveLength(1);
-        expect(summaries).toHaveLength(1);
-        expect(summaries[0]).toMatchObject({
-          topic: { id: fixtures.topicId, intent: "question" },
-          latestMessage: {
-            message: {
-              body: "The release candidate passed smoke testing.",
-              position: 2,
-            },
-            author: { name: "Topic Author" },
-          },
-          messageCount: 2,
-        });
         expect(detail.messages[0]?.message.body).toBe("Capture the remaining launch risks.");
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);
         expect(hiddenPrivateChannel).toBeInstanceOf(ChannelUnavailable);
@@ -309,6 +298,366 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           { body: "The release candidate passed smoke testng.", operation: "edit" },
           { body: "The release candidate passed smoke testing.", operation: "delete" },
         ]);
+      }),
+    ),
+  );
+
+  it.effect(
+    "maintains the bounded latest-Message projection atomically without reordering edits or deletions",
+    () =>
+      withFixtures((fixtures) =>
+        Effect.gen(function* () {
+          const topics = yield* TopicAccess;
+          const sql = yield* SqlClient.SqlClient;
+          yield* topics.create(
+            CreateTopicCommand.make({
+              actorAccountId: fixtures.authorAccountId,
+              workspaceId: fixtures.workspaceId,
+              channelId: fixtures.publicChannelId,
+              topicId: fixtures.topicId,
+              openingBriefMessageId: fixtures.messageId,
+              title: yield* makeTopicTitle("Release readiness"),
+              openingBrief: MessageBody.make("Capture the remaining launch risks."),
+            }),
+          );
+
+          const initial = yield* topics.getForActor(
+            fixtures.authorAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            fixtures.topicId,
+          );
+          expect(initial.topic).toMatchObject({
+            messageCount: 1,
+            latestMessageId: fixtures.messageId,
+            latestMessagePreview: "Capture the remaining launch risks.",
+          });
+
+          for (const oversizedUpdate of [
+            sql`
+              UPDATE topics
+              SET title = ${"é".repeat(257)}
+              WHERE workspace_id = ${fixtures.workspaceId}
+                AND id = ${fixtures.topicId}
+            `,
+            sql`
+              UPDATE topics
+              SET latest_message_preview = ${"é".repeat(257)}
+              WHERE workspace_id = ${fixtures.workspaceId}
+                AND id = ${fixtures.topicId}
+            `,
+            sql`
+              UPDATE channels
+              SET purpose = ${"é".repeat(1025)}
+              WHERE workspace_id = ${fixtures.workspaceId}
+                AND id = ${fixtures.publicChannelId}
+            `,
+          ]) {
+            expect(yield* oversizedUpdate.pipe(Effect.flip)).toBeDefined();
+          }
+
+          const replyId = yield* makeMessageId(`reply-${fixtures.messageId}`);
+          const appended = yield* topics.addMessage(
+            AddMessageCommand.make({
+              actorAccountId: fixtures.authorAccountId,
+              workspaceId: fixtures.workspaceId,
+              channelId: fixtures.publicChannelId,
+              topicId: fixtures.topicId,
+              messageId: replyId,
+              body: MessageBody.make("🙂".repeat(129)),
+            }),
+          );
+          const afterAppend = yield* topics.getForActor(
+            fixtures.authorAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            fixtures.topicId,
+          );
+          expect(afterAppend.topic).toMatchObject({
+            messageCount: 2,
+            latestMessageId: replyId,
+            latestMessagePreview: "🙂".repeat(128),
+            lastActivityAt: appended.message.createdAt,
+          });
+
+          const duplicate = yield* topics
+            .addMessage(
+              AddMessageCommand.make({
+                actorAccountId: fixtures.authorAccountId,
+                workspaceId: fixtures.workspaceId,
+                channelId: fixtures.publicChannelId,
+                topicId: fixtures.topicId,
+                messageId: replyId,
+                body: MessageBody.make("This append must roll back."),
+              }),
+            )
+            .pipe(Effect.flip);
+          expect(duplicate).toBeInstanceOf(TopicAccessFailure);
+
+          yield* topics.editMessage(
+            EditMessageCommand.make({
+              actorAccountId: fixtures.authorAccountId,
+              workspaceId: fixtures.workspaceId,
+              channelId: fixtures.publicChannelId,
+              topicId: fixtures.topicId,
+              messageId: replyId,
+              body: MessageBody.make("é".repeat(300)),
+            }),
+          );
+          const afterEdit = yield* topics.getForActor(
+            fixtures.authorAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            fixtures.topicId,
+          );
+          expect(afterEdit.topic).toMatchObject({
+            messageCount: 2,
+            latestMessageId: replyId,
+            latestMessagePreview: "é".repeat(256),
+            lastActivityAt: appended.message.createdAt,
+          });
+
+          yield* topics.deleteMessage(
+            DeleteMessageCommand.make({
+              actorAccountId: fixtures.authorAccountId,
+              workspaceId: fixtures.workspaceId,
+              channelId: fixtures.publicChannelId,
+              topicId: fixtures.topicId,
+              messageId: replyId,
+            }),
+          );
+          const afterDelete = yield* topics.getForActor(
+            fixtures.authorAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            fixtures.topicId,
+          );
+          expect(afterDelete.topic).toMatchObject({
+            messageCount: 2,
+            latestMessageId: replyId,
+            lastActivityAt: appended.message.createdAt,
+          });
+          expect(afterDelete.topic).not.toHaveProperty("latestMessagePreview");
+          expect(afterDelete.messages.at(-1)?.message).toMatchObject({
+            id: replyId,
+            deletedAt: expect.any(Date),
+          });
+        }),
+      ),
+  );
+
+  it.effect("pages Topics after the 500-Topic live window in deterministic stable snapshots", () =>
+    withFixtures((fixtures) =>
+      Effect.gen(function* () {
+        const topics = yield* TopicAccess;
+        const sql = yield* SqlClient.SqlClient;
+        const activityAt = new Date("2026-07-22T12:00:00.000Z");
+
+        yield* sql`
+            INSERT INTO topics (
+              id,
+              workspace_id,
+              channel_id,
+              title,
+              opened_by_identity_id,
+              message_count,
+              latest_message_id,
+              latest_message_preview,
+              last_activity_at,
+              created_at
+            )
+            SELECT
+              'archive-topic-' || lpad(number::text, 3, '0'),
+              ${fixtures.workspaceId},
+              ${fixtures.publicChannelId},
+              'Archive Topic ' || lpad(number::text, 3, '0'),
+              ${fixtures.authorIdentityId},
+              1,
+              'archive-message-' || lpad(number::text, 3, '0'),
+              'Archived summary ' || lpad(number::text, 3, '0'),
+              ${activityAt},
+              ${activityAt}
+            FROM generate_series(1, 702) AS number
+          `;
+        yield* sql`
+            INSERT INTO messages (
+              id,
+              workspace_id,
+              topic_id,
+              author_identity_id,
+              body,
+              position,
+              created_at
+            )
+            SELECT
+              'archive-message-' || lpad(number::text, 3, '0'),
+              ${fixtures.workspaceId},
+              'archive-topic-' || lpad(number::text, 3, '0'),
+              ${fixtures.authorIdentityId},
+              'Archived summary ' || lpad(number::text, 3, '0'),
+              1,
+              ${activityAt}
+            FROM generate_series(1, 702) AS number
+          `;
+
+        const first = yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+        );
+        expect(first.topics).toHaveLength(100);
+        expect(first.topics.at(0)?.topic.id).toBe("archive-topic-501");
+        expect(first.topics.at(-1)?.topic.id).toBe("archive-topic-600");
+        expect(first.nextCursor).toEqual(expect.any(String));
+
+        const [cursorStorage] = yield* sql<{
+          readonly cursorCount: number;
+          readonly snapshotCount: number;
+        }>`
+          SELECT
+            count(*)::integer AS "cursorCount",
+            count(DISTINCT snapshot_id)::integer AS "snapshotCount"
+          FROM topic_archive_cursors
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND channel_id = ${fixtures.publicChannelId}
+            AND account_id = ${fixtures.readerAccountId}
+        `;
+        expect(cursorStorage).toEqual({ cursorCount: 1, snapshotCount: 1 });
+
+        const crossActorCursor = yield* topics
+          .listArchiveForActor(
+            fixtures.authorAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            first.nextCursor,
+          )
+          .pipe(Effect.flip);
+        expect(crossActorCursor).toBeInstanceOf(TopicArchiveCursorInvalid);
+
+        yield* sql`
+            UPDATE topics
+            SET last_activity_at = ${new Date("2026-07-23T12:00:00.000Z")}
+            WHERE workspace_id = ${fixtures.workspaceId}
+              AND id = 'archive-topic-601'
+          `;
+
+        const freshVisit = yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+        );
+        expect(freshVisit.topics.at(0)?.topic.id).toBe("archive-topic-500");
+
+        const second = yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          first.nextCursor,
+        );
+        expect(second.topics.at(0)?.topic.id).toBe("archive-topic-601");
+        expect(second.topics.at(-1)?.topic.id).toBe("archive-topic-700");
+        expect(second.nextCursor).toEqual(expect.any(String));
+        const [{ liveAfterActivity }] = yield* sql<{ readonly liveAfterActivity: boolean }>`
+          SELECT EXISTS (
+            SELECT 1
+            FROM (
+              SELECT id
+              FROM topics
+              WHERE workspace_id = ${fixtures.workspaceId}
+                AND channel_id = ${fixtures.publicChannelId}
+              ORDER BY last_activity_at DESC, id
+              LIMIT 500
+            ) AS live_topic
+            WHERE live_topic.id = 'archive-topic-601'
+          ) AS "liveAfterActivity"
+        `;
+        expect(liveAfterActivity).toBe(true);
+
+        yield* topics.addMessage(
+          AddMessageCommand.make({
+            actorAccountId: fixtures.authorAccountId,
+            workspaceId: fixtures.workspaceId,
+            channelId: fixtures.publicChannelId,
+            topicId: yield* makeTopicId("archive-topic-650"),
+            messageId: yield* makeMessageId(`archive-activity-${randomUUID()}`),
+            body: MessageBody.make("Snapshot-visible activity"),
+          }),
+        );
+        const repeatedSecond = yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          first.nextCursor,
+        );
+        expect(repeatedSecond.topics.map(({ topic }) => topic.id)).toEqual(
+          second.topics.map(({ topic }) => topic.id),
+        );
+        expect(repeatedSecond.nextCursor).toBe(second.nextCursor);
+        expect(
+          second.topics.find(({ topic }) => topic.id === "archive-topic-650")?.topic,
+        ).toMatchObject({
+          messageCount: 1,
+          latestMessageId: "archive-message-650",
+        });
+        expect(
+          repeatedSecond.topics.find(({ topic }) => topic.id === "archive-topic-650")?.topic,
+        ).toMatchObject({
+          messageCount: 2,
+          latestMessagePreview: "Snapshot-visible activity",
+        });
+
+        const third = yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+          second.nextCursor,
+        );
+        expect(third.topics.map(({ topic }) => topic.id)).toEqual([
+          "archive-topic-701",
+          "archive-topic-702",
+        ]);
+        expect(third.nextCursor).toBeUndefined();
+
+        yield* sql`
+          UPDATE topic_archive_cursors
+          SET expires_at = ${new Date("2020-01-01T00:00:00.000Z")}
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND channel_id = ${fixtures.publicChannelId}
+            AND account_id = ${fixtures.readerAccountId}
+        `;
+        const expiredCursor = yield* topics
+          .listArchiveForActor(
+            fixtures.readerAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            first.nextCursor,
+          )
+          .pipe(Effect.flip);
+        expect(expiredCursor).toBeInstanceOf(TopicArchiveCursorInvalid);
+
+        yield* topics.listArchiveForActor(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          fixtures.publicChannelId,
+        );
+        const [{ snapshotCount }] = yield* sql<{ readonly snapshotCount: number }>`
+          SELECT count(DISTINCT snapshot_id)::integer AS "snapshotCount"
+          FROM topic_archive_cursors
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND channel_id = ${fixtures.publicChannelId}
+            AND account_id = ${fixtures.readerAccountId}
+        `;
+        expect(snapshotCount).toBe(1);
+
+        const invalidCursor = yield* topics
+          .listArchiveForActor(
+            fixtures.readerAccountId,
+            fixtures.workspaceId,
+            fixtures.publicChannelId,
+            "not-a-cursor",
+          )
+          .pipe(Effect.flip);
+        expect(invalidCursor).toBeInstanceOf(TopicArchiveCursorInvalid);
       }),
     ),
   );

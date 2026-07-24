@@ -100,6 +100,17 @@ test("posts a trimmed draft and returns to the collapsed bar", async () => {
   });
 });
 
+test("explains the 8 KiB reply limit before submission", () => {
+  render(<TopicReplyComposer identity={identity} onPost={vi.fn()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  const reply = screen.getByLabelText("Write a reply") as HTMLTextAreaElement;
+  fireEvent.change(reply, { target: { value: "é".repeat(4097) } });
+
+  expect(reply.validationMessage).toContain("8 KiB");
+  expect(screen.getByText("Up to 8 KiB of UTF-8 text.")).toBeDefined();
+});
+
 test.each([
   { shortcut: "Command", modifier: { metaKey: true } },
   { shortcut: "Control", modifier: { ctrlKey: true } },
