@@ -8,6 +8,14 @@ const TARGET_MIGRATION = "20260723234500_bounded_channel_topic_summaries";
 const migrationsDirectory = fileURLToPath(
   new URL("../../../../db/prisma/migrations/", import.meta.url),
 );
+const zeroPublicationMigration = join(
+  migrationsDirectory,
+  "20260723150000_zero_durable_topic_publication",
+  "migration.sql",
+);
+const resetBeforeMigrate = fileURLToPath(
+  new URL("../../../../db/prisma/reset-before-migrate.sql", import.meta.url),
+);
 const POSTGRES_IMAGE = "postgres:18.4-alpine";
 
 let container: StartedPostgreSqlContainer | undefined;
@@ -57,7 +65,7 @@ const runSql = async (sql: string): Promise<string> => {
   return result.output.trim();
 };
 
-describe("bounded Topic summary migration", () => {
+describe("PostgreSQL migrations", () => {
   beforeAll(async () => {
     const migrations = (await readdir(migrationsDirectory, { withFileTypes: true }))
       .filter((entry) => entry.isDirectory() && entry.name < TARGET_MIGRATION)
@@ -71,6 +79,23 @@ describe("bounded Topic summary migration", () => {
 
   afterAll(async () => {
     await container?.stop();
+  });
+
+  it("removes the database-level Zero publication before replaying migrations", async () => {
+    await expect(runFile(zeroPublicationMigration)).rejects.toThrow(
+      'publication "cove_zero_data" already exists',
+    );
+
+    await runFile(resetBeforeMigrate);
+    await runFile(zeroPublicationMigration);
+
+    expect(
+      await runSql(`
+        SELECT count(*)
+        FROM pg_catalog.pg_publication_tables
+        WHERE pubname = 'cove_zero_data';
+      `),
+    ).toBe("6");
   });
 
   it("rejects oversized content without truncation, then backfills bounded Topic summaries", async () => {

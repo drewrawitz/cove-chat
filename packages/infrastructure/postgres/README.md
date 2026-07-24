@@ -23,3 +23,6 @@ Run it with:
 ```sh
 vp run --filter @cove/infrastructure-postgres test:integration
 ```
+
+For a local database reset, use `vp run @cove/db#migrate:reset`. The wrapper removes Cove's
+database-level Zero publication before Prisma resets and replays the schema migrations.
