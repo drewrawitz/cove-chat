@@ -23,6 +23,9 @@ export type TopicId = typeof TopicId.Type;
 export const MessageId = Identifier.pipe(Schema.brand("MessageId"));
 export type MessageId = typeof MessageId.Type;
 
+export const MessageCommandId = Identifier.pipe(Schema.brand("MessageCommandId"));
+export type MessageCommandId = typeof MessageCommandId.Type;
+
 export class InvalidIdentifier extends Schema.TaggedErrorClass<InvalidIdentifier>()(
   "Domain.InvalidIdentifier",
   {
@@ -34,6 +37,7 @@ export class InvalidIdentifier extends Schema.TaggedErrorClass<InvalidIdentifier
       "channel",
       "topic",
       "message",
+      "message-command",
     ]),
     reason: Schema.Literals(["empty", "not-trimmed"]),
   },
@@ -84,5 +88,11 @@ export function makeTopicId(value: string) {
 export function makeMessageId(value: string) {
   return MessageId.makeEffect(value).pipe(
     Effect.mapError(() => invalidIdentifier("message", value)),
+  );
+}
+
+export function makeMessageCommandId(value: string) {
+  return MessageCommandId.makeEffect(value).pipe(
+    Effect.mapError(() => invalidIdentifier("message-command", value)),
   );
 }

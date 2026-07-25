@@ -6,7 +6,7 @@ generator zero {
   provider      = "prisma-zero"
   output        = "../../sync/src/generated"
   camelCase     = true
-  excludeTables = ["User", "MagicLink", "Session", "AuditEvent", "WorkspaceInvitation", "MessageRevision"]
+  excludeTables = ["User", "MagicLink", "Session", "AuditEvent", "WorkspaceInvitation", "MessageRevision", "MessageCommandReceipt"]
 }
 
 enum WorkspaceRole {
@@ -84,12 +84,13 @@ model AuditEvent {
 }
 
 model Workspace {
-  id          String                @id
-  name        String
-  identities  WorkspaceIdentity[]
-  channels    Channel[]
-  invitations WorkspaceInvitation[]
-  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  id                     String                  @id
+  name                   String
+  identities             WorkspaceIdentity[]
+  channels               Channel[]
+  invitations            WorkspaceInvitation[]
+  messageCommandReceipts MessageCommandReceipt[]
+  createdAt              DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("workspaces")
 }
@@ -132,6 +133,7 @@ model WorkspaceIdentity {
   openedTopics        Topic[]             @relation("TopicOpener")
   latestMessageTopics Topic[]             @relation("TopicLatestMessageAuthor")
   messages            Message[]           @relation("MessageAuthor")
+  messageCommands     MessageCommandReceipt[]
   createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([workspaceId, id])
@@ -204,23 +206,69 @@ model Topic {
 }
 
 model Message {
-  id               String
-  workspaceId      String            @map("workspace_id")
-  topicId          String            @map("topic_id")
-  authorIdentityId String            @map("author_identity_id")
-  body             String?
-  position         Int
-  topic            Topic             @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade)
-  author           WorkspaceIdentity @relation("MessageAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
-  editedAt         DateTime?         @map("edited_at") @db.Timestamptz(6)
-  deletedAt        DateTime?         @map("deleted_at") @db.Timestamptz(6)
-  revisions        MessageRevision[]
+  id                    String
+  workspaceId           String                 @map("workspace_id")
+  topicId               String                 @map("topic_id")
+  authorIdentityId      String                 @map("author_identity_id")
+  body                  String?
+  position              Int
+  version               Int                    @default(1)
+  /// Constrained by a partial-column ON DELETE SET NULL foreign key in the SQL migration.
+  producedByCommandId   String?                @map("produced_by_command_id")
+  topic                 Topic                  @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade)
+  author                WorkspaceIdentity      @relation("MessageAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  editedAt              DateTime?              @map("edited_at") @db.Timestamptz(6)
+  deletedAt             DateTime?              @map("deleted_at") @db.Timestamptz(6)
+  revisions             MessageRevision[]
 
   @@id([workspaceId, topicId, id])
   @@unique([workspaceId, topicId, position])
   @@index([workspaceId, authorIdentityId])
+  @@index([workspaceId, producedByCommandId])
   @@map("messages")
+}
+
+model MessageCommandReceipt {
+  workspaceId      String                  @map("workspace_id")
+  commandId        String                  @map("command_id")
+  actorIdentityId  String                  @map("actor_identity_id")
+  kind             MessageCommandKind
+  fingerprint      String
+  outcome          MessageCommandOutcome   @default(pending)
+  rejection        MessageCommandRejection?
+  channelId        String                  @map("channel_id")
+  topicId          String                  @map("topic_id")
+  messageId        String?                 @map("message_id")
+  messageVersion   Int?                    @map("message_version")
+  workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorIdentity    WorkspaceIdentity       @relation(fields: [workspaceId, actorIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  createdAt        DateTime                @map("created_at") @db.Timestamptz(6)
+  completedAt      DateTime?               @map("completed_at") @db.Timestamptz(6)
+
+  @@id([workspaceId, commandId])
+  @@index([workspaceId, actorIdentityId, createdAt])
+  @@map("message_command_receipts")
+}
+
+enum MessageCommandKind {
+  create
+  edit
+  delete
+}
+
+enum MessageCommandOutcome {
+  pending
+  succeeded
+  rejected
+}
+
+enum MessageCommandRejection {
+  channel_unavailable
+  topic_unavailable
+  message_unavailable
+  mutation_forbidden
+  stale_version
 }
 
 model MessageRevision {

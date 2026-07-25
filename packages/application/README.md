@@ -17,3 +17,8 @@ Invitation redemption composes that transition with provider-neutral session iss
 outer transaction. Invitation notification follows the committed state transition; repeating the
 invite rotates its credential, making a failed delivery safely retryable without storing plaintext
 tokens.
+
+Durable Reply creation and Message edits and deletions use the application-owned `MessageCommands`
+interface. Its PostgreSQL implementation owns idempotency receipts and atomic mutation details
+directly; those operations are deliberately not duplicated on `TopicAccess` or exposed as generic
+repository mutation ports.

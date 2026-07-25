@@ -52,35 +52,6 @@ export const CreateTopicCommand = Schema.Struct({
 });
 export interface CreateTopicCommand extends Schema.Schema.Type<typeof CreateTopicCommand> {}
 
-export const AddMessageCommand = Schema.Struct({
-  actorAccountId: UserId,
-  workspaceId: WorkspaceId,
-  channelId: ChannelId,
-  topicId: TopicId,
-  messageId: MessageId,
-  body: MessageBody,
-});
-export interface AddMessageCommand extends Schema.Schema.Type<typeof AddMessageCommand> {}
-
-export const EditMessageCommand = Schema.Struct({
-  actorAccountId: UserId,
-  workspaceId: WorkspaceId,
-  channelId: ChannelId,
-  topicId: TopicId,
-  messageId: MessageId,
-  body: MessageBody,
-});
-export interface EditMessageCommand extends Schema.Schema.Type<typeof EditMessageCommand> {}
-
-export const DeleteMessageCommand = Schema.Struct({
-  actorAccountId: UserId,
-  workspaceId: WorkspaceId,
-  channelId: ChannelId,
-  topicId: TopicId,
-  messageId: MessageId,
-});
-export interface DeleteMessageCommand extends Schema.Schema.Type<typeof DeleteMessageCommand> {}
-
 export class TopicAccessFailure extends Schema.TaggedErrorClass<TopicAccessFailure>()(
   "Application.TopicAccessFailure",
   { operation: Schema.String },
@@ -89,16 +60,6 @@ export class TopicAccessFailure extends Schema.TaggedErrorClass<TopicAccessFailu
 export class TopicUnavailable extends Schema.TaggedErrorClass<TopicUnavailable>()(
   "Application.TopicUnavailable",
   { topicId: TopicId },
-) {}
-
-export class MessageMutationForbidden extends Schema.TaggedErrorClass<MessageMutationForbidden>()(
-  "Application.MessageMutationForbidden",
-  { messageId: MessageId },
-) {}
-
-export class MessageUnavailable extends Schema.TaggedErrorClass<MessageUnavailable>()(
-  "Application.MessageUnavailable",
-  { messageId: MessageId },
 ) {}
 
 export interface TopicAccessService {
@@ -114,29 +75,6 @@ export interface TopicAccessService {
   readonly create: (
     command: CreateTopicCommand,
   ) => Effect.Effect<TopicView, ChannelUnavailable | TopicAccessFailure>;
-  readonly addMessage: (
-    command: AddMessageCommand,
-  ) => Effect.Effect<TopicMessageView, ChannelUnavailable | TopicUnavailable | TopicAccessFailure>;
-  readonly editMessage: (
-    command: EditMessageCommand,
-  ) => Effect.Effect<
-    TopicMessageView,
-    | ChannelUnavailable
-    | TopicUnavailable
-    | MessageUnavailable
-    | MessageMutationForbidden
-    | TopicAccessFailure
-  >;
-  readonly deleteMessage: (
-    command: DeleteMessageCommand,
-  ) => Effect.Effect<
-    TopicMessageView,
-    | ChannelUnavailable
-    | TopicUnavailable
-    | MessageUnavailable
-    | MessageMutationForbidden
-    | TopicAccessFailure
-  >;
 }
 
 export class TopicAccess extends Context.Service<TopicAccess, TopicAccessService>()(

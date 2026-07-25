@@ -1,4 +1,6 @@
 import type {
+  MessageCommandStatus,
+  MessageCommandSucceeded,
   TopicArchivePageView,
   TopicMessageView,
   TopicSummaryView,
@@ -6,6 +8,9 @@ import type {
 } from "@cove/application";
 import {
   CreatedTopicResponse,
+  MessageCommandAcceptedResponse,
+  MessageCommandRejectedStatusResponse,
+  MessageCommandStatusResponse,
   TopicArchivePageResponse,
   TopicMessageResponse,
   TopicSummaryResponse,
@@ -16,6 +21,10 @@ export const topicResponseMessage = (view: TopicMessageView): TopicMessageRespon
     id: view.message.id,
     ...(view.message.body === undefined ? {} : { body: view.message.body }),
     position: view.message.position,
+    version: view.message.version,
+    ...(view.message.producedByCommandId === undefined
+      ? {}
+      : { producedByCommandId: view.message.producedByCommandId }),
     createdAt: view.message.createdAt,
     edited: view.message.editedAt !== undefined,
     deleted: view.message.deletedAt !== undefined,
@@ -25,6 +34,30 @@ export const topicResponseMessage = (view: TopicMessageView): TopicMessageRespon
       avatarUrl: view.author.avatarUrl,
     },
   });
+
+export const messageCommandAcceptedResponse = (
+  outcome: MessageCommandSucceeded,
+): MessageCommandAcceptedResponse =>
+  MessageCommandAcceptedResponse.make({
+    status: "succeeded",
+    commandId: outcome.commandId,
+    kind: outcome.kind,
+    messageId: outcome.messageId,
+    messageVersion: outcome.messageVersion,
+  });
+
+export const messageCommandStatusResponse = (
+  outcome: MessageCommandStatus,
+): MessageCommandStatusResponse =>
+  outcome._tag === "succeeded"
+    ? messageCommandAcceptedResponse(outcome)
+    : MessageCommandRejectedStatusResponse.make({
+        status: "rejected",
+        commandId: outcome.commandId,
+        kind: outcome.kind,
+        rejection: outcome.rejection,
+        ...(outcome.messageId === undefined ? {} : { messageId: outcome.messageId }),
+      });
 
 const topicResponseFields = (view: TopicView | TopicSummaryView) => ({
   id: view.topic.id,

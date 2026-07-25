@@ -10,6 +10,8 @@ export interface SynchronizedTopicMessage {
   readonly id: string;
   readonly body?: string | null;
   readonly position: number;
+  readonly version: number;
+  readonly producedByCommandId?: string | null;
   readonly createdAt: number;
   readonly editedAt?: number | null;
   readonly deletedAt?: number | null;
@@ -35,6 +37,8 @@ export interface TopicMessageView {
   readonly id: string;
   readonly body?: string;
   readonly position: number;
+  readonly version: number;
+  readonly producedByCommandId?: string;
   readonly createdAt: string;
   readonly edited: boolean;
   readonly deleted: boolean;
@@ -124,6 +128,10 @@ const topicMessageView = (message: SynchronizedTopicMessage): TopicMessageView |
     id: message.id,
     ...(deleted || message.body == null ? {} : { body: message.body }),
     position: message.position,
+    version: message.version,
+    ...(message.producedByCommandId == null
+      ? {}
+      : { producedByCommandId: message.producedByCommandId }),
     createdAt: new Date(message.createdAt).toISOString(),
     edited: message.editedAt != null,
     deleted,
@@ -180,6 +188,8 @@ function sameSynchronizedTopicMessage(
     message.id === previous.id &&
     message.body === previous.body &&
     message.position === previous.position &&
+    message.version === previous.version &&
+    message.producedByCommandId === previous.producedByCommandId &&
     message.createdAt === previous.createdAt &&
     message.editedAt === previous.editedAt &&
     message.deletedAt === previous.deletedAt &&

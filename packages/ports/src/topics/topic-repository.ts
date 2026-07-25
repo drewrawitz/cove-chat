@@ -3,6 +3,7 @@ import {
   MessageBody,
   MessageId,
   MessagePosition,
+  MessageVersion,
   Topic,
   TopicId,
   UserId,
@@ -10,6 +11,7 @@ import {
   WorkspaceId,
   WorkspaceIdentityId,
   WorkspaceIdentityName,
+  MessageCommandId,
   type ChannelId,
 } from "@cove/domain";
 import { Context, type Effect, Schema } from "effect";
@@ -29,6 +31,8 @@ export const StoredMessage = Schema.Struct({
   authorIdentityId: WorkspaceIdentityId,
   body: Schema.optionalKey(MessageBody),
   position: MessagePosition,
+  version: MessageVersion,
+  producedByCommandId: Schema.optionalKey(MessageCommandId),
   createdAt: Schema.Date,
   editedAt: Schema.optionalKey(Schema.Date),
   deletedAt: Schema.optionalKey(Schema.Date),
@@ -54,30 +58,6 @@ export interface TopicArchivePageRecord {
   readonly nextCursor?: string;
 }
 
-export interface MessageAppend {
-  readonly id: MessageId;
-  readonly workspaceId: WorkspaceId;
-  readonly topicId: TopicId;
-  readonly authorIdentityId: WorkspaceIdentityId;
-  readonly body: MessageBody;
-  readonly createdAt: Date;
-}
-
-export interface MessageEdit {
-  readonly workspaceId: WorkspaceId;
-  readonly topicId: TopicId;
-  readonly messageId: MessageId;
-  readonly body: MessageBody;
-  readonly editedAt: Date;
-}
-
-export interface MessageTombstone {
-  readonly workspaceId: WorkspaceId;
-  readonly topicId: TopicId;
-  readonly messageId: MessageId;
-  readonly deletedAt: Date;
-}
-
 export interface TopicRepositoryService {
   readonly listArchivePageInChannel: (
     actorAccountId: UserId,
@@ -97,11 +77,6 @@ export interface TopicRepositoryService {
   ) => Effect.Effect<TopicMessageRecord | undefined, PersistenceError>;
   readonly insertTopic: (topic: Topic) => Effect.Effect<void, PersistenceError>;
   readonly insertMessage: (message: Message) => Effect.Effect<void, PersistenceError>;
-  readonly appendMessage: (message: MessageAppend) => Effect.Effect<Message, PersistenceError>;
-  readonly editMessage: (edit: MessageEdit) => Effect.Effect<Message, PersistenceError>;
-  readonly tombstoneMessage: (
-    tombstone: MessageTombstone,
-  ) => Effect.Effect<Message, PersistenceError>;
 }
 
 export class TopicRepository extends Context.Service<TopicRepository, TopicRepositoryService>()(

@@ -17,6 +17,12 @@ export type ChannelVisibility = "public" | "private";
 
 export type TopicIntent = "question" | "proposal" | "decision" | "update" | "discussion";
 
+export type MessageCommandKind = "create" | "edit" | "delete";
+
+export type MessageCommandOutcome = "pending" | "succeeded" | "rejected";
+
+export type MessageCommandRejection = "channel_unavailable" | "topic_unavailable" | "message_unavailable" | "mutation_forbidden" | "stale_version";
+
 export type MessageRevisionOperation = "edit" | "delete";
 
 export const workspaceTable = table("workspace")
@@ -97,6 +103,8 @@ export const messageTable = table("message")
     authorIdentityId: string().from('author_identity_id'),
     body: string().optional(),
     position: number(),
+    version: number(),
+    producedByCommandId: string().from('produced_by_command_id').optional(),
     createdAt: number().from('created_at'),
     editedAt: number().from('edited_at').optional(),
     deletedAt: number().from('deleted_at').optional(),

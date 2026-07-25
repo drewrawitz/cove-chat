@@ -1,12 +1,8 @@
 import { expect, layer } from "@effect/vitest";
 import {
-  AddMessageCommand,
   ChannelUnavailable,
   CreateTopicCommand,
-  DeleteMessageCommand,
-  EditMessageCommand,
   TopicAccess,
-  TopicAccessFailure,
   TopicArchiveCursorInvalid,
 } from "@cove/application";
 import {
@@ -40,10 +36,6 @@ const makeFixtures = Effect.gen(function* () {
     messageId: yield* makeMessageId(`opening-brief-${suffix}`),
   };
 });
-
-const ARCHIVE_PAGE_SIZE = 100;
-const ARCHIVE_TEST_TOPIC_COUNT = CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE * 2 + 2;
-const archiveTopicId = (position: number) => `archive-topic-${String(position).padStart(3, "0")}`;
 
 type Fixtures = Effect.Success<typeof makeFixtures>;
 
@@ -98,8 +90,12 @@ const withFixtures = <A, E, R>(use: (fixtures: Fixtures) => Effect.Effect<A, E, 
     removeFixtures,
   );
 
+const ARCHIVE_PAGE_SIZE = 100;
+const ARCHIVE_TEST_TOPIC_COUNT = CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE * 2 + 2;
+const archiveTopicId = (position: number) => `archive-topic-${String(position).padStart(3, "0")}`;
+
 layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) => {
-  it.effect("uses bounded Topic metadata and single-Message persistence lookups", () =>
+  it.effect("persists and reads a versioned Opening Brief at the Topic boundary", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
@@ -114,16 +110,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             title: yield* makeTopicTitle("Release readiness"),
             openingBrief: MessageBody.make("Capture the remaining launch risks."),
             intent: "question",
-          }),
-        );
-        yield* topics.addMessage(
-          AddMessageCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            messageId: yield* makeMessageId(`latest-${fixtures.messageId}`),
-            body: MessageBody.make("The release candidate passed smoke testing."),
           }),
         );
 
@@ -164,372 +150,16 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         );
 
         expect(created.messages).toHaveLength(1);
-        expect(topic).toMatchObject({ id: fixtures.topicId, messageCount: 2 });
-        expect(openingBrief?.message.body).toBe("Capture the remaining launch risks.");
+        expect(topic).toMatchObject({ id: fixtures.topicId, messageCount: 1 });
+        expect(openingBrief?.message).toMatchObject({
+          body: "Capture the remaining launch risks.",
+          version: 1,
+        });
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);
         expect(hiddenPrivateChannel).toBeInstanceOf(ChannelUnavailable);
         expect(wrongChannel).toBeUndefined();
       }),
     ),
-  );
-
-  it.effect("appends concurrent flat Messages in a stable Topic order", () =>
-    withFixtures((fixtures) =>
-      Effect.gen(function* () {
-        const topics = yield* TopicAccess;
-        const repository = yield* TopicRepository;
-        yield* topics.create(
-          CreateTopicCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            openingBriefMessageId: fixtures.messageId,
-            title: yield* makeTopicTitle("Release readiness"),
-            openingBrief: MessageBody.make("Capture the remaining launch risks."),
-          }),
-        );
-        const firstReplyId = yield* makeMessageId(`first-${fixtures.messageId}`);
-        const secondReplyId = yield* makeMessageId(`second-${fixtures.messageId}`);
-
-        yield* Effect.all(
-          [
-            topics.addMessage(
-              AddMessageCommand.make({
-                actorAccountId: fixtures.authorAccountId,
-                workspaceId: fixtures.workspaceId,
-                channelId: fixtures.publicChannelId,
-                topicId: fixtures.topicId,
-                messageId: firstReplyId,
-                body: MessageBody.make("The release candidate passed smoke testing."),
-              }),
-            ),
-            topics.addMessage(
-              AddMessageCommand.make({
-                actorAccountId: fixtures.authorAccountId,
-                workspaceId: fixtures.workspaceId,
-                channelId: fixtures.publicChannelId,
-                topicId: fixtures.topicId,
-                messageId: secondReplyId,
-                body: MessageBody.make("Documentation review is complete."),
-              }),
-            ),
-          ],
-          { concurrency: "unbounded" },
-        );
-
-        const messages = yield* Effect.all([
-          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, fixtures.messageId),
-          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, firstReplyId),
-          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, secondReplyId),
-        ]);
-        expect(
-          messages
-            .flatMap((record) => (record === undefined ? [] : [record.message]))
-            .map(({ position }) => position)
-            .sort((left, right) => left - right),
-        ).toEqual([1, 2, 3]);
-        expect(
-          messages
-            .flatMap((record) => (record?.message.body === undefined ? [] : [record.message.body]))
-            .slice(1),
-        ).toEqual(
-          expect.arrayContaining([
-            "The release candidate passed smoke testing.",
-            "Documentation review is complete.",
-          ]),
-        );
-      }),
-    ),
-  );
-
-  it.effect("keeps Topic activity monotonic across out-of-order append timestamps", () =>
-    withFixtures((fixtures) =>
-      Effect.gen(function* () {
-        const topics = yield* TopicAccess;
-        const repository = yield* TopicRepository;
-        yield* topics.create(
-          CreateTopicCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            openingBriefMessageId: fixtures.messageId,
-            title: yield* makeTopicTitle("Monotonic activity"),
-            openingBrief: MessageBody.make("Capture append ordering."),
-          }),
-        );
-        const newerActivity = new Date("2026-07-24T12:05:00.000Z");
-        const olderActivity = new Date("2026-07-24T12:04:00.000Z");
-        const newerMessageId = yield* makeMessageId(`newer-${fixtures.messageId}`);
-        const olderMessageId = yield* makeMessageId(`older-${fixtures.messageId}`);
-
-        yield* repository.appendMessage({
-          id: newerMessageId,
-          workspaceId: fixtures.workspaceId,
-          topicId: fixtures.topicId,
-          authorIdentityId: fixtures.authorIdentityId,
-          body: MessageBody.make("Captured later."),
-          createdAt: newerActivity,
-        });
-        yield* repository.appendMessage({
-          id: olderMessageId,
-          workspaceId: fixtures.workspaceId,
-          topicId: fixtures.topicId,
-          authorIdentityId: fixtures.authorIdentityId,
-          body: MessageBody.make("Committed later with an earlier timestamp."),
-          createdAt: olderActivity,
-        });
-
-        const topic = yield* repository.findTopicById(
-          fixtures.workspaceId,
-          fixtures.publicChannelId,
-          fixtures.topicId,
-        );
-        expect(topic).toMatchObject({
-          latestMessageId: olderMessageId,
-          latestMessagePosition: 3,
-          latestMessageCreatedAt: olderActivity,
-          lastActivityAt: newerActivity,
-        });
-      }),
-    ),
-  );
-
-  it.effect("retains edit and deletion revisions while returning a stable tombstone", () =>
-    withFixtures((fixtures) =>
-      Effect.gen(function* () {
-        const topics = yield* TopicAccess;
-        const repository = yield* TopicRepository;
-        const sql = yield* SqlClient.SqlClient;
-        yield* topics.create(
-          CreateTopicCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            openingBriefMessageId: fixtures.messageId,
-            title: yield* makeTopicTitle("Release readiness"),
-            openingBrief: MessageBody.make("Capture the remaining launch risks."),
-          }),
-        );
-        const replyId = yield* makeMessageId(`reply-${fixtures.messageId}`);
-        yield* topics.addMessage(
-          AddMessageCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            messageId: replyId,
-            body: MessageBody.make("The release candidate passed smoke testng."),
-          }),
-        );
-        const edited = yield* topics.editMessage(
-          EditMessageCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            messageId: replyId,
-            body: MessageBody.make("The release candidate passed smoke testing."),
-          }),
-        );
-        const deleted = yield* topics.deleteMessage(
-          DeleteMessageCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: fixtures.topicId,
-            messageId: replyId,
-          }),
-        );
-        const stored = yield* repository.findMessageById(
-          fixtures.workspaceId,
-          fixtures.topicId,
-          replyId,
-        );
-        const revisions = yield* sql<{ readonly body: string; readonly operation: string }>`
-          SELECT body, operation
-          FROM message_revisions
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND message_id = ${replyId}
-          ORDER BY id
-        `;
-
-        expect(edited.message.editedAt).toBeInstanceOf(Date);
-        expect(deleted.message).toMatchObject({ id: replyId, position: 2 });
-        expect(deleted.message).not.toHaveProperty("body");
-        expect(stored?.message).toMatchObject({
-          id: replyId,
-          position: 2,
-        });
-        expect(stored?.message).not.toHaveProperty("body");
-        expect(revisions).toEqual([
-          { body: "The release candidate passed smoke testng.", operation: "edit" },
-          { body: "The release candidate passed smoke testing.", operation: "delete" },
-        ]);
-      }),
-    ),
-  );
-
-  it.effect(
-    "maintains the bounded latest-Message projection atomically without reordering edits or deletions",
-    () =>
-      withFixtures((fixtures) =>
-        Effect.gen(function* () {
-          const topics = yield* TopicAccess;
-          const repository = yield* TopicRepository;
-          const sql = yield* SqlClient.SqlClient;
-          yield* topics.create(
-            CreateTopicCommand.make({
-              actorAccountId: fixtures.authorAccountId,
-              workspaceId: fixtures.workspaceId,
-              channelId: fixtures.publicChannelId,
-              topicId: fixtures.topicId,
-              openingBriefMessageId: fixtures.messageId,
-              title: yield* makeTopicTitle("Release readiness"),
-              openingBrief: MessageBody.make("Capture the remaining launch risks."),
-            }),
-          );
-
-          const initial = yield* repository.findTopicById(
-            fixtures.workspaceId,
-            fixtures.publicChannelId,
-            fixtures.topicId,
-          );
-          expect(initial).toMatchObject({
-            messageCount: 1,
-            latestMessageId: fixtures.messageId,
-            latestMessagePreview: "Capture the remaining launch risks.",
-          });
-
-          for (const { statement, constraint } of [
-            {
-              statement: sql`
-                UPDATE topics
-                SET title = ${"é".repeat(257)}
-                WHERE workspace_id = ${fixtures.workspaceId}
-                  AND id = ${fixtures.topicId}
-              `,
-              constraint: "topics_title_bytes",
-            },
-            {
-              statement: sql`
-                UPDATE topics
-                SET latest_message_preview = ${"é".repeat(257)}
-                WHERE workspace_id = ${fixtures.workspaceId}
-                  AND id = ${fixtures.topicId}
-              `,
-              constraint: "topics_latest_message_preview_bytes",
-            },
-            {
-              statement: sql`
-                UPDATE channels
-                SET purpose = ${"é".repeat(1025)}
-                WHERE workspace_id = ${fixtures.workspaceId}
-                  AND id = ${fixtures.publicChannelId}
-              `,
-              constraint: "channels_purpose_bytes",
-            },
-          ]) {
-            expect(yield* statement.pipe(Effect.flip)).toMatchObject({
-              reason: {
-                _tag: "ConstraintError",
-                cause: { constraint },
-              },
-            });
-          }
-
-          const replyId = yield* makeMessageId(`reply-${fixtures.messageId}`);
-          const appended = yield* topics.addMessage(
-            AddMessageCommand.make({
-              actorAccountId: fixtures.authorAccountId,
-              workspaceId: fixtures.workspaceId,
-              channelId: fixtures.publicChannelId,
-              topicId: fixtures.topicId,
-              messageId: replyId,
-              body: MessageBody.make("🙂".repeat(129)),
-            }),
-          );
-          const afterAppend = yield* repository.findTopicById(
-            fixtures.workspaceId,
-            fixtures.publicChannelId,
-            fixtures.topicId,
-          );
-          expect(afterAppend).toMatchObject({
-            messageCount: 2,
-            latestMessageId: replyId,
-            latestMessagePreview: "🙂".repeat(128),
-            lastActivityAt: appended.message.createdAt,
-          });
-
-          const duplicate = yield* topics
-            .addMessage(
-              AddMessageCommand.make({
-                actorAccountId: fixtures.authorAccountId,
-                workspaceId: fixtures.workspaceId,
-                channelId: fixtures.publicChannelId,
-                topicId: fixtures.topicId,
-                messageId: replyId,
-                body: MessageBody.make("This append must roll back."),
-              }),
-            )
-            .pipe(Effect.flip);
-          expect(duplicate).toBeInstanceOf(TopicAccessFailure);
-
-          yield* topics.editMessage(
-            EditMessageCommand.make({
-              actorAccountId: fixtures.authorAccountId,
-              workspaceId: fixtures.workspaceId,
-              channelId: fixtures.publicChannelId,
-              topicId: fixtures.topicId,
-              messageId: replyId,
-              body: MessageBody.make("é".repeat(300)),
-            }),
-          );
-          const afterEdit = yield* repository.findTopicById(
-            fixtures.workspaceId,
-            fixtures.publicChannelId,
-            fixtures.topicId,
-          );
-          expect(afterEdit).toMatchObject({
-            messageCount: 2,
-            latestMessageId: replyId,
-            latestMessagePreview: "é".repeat(256),
-            lastActivityAt: appended.message.createdAt,
-          });
-
-          yield* topics.deleteMessage(
-            DeleteMessageCommand.make({
-              actorAccountId: fixtures.authorAccountId,
-              workspaceId: fixtures.workspaceId,
-              channelId: fixtures.publicChannelId,
-              topicId: fixtures.topicId,
-              messageId: replyId,
-            }),
-          );
-          const afterDelete = yield* repository.findTopicById(
-            fixtures.workspaceId,
-            fixtures.publicChannelId,
-            fixtures.topicId,
-          );
-          const deletedMessage = yield* repository.findMessageById(
-            fixtures.workspaceId,
-            fixtures.topicId,
-            replyId,
-          );
-          expect(afterDelete).toMatchObject({
-            messageCount: 2,
-            latestMessageId: replyId,
-            lastActivityAt: appended.message.createdAt,
-          });
-          expect(afterDelete).not.toHaveProperty("latestMessagePreview");
-          expect(deletedMessage?.message).toMatchObject({
-            id: replyId,
-            deletedAt: expect.any(Date),
-          });
-        }),
-      ),
   );
 
   it.effect("pages Topics after the live window with scope-bound stateless keysets", () =>
@@ -540,61 +170,67 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         const activityAt = new Date("2026-07-22T12:00:00.000Z");
 
         yield* sql`
-            INSERT INTO topics (
-              id,
-              workspace_id,
-              channel_id,
-              title,
-              opened_by_identity_id,
-              message_count,
-              latest_message_id,
-              latest_message_preview,
-              latest_message_author_identity_id,
-              latest_message_position,
-              latest_message_created_at,
-              latest_message_edited_at,
-              latest_message_deleted_at,
-              last_activity_at,
-              created_at
-            )
-            SELECT
-              'archive-topic-' || lpad(number::text, 3, '0'),
-              ${fixtures.workspaceId},
-              ${fixtures.publicChannelId},
-              'Archive Topic ' || lpad(number::text, 3, '0'),
-              ${fixtures.authorIdentityId},
-              1,
-              'archive-message-' || lpad(number::text, 3, '0'),
-              'Archived summary ' || lpad(number::text, 3, '0'),
-              ${fixtures.authorIdentityId},
-              1,
-              ${activityAt},
-              NULL,
-              NULL,
-              ${activityAt},
-              ${activityAt}
-            FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
-          `;
+          INSERT INTO topics (
+            id,
+            workspace_id,
+            channel_id,
+            title,
+            opened_by_identity_id,
+            message_count,
+            latest_message_id,
+            latest_message_preview,
+            latest_message_author_identity_id,
+            latest_message_position,
+            latest_message_created_at,
+            latest_message_edited_at,
+            latest_message_deleted_at,
+            last_activity_at,
+            created_at
+          )
+          SELECT
+            'archive-topic-' || lpad(number::text, 3, '0'),
+            ${fixtures.workspaceId},
+            ${fixtures.publicChannelId},
+            'Archive Topic ' || lpad(number::text, 3, '0'),
+            ${fixtures.authorIdentityId},
+            1,
+            'archive-message-' || lpad(number::text, 3, '0'),
+            'Archived summary ' || lpad(number::text, 3, '0'),
+            ${fixtures.authorIdentityId},
+            1,
+            ${activityAt},
+            NULL,
+            NULL,
+            ${activityAt},
+            ${activityAt}
+          FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
+        `;
         yield* sql`
-            INSERT INTO messages (
-              id,
-              workspace_id,
-              topic_id,
-              author_identity_id,
-              body,
-              position,
-              created_at
-            )
-            SELECT
-              'archive-message-' || lpad(number::text, 3, '0'),
-              ${fixtures.workspaceId},
-              'archive-topic-' || lpad(number::text, 3, '0'),
-              ${fixtures.authorIdentityId},
-              'Archived summary ' || lpad(number::text, 3, '0'),
-              1,
-              ${activityAt}
-            FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
-          `;
+          INSERT INTO messages (
+            id,
+            workspace_id,
+            topic_id,
+            author_identity_id,
+            body,
+            position,
+            created_at
+          )
+          SELECT
+            'archive-message-' || lpad(number::text, 3, '0'),
+            ${fixtures.workspaceId},
+            'archive-topic-' || lpad(number::text, 3, '0'),
+            ${fixtures.authorIdentityId},
+            'Archived summary ' || lpad(number::text, 3, '0'),
+            1,
+            ${activityAt}
+          FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
+        `;
+        yield* sql`
+          UPDATE messages
+          SET version = 3
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND topic_id = ${archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + 1)}
+        `;
 
         const first = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
@@ -603,6 +239,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         );
         expect(first.topics).toHaveLength(ARCHIVE_PAGE_SIZE);
         expect(first.topics.at(0)?.topic.id).toBe(archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + 1));
+        expect(first.topics.at(0)?.latestMessage.message.version).toBe(3);
         expect(first.topics.at(-1)?.topic.id).toBe(
           archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE),
         );
@@ -619,11 +256,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         expect(crossActorCursor).toBeInstanceOf(TopicArchiveCursorInvalid);
 
         yield* sql`
-            UPDATE topics
-            SET last_activity_at = ${new Date("2026-07-23T12:00:00.000Z")}
-            WHERE workspace_id = ${fixtures.workspaceId}
-              AND id = ${archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 1)}
-          `;
+          UPDATE topics
+          SET last_activity_at = ${new Date("2026-07-23T12:00:00.000Z")}
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND id = ${archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 1)}
+        `;
 
         const freshVisit = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
@@ -645,38 +282,15 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE * 2 + 1),
         );
         expect(second.nextCursor).toEqual(expect.any(String));
-        const [{ liveAfterActivity }] = yield* sql<{ readonly liveAfterActivity: boolean }>`
-          SELECT EXISTS (
-            SELECT 1
-            FROM (
-              SELECT id
-              FROM topics
-              WHERE workspace_id = ${fixtures.workspaceId}
-                AND channel_id = ${fixtures.publicChannelId}
-              ORDER BY last_activity_at DESC, id
-              LIMIT ${CHANNEL_TOPIC_LIVE_MAXIMUM}
-            ) AS live_topic
-            WHERE live_topic.id = ${archiveTopicId(
-              CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 1,
-            )}
-          ) AS "liveAfterActivity"
-        `;
-        expect(liveAfterActivity).toBe(true);
 
-        yield* topics.addMessage(
-          AddMessageCommand.make({
-            actorAccountId: fixtures.authorAccountId,
-            workspaceId: fixtures.workspaceId,
-            channelId: fixtures.publicChannelId,
-            topicId: yield* makeTopicId(
-              archiveTopicId(
-                CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + ARCHIVE_PAGE_SIZE / 2,
-              ),
-            ),
-            messageId: yield* makeMessageId(`archive-activity-${randomUUID()}`),
-            body: MessageBody.make("Snapshot-visible activity"),
-          }),
-        );
+        yield* sql`
+          UPDATE topics
+          SET last_activity_at = ${new Date("2026-07-23T13:00:00.000Z")}
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND id = ${archiveTopicId(
+              CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + ARCHIVE_PAGE_SIZE / 2,
+            )}
+        `;
         const repeatedSecond = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
           fixtures.workspaceId,

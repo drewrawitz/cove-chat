@@ -8,16 +8,25 @@ import { CsrfHeaders } from "../auth/logout-headers.ts";
 import { SessionAuth } from "../auth/session-auth.ts";
 import { ChannelUnavailableResponse } from "../channels/channel-error-response.ts";
 import {
+  MessageCommandConflictResponse,
+  MessageCommandUnavailableResponse,
   MessageMutationForbiddenResponse,
   MessageUnavailableResponse,
+  StaleMessageVersionResponse,
   TopicArchiveCursorInvalidResponse,
   TopicUnavailableResponse,
 } from "./topic-error-response.ts";
-import { MessageMutationRequest, CreateTopicRequest } from "./topic-request.ts";
+import {
+  CreateReplyRequest,
+  CreateTopicRequest,
+  DeleteMessageRequest,
+  EditMessageRequest,
+} from "./topic-request.ts";
 import {
   CreatedTopicResponse,
+  MessageCommandAcceptedResponse,
+  MessageCommandStatusResponse,
   TopicArchivePageResponse,
-  TopicMessageResponse,
 } from "./topic-response.ts";
 
 const ChannelParams = {
@@ -26,6 +35,10 @@ const ChannelParams = {
 };
 const TopicParams = { ...ChannelParams, topicId: Schema.NonEmptyString };
 const MessageParams = { ...TopicParams, messageId: Schema.NonEmptyString };
+const MessageCommandParams = {
+  workspaceId: Schema.NonEmptyString,
+  commandId: Schema.NonEmptyString,
+};
 
 const ListArchivedTopicsEndpoint = HttpApiEndpoint.get(
   "listArchivedTopics",
@@ -59,6 +72,7 @@ const addMessageErrors = [
   TopicUnavailableResponse,
   ChannelUnavailableResponse,
   InternalServerErrorResponse,
+  MessageCommandConflictResponse,
 ];
 
 const messageChangeErrors = [
@@ -67,6 +81,8 @@ const messageChangeErrors = [
   MessageUnavailableResponse,
   TopicUnavailableResponse,
   ChannelUnavailableResponse,
+  MessageCommandConflictResponse,
+  StaleMessageVersionResponse,
   InternalServerErrorResponse,
 ];
 
@@ -76,8 +92,8 @@ const AddMessageEndpoint = HttpApiEndpoint.post(
   {
     params: TopicParams,
     headers: CsrfHeaders,
-    payload: MessageMutationRequest,
-    success: TopicMessageResponse,
+    payload: CreateReplyRequest,
+    success: MessageCommandAcceptedResponse,
     error: addMessageErrors,
   },
 ).middleware(SessionAuth);
@@ -88,8 +104,8 @@ const EditMessageEndpoint = HttpApiEndpoint.patch(
   {
     params: MessageParams,
     headers: CsrfHeaders,
-    payload: MessageMutationRequest,
-    success: TopicMessageResponse,
+    payload: EditMessageRequest,
+    success: MessageCommandAcceptedResponse,
     error: messageChangeErrors,
   },
 ).middleware(SessionAuth);
@@ -100,8 +116,19 @@ const DeleteMessageEndpoint = HttpApiEndpoint.delete(
   {
     params: MessageParams,
     headers: CsrfHeaders,
-    success: TopicMessageResponse,
+    query: DeleteMessageRequest,
+    success: MessageCommandAcceptedResponse,
     error: messageChangeErrors,
+  },
+).middleware(SessionAuth);
+
+const GetMessageCommandStatusEndpoint = HttpApiEndpoint.get(
+  "getMessageCommandStatus",
+  "/api/app/v1/workspaces/:workspaceId/message-commands/:commandId",
+  {
+    params: MessageCommandParams,
+    success: MessageCommandStatusResponse,
+    error: [MessageCommandUnavailableResponse, InternalServerErrorResponse],
   },
 ).middleware(SessionAuth);
 
@@ -111,4 +138,5 @@ export const TopicApiGroup = HttpApiGroup.make("topics").add(
   AddMessageEndpoint,
   EditMessageEndpoint,
   DeleteMessageEndpoint,
+  GetMessageCommandStatusEndpoint,
 );

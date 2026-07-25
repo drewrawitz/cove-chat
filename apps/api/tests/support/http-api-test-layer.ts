@@ -1,12 +1,15 @@
 import { NodeHttpServer } from "@effect/platform-node";
 import {
   ChannelAccess,
+  MessageCommands,
+  type MessageCommandsService,
   TopicAccess,
   WorkspaceAccess,
   makeCsrfToken,
   makeMagicLinkToken,
   makeSessionToken,
 } from "@cove/application";
+import { DisplayName, EmailAddress, User, UserId } from "@cove/domain";
 import {
   AuditEventWriter,
   AuthenticationNotifier,
@@ -26,6 +29,8 @@ const unmockedChannelAccess = (operation: string) =>
   Effect.die(new Error(`ChannelAccess.${operation} not mocked for this test`));
 const unmockedTopicAccess = (operation: string) =>
   Effect.die(new Error(`TopicAccess.${operation} not mocked for this test`));
+const unmockedMessageCommands = (operation: string) =>
+  Effect.die(new Error(`MessageCommands.${operation} not mocked for this test`));
 
 const AuthPortsTest = Layer.mergeAll(
   Layer.succeed(
@@ -35,13 +40,6 @@ const AuthPortsTest = Layer.mergeAll(
         unmockedTopicAccess("listArchiveForActor"),
       ),
       create: Effect.fn("TopicAccess.Test.create")(() => unmockedTopicAccess("create")),
-      addMessage: Effect.fn("TopicAccess.Test.addMessage")(() => unmockedTopicAccess("addMessage")),
-      editMessage: Effect.fn("TopicAccess.Test.editMessage")(() =>
-        unmockedTopicAccess("editMessage"),
-      ),
-      deleteMessage: Effect.fn("TopicAccess.Test.deleteMessage")(() =>
-        unmockedTopicAccess("deleteMessage"),
-      ),
     }),
   ),
   Layer.succeed(
@@ -164,7 +162,15 @@ const AuthPortsTest = Layer.mergeAll(
         }),
       ),
       findCurrentUser: Effect.fn("SessionRepository.Test.findCurrentUser")(() =>
-        Effect.succeed(Option.none()),
+        Effect.succeed(
+          Option.some(
+            User.make({
+              id: UserId.make("http-test-actor"),
+              email: EmailAddress.make("http-test@example.test"),
+              displayName: DisplayName.make("HTTP Test Actor"),
+            }),
+          ),
+        ),
       ),
       validateCsrf: Effect.fn("SessionRepository.Test.validateCsrf")(() => Effect.succeed(true)),
       revoke: Effect.fn("SessionRepository.Test.revoke")(() => Effect.succeed(true)),
@@ -195,11 +201,20 @@ const AuthPortsTest = Layer.mergeAll(
 export const makeHttpApiTestLayer = <R, E>(
   options: { readonly exposeAppApiDocs: boolean },
   dependencies: Layer.Layer<R, E>,
+  messageCommands: MessageCommandsService = MessageCommands.of({
+    execute: Effect.fn("MessageCommands.Test.execute")(() => unmockedMessageCommands("execute")),
+    status: Effect.fn("MessageCommands.Test.status")(() => unmockedMessageCommands("status")),
+  }),
 ) =>
   HttpRouter.serve(makeHttpRoutes(options), {
     disableListenLog: true,
     disableLogger: true,
   }).pipe(
-    Layer.provide(dependencies.pipe(Layer.provideMerge(AuthPortsTest))),
+    Layer.provide(
+      dependencies.pipe(
+        Layer.provideMerge(AuthPortsTest),
+        Layer.provideMerge(Layer.succeed(MessageCommands, messageCommands)),
+      ),
+    ),
     Layer.provideMerge(NodeHttpServer.layerTest),
   );
