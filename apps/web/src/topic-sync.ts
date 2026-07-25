@@ -189,16 +189,6 @@ function sameSynchronizedTopicMessage(
   );
 }
 
-export function sameTopicReplies(
-  left: ReadonlyArray<SynchronizedTopicMessage>,
-  right: ReadonlyArray<SynchronizedTopicMessage>,
-): boolean {
-  return (
-    left.length === right.length &&
-    left.every((message, index) => sameSynchronizedTopicMessage(message, right[index]))
-  );
-}
-
 export function remainingTopicReplyCount(
   messageCount: number,
   loadedReplies: ReadonlyArray<SynchronizedTopicMessage>,

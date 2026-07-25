@@ -1,17 +1,9 @@
 import { queries, TOPIC_REPLY_PAGE_SIZE } from "@cove/sync";
 import { useQuery } from "@rocicorp/zero/react";
-import {
-  type ReactElement,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactElement, type ReactNode, useMemo, useState } from "react";
 import {
   mergeTopicReplies,
   remainingTopicReplyCount,
-  sameTopicReplies,
   type SynchronizedTopicMessage,
 } from "../topic-sync.ts";
 
@@ -39,50 +31,93 @@ interface SynchronizedTopicRepliesProps extends TopicReplyScope {
 
 type ReplyPageOwnership = "retained-live" | "manual-older";
 
-interface OlderReplyPageSubscriptionProps extends TopicReplyScope {
+interface ReplyPageWindow {
   readonly beforePosition: number;
-  readonly onComplete: (
-    beforePosition: number,
-    messages: ReadonlyArray<SynchronizedTopicMessage>,
-  ) => void;
-  readonly onError: (beforePosition: number, ownership: ReplyPageOwnership) => void;
   readonly ownership: ReplyPageOwnership;
+  readonly requestId: number;
 }
 
-function OlderReplyPageSubscription({
-  beforePosition,
+interface ReplyPageSnapshot extends ReplyPageWindow {
+  readonly messages: ReadonlyArray<SynchronizedTopicMessage>;
+  readonly resultType: SynchronizedTopicReplyState["initialResultType"];
+}
+
+interface ReplyPageSubscriptionProps extends TopicReplyScope {
+  readonly children: (snapshot: ReplyPageSnapshot) => ReactNode;
+  readonly pageWindow: ReplyPageWindow;
+}
+
+function ReplyPageSubscription({
   channelId,
-  onComplete,
-  onError,
-  ownership,
+  children,
+  pageWindow,
   topicId,
   workspaceId,
-}: OlderReplyPageSubscriptionProps): null {
+}: ReplyPageSubscriptionProps): ReactElement {
   const [messages, result] = useQuery(
-    queries.messages.replies({ workspaceId, channelId, topicId, beforePosition }),
+    queries.messages.replies({
+      workspaceId,
+      channelId,
+      topicId,
+      beforePosition: pageWindow.beforePosition,
+    }),
     { ttl: TOPIC_QUERY_TTL },
   );
 
-  useEffect(() => {
-    if (result.type === "complete") {
-      onComplete(beforePosition, messages);
-    } else if (result.type === "error") {
-      onError(beforePosition, ownership);
-    }
-  }, [beforePosition, messages, onComplete, onError, ownership, result.type]);
-
-  return null;
+  return (
+    <>
+      {children({
+        ...pageWindow,
+        messages,
+        resultType: result.type,
+      })}
+    </>
+  );
 }
 
-function addUniquePositions(
-  current: ReadonlyArray<number>,
-  incoming: ReadonlyArray<number>,
-): ReadonlyArray<number> {
-  const merged = new Set(current);
-  for (const position of incoming) {
-    merged.add(position);
+interface ReplyPageSubscriptionsProps extends TopicReplyScope {
+  readonly children: (snapshots: ReadonlyArray<ReplyPageSnapshot>) => ReactNode;
+  readonly index?: number;
+  readonly snapshots?: ReadonlyArray<ReplyPageSnapshot>;
+  readonly windows: ReadonlyArray<ReplyPageWindow>;
+}
+
+function ReplyPageSubscriptions({
+  channelId,
+  children,
+  index = 0,
+  snapshots = [],
+  topicId,
+  windows,
+  workspaceId,
+}: ReplyPageSubscriptionsProps): ReactElement {
+  const pageWindow = windows[index];
+  if (pageWindow === undefined) {
+    return <>{children(snapshots)}</>;
   }
-  return merged.size === current.length ? current : [...merged];
+
+  return (
+    <ReplyPageSubscription
+      key={`${pageWindow.beforePosition}:${pageWindow.requestId}`}
+      channelId={channelId}
+      pageWindow={pageWindow}
+      topicId={topicId}
+      workspaceId={workspaceId}
+    >
+      {(snapshot) => (
+        <ReplyPageSubscriptions
+          channelId={channelId}
+          index={index + 1}
+          snapshots={[...snapshots, snapshot]}
+          topicId={topicId}
+          windows={windows}
+          workspaceId={workspaceId}
+        >
+          {children}
+        </ReplyPageSubscriptions>
+      )}
+    </ReplyPageSubscription>
+  );
 }
 
 function newestReplyPosition(replies: ReadonlyArray<SynchronizedTopicMessage>): number | undefined {
@@ -95,38 +130,125 @@ function newestReplyPosition(replies: ReadonlyArray<SynchronizedTopicMessage>): 
   return newest;
 }
 
-function pinnedReplyPagePositions(
-  firstPin: number | undefined,
+function replyPageWindowKey(pageWindow: ReplyPageWindow): string {
+  return `${pageWindow.ownership}:${pageWindow.beforePosition}:${pageWindow.requestId}`;
+}
+
+function withAutomaticRetainedWindows(
+  ownedWindows: ReadonlyArray<ReplyPageWindow>,
   newestPosition: number | undefined,
-): ReadonlyArray<number> {
-  if (firstPin === undefined || newestPosition === undefined) return [];
-
-  const positions: Array<number> = [];
-  for (let pin = firstPin; pin <= newestPosition + 1; pin += TOPIC_REPLY_PAGE_SIZE) {
-    positions.push(pin);
-  }
-  return positions;
-}
-
-interface ReplyPageWindow {
-  readonly beforePosition: number;
-  readonly ownership: ReplyPageOwnership;
-}
-
-function replyPageWindows(
-  pinnedBeforePositions: ReadonlyArray<number>,
-  olderBeforePositions: ReadonlyArray<number>,
 ): ReadonlyArray<ReplyPageWindow> {
-  const windows = new Map<number, ReplyPageWindow>();
-  for (const beforePosition of pinnedBeforePositions) {
-    windows.set(beforePosition, { beforePosition, ownership: "retained-live" });
-  }
-  for (const beforePosition of olderBeforePositions) {
-    if (!windows.has(beforePosition)) {
-      windows.set(beforePosition, { beforePosition, ownership: "manual-older" });
+  if (newestPosition === undefined) return ownedWindows;
+
+  let latestRetainedBoundary: number | undefined;
+  for (const pageWindow of ownedWindows) {
+    if (
+      pageWindow.ownership === "retained-live" &&
+      (latestRetainedBoundary === undefined || pageWindow.beforePosition > latestRetainedBoundary)
+    ) {
+      latestRetainedBoundary = pageWindow.beforePosition;
     }
   }
-  return [...windows.values()];
+  if (latestRetainedBoundary === undefined) return ownedWindows;
+
+  const windows = [...ownedWindows];
+  for (
+    let beforePosition = latestRetainedBoundary + TOPIC_REPLY_PAGE_SIZE;
+    beforePosition <= newestPosition + 1;
+    beforePosition += TOPIC_REPLY_PAGE_SIZE
+  ) {
+    windows.push({ beforePosition, ownership: "retained-live", requestId: 0 });
+  }
+  return windows;
+}
+
+interface SynchronizedTopicReplyContentProps {
+  readonly children: (state: SynchronizedTopicReplyState) => ReactNode;
+  readonly initialReplies: ReadonlyArray<SynchronizedTopicMessage>;
+  readonly initialResultType: SynchronizedTopicReplyState["initialResultType"];
+  readonly messageCount: number;
+  readonly newestPosition: number | undefined;
+  readonly replaceOwnedWindows: (windows: ReadonlyArray<ReplyPageWindow>) => void;
+  readonly snapshots: ReadonlyArray<ReplyPageSnapshot>;
+  readonly windows: ReadonlyArray<ReplyPageWindow>;
+}
+
+function SynchronizedTopicReplyContent({
+  children,
+  initialReplies,
+  initialResultType,
+  messageCount,
+  newestPosition,
+  replaceOwnedWindows,
+  snapshots,
+  windows,
+}: SynchronizedTopicReplyContentProps): ReactElement {
+  const isLoadingOlderReplies = snapshots.some(({ resultType }) => resultType === "unknown");
+  const failedWindowKeys = new Set<string>();
+  for (const snapshot of snapshots) {
+    if (snapshot.resultType === "error") {
+      failedWindowKeys.add(replyPageWindowKey(snapshot));
+    }
+  }
+  const olderRepliesError = failedWindowKeys.size > 0;
+
+  const replies = useMemo(() => {
+    const pageReplies: Array<SynchronizedTopicMessage> = [];
+    for (const snapshot of snapshots) {
+      if (snapshot.resultType === "complete") {
+        pageReplies.push(...snapshot.messages);
+      }
+    }
+    return mergeTopicReplies(initialReplies, pageReplies);
+  }, [initialReplies, snapshots]);
+  const remainingReplyCount =
+    initialResultType === "complete" ? remainingTopicReplyCount(messageCount, replies) : 0;
+
+  const loadOlderReplies = (): void => {
+    if (isLoadingOlderReplies) return;
+
+    if (olderRepliesError) {
+      replaceOwnedWindows(
+        windows.map((pageWindow) =>
+          failedWindowKeys.has(replyPageWindowKey(pageWindow))
+            ? { ...pageWindow, requestId: pageWindow.requestId + 1 }
+            : pageWindow,
+        ),
+      );
+      return;
+    }
+
+    const beforePosition = replies[0]?.position;
+    if (beforePosition === undefined || newestPosition === undefined || remainingReplyCount === 0) {
+      return;
+    }
+
+    const nextWindows = [...windows];
+    if (!windows.some(({ ownership }) => ownership === "retained-live")) {
+      nextWindows.push({
+        beforePosition: newestPosition + 1,
+        ownership: "retained-live",
+        requestId: 0,
+      });
+    }
+    if (!windows.some((pageWindow) => pageWindow.beforePosition === beforePosition)) {
+      nextWindows.push({ beforePosition, ownership: "manual-older", requestId: 0 });
+    }
+    replaceOwnedWindows(nextWindows);
+  };
+
+  return (
+    <>
+      {children({
+        initialResultType,
+        isLoadingOlderReplies,
+        loadOlderReplies,
+        olderRepliesError,
+        remainingReplyCount,
+        replies,
+      })}
+    </>
+  );
 }
 
 export function SynchronizedTopicReplies({
@@ -140,103 +262,33 @@ export function SynchronizedTopicReplies({
     queries.messages.replies({ workspaceId, channelId, topicId }),
     { ttl: TOPIC_QUERY_TTL },
   );
-  const [pageResults, setPageResults] = useState<
-    ReadonlyMap<number, ReadonlyArray<SynchronizedTopicMessage>>
-  >(() => new Map());
-  const [olderBeforePositions, setOlderBeforePositions] = useState<ReadonlyArray<number>>([]);
-  const [firstPinnedBeforePosition, setFirstPinnedBeforePosition] = useState<number>();
-  const [pendingBeforePosition, setPendingBeforePosition] = useState<number>();
-  const [olderRepliesError, setOlderRepliesError] = useState(false);
+  const [ownedWindows, setOwnedWindows] = useState<ReadonlyArray<ReplyPageWindow>>([]);
   const newestPosition = newestReplyPosition(initialReplies);
-  const pinnedBeforePositions = useMemo(
-    () => pinnedReplyPagePositions(firstPinnedBeforePosition, newestPosition),
-    [firstPinnedBeforePosition, newestPosition],
-  );
   const windows = useMemo(
-    () => replyPageWindows(pinnedBeforePositions, olderBeforePositions),
-    [olderBeforePositions, pinnedBeforePositions],
+    () => withAutomaticRetainedWindows(ownedWindows, newestPosition),
+    [newestPosition, ownedWindows],
   );
-
-  const replies = useMemo(() => {
-    let ownedReplies = mergeTopicReplies([], initialReplies);
-    for (const page of pageResults.values()) {
-      ownedReplies = mergeTopicReplies(ownedReplies, page);
-    }
-    return ownedReplies;
-  }, [initialReplies, pageResults]);
-  const remainingReplyCount =
-    initialResult.type === "complete" ? remainingTopicReplyCount(messageCount, replies) : 0;
-
-  const acceptPage = useCallback(
-    (beforePosition: number, messages: ReadonlyArray<SynchronizedTopicMessage>) => {
-      setPageResults((current) => {
-        const existing = current.get(beforePosition);
-        if (existing !== undefined && sameTopicReplies(existing, messages)) {
-          return current;
-        }
-        const next = new Map(current);
-        next.set(beforePosition, messages);
-        return next;
-      });
-      setPendingBeforePosition((current) => (current === beforePosition ? undefined : current));
-      setOlderRepliesError(false);
-    },
-    [],
-  );
-  const rejectPage = useCallback((beforePosition: number, ownership: ReplyPageOwnership) => {
-    if (ownership === "manual-older") {
-      setOlderBeforePositions((current) =>
-        current.filter((position) => position !== beforePosition),
-      );
-      setPageResults((current) => {
-        if (!current.has(beforePosition)) return current;
-        const next = new Map(current);
-        next.delete(beforePosition);
-        return next;
-      });
-    }
-    setPendingBeforePosition((current) => (current === beforePosition ? undefined : current));
-    setOlderRepliesError(true);
-  }, []);
-  const loadOlderReplies = useCallback(() => {
-    const beforePosition = replies[0]?.position;
-    if (
-      beforePosition === undefined ||
-      newestPosition === undefined ||
-      remainingReplyCount === 0 ||
-      pendingBeforePosition !== undefined
-    ) {
-      return;
-    }
-    const pinBeforePosition = newestPosition + 1;
-    setFirstPinnedBeforePosition((current) => current ?? pinBeforePosition);
-    setOlderBeforePositions((current) => addUniquePositions(current, [beforePosition]));
-    setPendingBeforePosition(beforePosition);
-    setOlderRepliesError(false);
-  }, [newestPosition, pendingBeforePosition, remainingReplyCount, replies]);
 
   return (
-    <>
-      {windows.map(({ beforePosition, ownership }) => (
-        <OlderReplyPageSubscription
-          key={beforePosition}
-          beforePosition={beforePosition}
-          channelId={channelId}
-          onComplete={acceptPage}
-          onError={rejectPage}
-          ownership={ownership}
-          topicId={topicId}
-          workspaceId={workspaceId}
-        />
-      ))}
-      {children({
-        initialResultType: initialResult.type,
-        isLoadingOlderReplies: pendingBeforePosition !== undefined,
-        loadOlderReplies,
-        olderRepliesError,
-        remainingReplyCount,
-        replies,
-      })}
-    </>
+    <ReplyPageSubscriptions
+      channelId={channelId}
+      topicId={topicId}
+      windows={windows}
+      workspaceId={workspaceId}
+    >
+      {(snapshots) => (
+        <SynchronizedTopicReplyContent
+          initialReplies={initialReplies}
+          initialResultType={initialResult.type}
+          messageCount={messageCount}
+          newestPosition={newestPosition}
+          replaceOwnedWindows={setOwnedWindows}
+          snapshots={snapshots}
+          windows={windows}
+        >
+          {children}
+        </SynchronizedTopicReplyContent>
+      )}
+    </ReplyPageSubscriptions>
   );
 }

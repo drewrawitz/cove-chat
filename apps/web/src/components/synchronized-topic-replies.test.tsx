@@ -12,6 +12,7 @@ const queryHarness = vi.hoisted(() => ({
     readonly options: unknown;
   }>,
   newestPosition: 102,
+  resultTypeByBeforePosition: new Map<number, "complete" | "error">(),
 }));
 
 vi.mock("@cove/sync", () => ({
@@ -44,7 +45,13 @@ vi.mock("@rocicorp/zero/react", () => ({
           avatarUrl: "/alice.svg",
         },
       })),
-      { type: "complete" },
+      {
+        type:
+          query.args.beforePosition === undefined
+            ? "complete"
+            : (queryHarness.resultTypeByBeforePosition.get(query.args.beforePosition) ??
+              "complete"),
+      },
     ] as const;
   },
 }));
@@ -54,6 +61,7 @@ afterEach(() => {
   queryHarness.bodyByPosition.clear();
   queryHarness.calls.length = 0;
   queryHarness.newestPosition = 102;
+  queryHarness.resultTypeByBeforePosition.clear();
 });
 
 test("keeps displaced Reply windows live with an explicit five-minute Zero TTL", async () => {
@@ -143,4 +151,46 @@ test("keeps displaced Reply windows live with an explicit five-minute Zero TTL",
         options.ttl === "5m",
     ),
   ).toBe(true);
+});
+
+test("retries an errored older Reply page without releasing retained live windows", async () => {
+  queryHarness.resultTypeByBeforePosition.set(3, "error");
+  render(
+    <SynchronizedTopicReplies
+      channelId="channel-1"
+      messageCount={102}
+      topicId="topic-1"
+      workspaceId="workspace-1"
+    >
+      {({ loadOlderReplies, olderRepliesError, remainingReplyCount, replies }): ReactElement => (
+        <>
+          <p>{`${replies.length} loaded, ${remainingReplyCount} remaining`}</p>
+          {olderRepliesError ? <p>Older Replies failed</p> : null}
+          <button type="button" onClick={loadOlderReplies}>
+            Load
+          </button>
+        </>
+      )}
+    </SynchronizedTopicReplies>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Load" }));
+  await waitFor(() => {
+    expect(screen.getByText("Older Replies failed")).toBeDefined();
+  });
+  expect(screen.getByText("100 loaded, 1 remaining")).toBeDefined();
+
+  const retainedQueryCallsBeforeRetry = queryHarness.calls.filter(
+    ({ args }) => args.beforePosition === 103,
+  ).length;
+  queryHarness.resultTypeByBeforePosition.delete(3);
+  fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+  await waitFor(() => {
+    expect(screen.getByText("101 loaded, 0 remaining")).toBeDefined();
+  });
+  expect(screen.queryByText("Older Replies failed")).toBeNull();
+  expect(
+    queryHarness.calls.filter(({ args }) => args.beforePosition === 103).length,
+  ).toBeGreaterThan(retainedQueryCallsBeforeRetry);
 });
