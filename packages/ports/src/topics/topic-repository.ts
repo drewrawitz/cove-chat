@@ -48,12 +48,6 @@ export const TopicSummaryRecord = Schema.Struct({
 });
 export interface TopicSummaryRecord extends Schema.Schema.Type<typeof TopicSummaryRecord> {}
 
-export const TopicRecord = Schema.Struct({
-  topic: Topic,
-  messages: Schema.Array(TopicMessageRecord),
-});
-export interface TopicRecord extends Schema.Schema.Type<typeof TopicRecord> {}
-
 export interface TopicArchivePageRecord {
   readonly summaries: ReadonlyArray<TopicSummaryRecord>;
   readonly cursorValid: boolean;
@@ -91,11 +85,16 @@ export interface TopicRepositoryService {
     channelId: ChannelId,
     cursor?: string,
   ) => Effect.Effect<TopicArchivePageRecord, PersistenceError>;
-  readonly findById: (
+  readonly findTopicById: (
     workspaceId: WorkspaceId,
     channelId: ChannelId,
     topicId: TopicId,
-  ) => Effect.Effect<TopicRecord | undefined, PersistenceError>;
+  ) => Effect.Effect<Topic | undefined, PersistenceError>;
+  readonly findMessageById: (
+    workspaceId: WorkspaceId,
+    topicId: TopicId,
+    messageId: MessageId,
+  ) => Effect.Effect<TopicMessageRecord | undefined, PersistenceError>;
   readonly insertTopic: (topic: Topic) => Effect.Effect<void, PersistenceError>;
   readonly insertMessage: (message: Message) => Effect.Effect<void, PersistenceError>;
   readonly appendMessage: (message: MessageAppend) => Effect.Effect<Message, PersistenceError>;

@@ -25,7 +25,11 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
-import { topicArchivePageResponse, topicResponse, topicResponseMessage } from "./topic-response.ts";
+import {
+  createdTopicResponse,
+  topicArchivePageResponse,
+  topicResponseMessage,
+} from "./topic-response.ts";
 
 const errorTag = (error: unknown): unknown =>
   typeof error === "object" && error !== null && "_tag" in error ? error._tag : undefined;
@@ -112,7 +116,7 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const openingBriefMessageId = yield* makeMessageId(randomUUID());
         const title = yield* makeTopicTitle(payload.title);
         const topics = yield* TopicAccess;
-        return topicResponse(
+        return createdTopicResponse(
           yield* topics.create(
             CreateTopicCommand.make({
               actorAccountId: actorId,
@@ -127,14 +131,6 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
           ),
         );
       }).pipe(Effect.mapError(createTopicErrorResponse)),
-    )
-    .handle("getTopic", ({ params }) =>
-      Effect.gen(function* () {
-        const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
-        const topicId = yield* makeTopicId(params.topicId);
-        const topics = yield* TopicAccess;
-        return topicResponse(yield* topics.getForActor(actorId, workspaceId, channelId, topicId));
-      }).pipe(Effect.mapError(topicErrorResponse)),
     )
     .handle("addMessage", ({ headers, params, payload }) =>
       Effect.gen(function* () {

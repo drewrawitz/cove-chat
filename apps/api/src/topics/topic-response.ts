@@ -5,9 +5,9 @@ import type {
   TopicView,
 } from "@cove/application";
 import {
+  CreatedTopicResponse,
   TopicArchivePageResponse,
   TopicMessageResponse,
-  TopicResponse,
   TopicSummaryResponse,
 } from "@cove/protocol";
 
@@ -35,11 +35,16 @@ const topicResponseFields = (view: TopicView | TopicSummaryView) => ({
   createdAt: view.topic.createdAt,
 });
 
-export const topicResponse = (view: TopicView): TopicResponse =>
-  TopicResponse.make({
+export const createdTopicResponse = (view: TopicView): CreatedTopicResponse => {
+  const openingBrief = view.messages[0];
+  if (openingBrief === undefined) {
+    throw new Error("A newly created Topic must include its Opening Brief.");
+  }
+  return CreatedTopicResponse.make({
     ...topicResponseFields(view),
-    messages: view.messages.map(topicResponseMessage),
+    openingBrief: topicResponseMessage(openingBrief),
   });
+};
 
 const topicSummaryResponse = (view: TopicSummaryView): TopicSummaryResponse =>
   TopicSummaryResponse.make({

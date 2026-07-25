@@ -46,7 +46,7 @@ describe("authorized Topic queries", () => {
     }
   });
 
-  it("orders one Topic's flat Messages and includes each author", () => {
+  it("opens one authorized Topic without relating any Messages", () => {
     const query = queries.topics.byId.fn({
       args: { ...args, topicId: "topic-1" },
       ctx,
@@ -55,8 +55,63 @@ describe("authorized Topic queries", () => {
     const serialized = JSON.stringify(ast);
 
     expect(serialized).toContain("topic-1");
-    expect(serialized).toContain('"alias":"messages"');
+    expect(serialized).toContain(args.workspaceId);
+    expect(serialized).toContain(args.channelId);
+    expect(serialized).toContain(ctx.userID);
+    expect(serialized).not.toContain('"alias":"messages"');
+  });
+
+  it("loads the authorized Opening Brief exactly once", () => {
+    const query = queries.messages.openingBrief.fn({
+      args: { ...args, topicId: "topic-1" },
+      ctx,
+    });
+    const ast = queryAst(query);
+    const serialized = JSON.stringify(ast);
+
+    expect(ast.table).toBe("message");
+    expect(serialized).toContain(args.workspaceId);
+    expect(serialized).toContain(args.channelId);
+    expect(serialized).toContain("topic-1");
+    expect(serialized).toContain(ctx.userID);
+    expect(serialized).toContain('"name":"position"');
+    expect(serialized).toContain('"value":1');
     expect(serialized).toContain('"alias":"author"');
-    expect(serialized).toContain('"position","asc"');
+    expect(serialized).toContain('"limit":1');
+  });
+
+  it("loads at most 100 Replies before an exclusive immutable position", () => {
+    const initial = JSON.stringify(
+      queryAst(
+        queries.messages.replies.fn({
+          args: { ...args, topicId: "topic-1" },
+          ctx,
+        }),
+      ),
+    );
+    const older = JSON.stringify(
+      queryAst(
+        queries.messages.replies.fn({
+          args: { ...args, topicId: "topic-1", beforePosition: 902 },
+          ctx,
+        }),
+      ),
+    );
+
+    for (const serialized of [initial, older]) {
+      expect(serialized).toContain(args.workspaceId);
+      expect(serialized).toContain(args.channelId);
+      expect(serialized).toContain("topic-1");
+      expect(serialized).toContain(ctx.userID);
+      expect(serialized).toContain('"name":"position"');
+      expect(serialized).toContain('"value":1');
+      expect(serialized).toContain('"op":">"');
+      expect(serialized).toContain('"position","desc"');
+      expect(serialized).toContain('"limit":100');
+      expect(serialized).toContain('"alias":"author"');
+    }
+    expect(initial).not.toContain('"value":902');
+    expect(older).toContain('"value":902');
+    expect(older).toContain('"op":"<"');
   });
 });

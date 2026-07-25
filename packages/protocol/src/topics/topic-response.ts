@@ -58,8 +58,8 @@ export interface TopicArchivePageResponse extends Schema.Schema.Type<
   typeof TopicArchivePageResponse
 > {}
 
-export const TopicResponse = Schema.Struct({
+export const CreatedTopicResponse = Schema.Struct({
   ...TopicResponseFields,
-  messages: Schema.Array(TopicMessageResponse),
-}).annotate({ identifier: "TopicResponse" });
-export interface TopicResponse extends Schema.Schema.Type<typeof TopicResponse> {}
+  openingBrief: TopicMessageResponse,
+}).annotate({ identifier: "CreatedTopicResponse" });
+export interface CreatedTopicResponse extends Schema.Schema.Type<typeof CreatedTopicResponse> {}

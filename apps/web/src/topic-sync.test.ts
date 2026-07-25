@@ -4,6 +4,8 @@ import {
   completeTopicArchiveRequest,
   failTopicArchiveRequest,
   initialTopicArchivePagination,
+  mergeTopicReplies,
+  remainingTopicReplyCount,
   startTopicArchiveRequest,
   synchronizedTopicDetail,
   synchronizedTopicSummaries,
@@ -136,7 +138,7 @@ describe("synchronized Topic views", () => {
   });
 
   it("preserves flat Message order and tombstone state without duplicates", () => {
-    const detail = synchronizedTopicDetail(topic);
+    const detail = synchronizedTopicDetail(topic, messages[0], messages.slice(1));
 
     expect(detail?.messages.map(({ id }) => id)).toEqual(["message-1", "message-2"]);
     expect(detail?.messages[1]).toMatchObject({
@@ -145,6 +147,65 @@ describe("synchronized Topic views", () => {
     });
     expect(detail?.messages[1]).not.toHaveProperty("body");
   });
+
+  it("merges Reply pages by identity in Topic order without losing a shifted boundary", () => {
+    const initial = Array.from({ length: 100 }, (_, index) => ({
+      ...messages[0]!,
+      id: `message-${index + 902}`,
+      position: index + 902,
+    }));
+    const older = Array.from({ length: 100 }, (_, index) => ({
+      ...messages[0]!,
+      id: `message-${index + 802}`,
+      position: index + 802,
+    }));
+    const afterNewActivity = Array.from({ length: 100 }, (_, index) => ({
+      ...messages[0]!,
+      id: `message-${index + 903}`,
+      position: index + 903,
+    }));
+
+    const loaded = mergeTopicReplies([], initial);
+    const withOlder = mergeTopicReplies(loaded, older);
+    const shifted = mergeTopicReplies(withOlder, afterNewActivity);
+
+    expect(shifted.map(({ position }) => position)).toEqual(
+      Array.from({ length: 201 }, (_, index) => index + 802),
+    );
+    expect(new Set(shifted.map(({ id }) => id)).size).toBe(shifted.length);
+    expect(remainingTopicReplyCount(1_001, withOlder)).toBe(800);
+    expect(remainingTopicReplyCount(1_002, shifted)).toBe(800);
+  });
+
+  it.each([0, 100, 101, 1_000])(
+    "loads all %i Replies across repeatable 100-row boundaries",
+    (replyCount) => {
+      const allReplies = Array.from({ length: replyCount }, (_, index) => ({
+        ...messages[0]!,
+        id: `reply-${index + 1}`,
+        position: index + 2,
+      }));
+      const pageBefore = (beforePosition?: number) =>
+        allReplies
+          .filter(({ position }) => beforePosition === undefined || position < beforePosition)
+          .sort((left, right) => right.position - left.position)
+          .slice(0, 100);
+
+      let loaded = mergeTopicReplies([], pageBefore());
+      while (remainingTopicReplyCount(replyCount + 1, loaded) > 0) {
+        const beforePosition = loaded[0]!.position;
+        const page = pageBefore(beforePosition);
+        loaded = mergeTopicReplies(loaded, page);
+        loaded = mergeTopicReplies(loaded, pageBefore(beforePosition));
+      }
+
+      expect(loaded.map(({ position }) => position)).toEqual(
+        Array.from({ length: replyCount }, (_, index) => index + 2),
+      );
+      expect(new Set(loaded.map(({ id }) => id)).size).toBe(replyCount);
+      expect(remainingTopicReplyCount(replyCount + 1, loaded)).toBe(0);
+    },
+  );
 
   it("keeps a just-created Topic syncing until its delayed projection arrives", () => {
     expect([

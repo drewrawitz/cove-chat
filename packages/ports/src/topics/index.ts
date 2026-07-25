@@ -2,7 +2,6 @@ export {
   StoredMessage,
   TopicAuthorRecord,
   TopicMessageRecord,
-  TopicRecord,
   TopicRepository,
   TopicSummaryRecord,
   type MessageAppend,

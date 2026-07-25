@@ -31,7 +31,6 @@ import {
   TopicAccessLive,
   TopicArchiveCursorInvalid,
   ChannelUnavailable,
-  TopicUnavailable,
   type ChannelAccessService,
 } from "../../src/index.ts";
 
@@ -60,7 +59,8 @@ const makeChannelAccess = (overrides: Partial<ChannelAccessService>): ChannelAcc
 const makeRepository = (overrides: Partial<TopicRepositoryService>): TopicRepositoryService =>
   TopicRepository.of({
     listArchivePageInChannel: () => unexpected("TopicRepository", "listArchivePageInChannel"),
-    findById: () => unexpected("TopicRepository", "findById"),
+    findTopicById: () => unexpected("TopicRepository", "findTopicById"),
+    findMessageById: () => unexpected("TopicRepository", "findMessageById"),
     insertTopic: () => unexpected("TopicRepository", "insertTopic"),
     insertMessage: () => unexpected("TopicRepository", "insertMessage"),
     appendMessage: () => unexpected("TopicRepository", "appendMessage"),
@@ -209,7 +209,7 @@ it.effect("adds a flat Message at the next Topic position for a Channel Member",
         }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [] }),
+      findTopicById: () => Effect.succeed(topic),
       appendMessage: (message) =>
         Effect.succeed(
           Message.make({
@@ -298,7 +298,8 @@ it.effect("lets a Message author correct their writing with an edited marker", (
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [{ message: original, author }] }),
+      findTopicById: () => Effect.succeed(topic),
+      findMessageById: () => Effect.succeed({ message: original, author }),
       editMessage: (edit) =>
         Effect.succeed(
           Message.make({
@@ -384,7 +385,8 @@ it.effect("lets a Message author leave a tombstone without removing its position
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [{ message: original, author }] }),
+      findTopicById: () => Effect.succeed(topic),
+      findMessageById: () => Effect.succeed({ message: original, author }),
       tombstoneMessage: () =>
         Effect.succeed(
           Message.make({
@@ -473,7 +475,8 @@ it.effect("does not let an author edit a tombstoned Message", () =>
         Effect.succeed({ channel, actor: author, hasChannelMembership: true }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [{ message: tombstone, author }] }),
+      findTopicById: () => Effect.succeed(topic),
+      findMessageById: () => Effect.succeed({ message: tombstone, author }),
       editMessage: () => Ref.update(editCount, (count) => count + 1).pipe(Effect.as(tombstone)),
     });
 
@@ -559,7 +562,8 @@ it.effect("does not let a Channel participant change another author's Message", 
         }),
     });
     const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [{ message, author }] }),
+      findTopicById: () => Effect.succeed(topic),
+      findMessageById: () => Effect.succeed({ message, author }),
       editMessage: () => Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(message)),
       tombstoneMessage: () =>
         Ref.update(mutationCount, (count) => count + 1).pipe(Effect.as(message)),
@@ -674,83 +678,6 @@ it.effect("does not let a Public Channel reader create a Topic before joining", 
   }),
 );
 
-it.effect("inherits Channel read access when opening a Topic", () =>
-  Effect.gen(function* () {
-    const actorAccountId = yield* makeUserId("reader-account");
-    const actorIdentityId = yield* makeWorkspaceIdentityId("reader-identity");
-    const authorIdentityId = yield* makeWorkspaceIdentityId("author-identity");
-    const workspaceId = yield* makeWorkspaceId("workspace");
-    const channelId = yield* makeChannelId("general");
-    const topicId = yield* makeTopicId("topic-1");
-    const messageId = yield* makeMessageId("message-1");
-    const title = yield* makeTopicTitle("Release readiness");
-    const createdAt = new Date("2026-07-22T12:00:00.000Z");
-    const channel = Channel.make({
-      id: channelId,
-      workspaceId,
-      name: ChannelName.make("general"),
-      purpose: ChannelPurpose.make("Coordinate workspace topics."),
-      visibility: "public",
-      maintainerIdentityId: authorIdentityId,
-    });
-    const topic = Topic.make({
-      id: topicId,
-      workspaceId,
-      channelId,
-      title,
-      intent: "discussion",
-      openedByIdentityId: authorIdentityId,
-      messageCount: 1,
-      latestMessageId: messageId,
-      latestMessagePreview: makeTopicSummaryPreview("Capture the remaining launch risks."),
-      latestMessageAuthorIdentityId: authorIdentityId,
-      latestMessagePosition: 1,
-      latestMessageCreatedAt: createdAt,
-      lastActivityAt: createdAt,
-      createdAt,
-    });
-    const latestMessage = {
-      message: Message.make({
-        id: messageId,
-        workspaceId,
-        topicId,
-        authorIdentityId,
-        body: MessageBody.make("Capture the remaining launch risks."),
-        position: 1,
-        createdAt,
-      }),
-      author: {
-        id: authorIdentityId,
-        name: WorkspaceIdentityName.make("Topic Author"),
-        avatarUrl: WorkspaceAvatarUrl.make("/avatars/author.svg"),
-      },
-    };
-    const channelAccess = makeChannelAccess({
-      getConversationContextForActor: () =>
-        Effect.succeed({
-          channel,
-          actor: {
-            id: actorIdentityId,
-            name: WorkspaceIdentityName.make("Channel Reader"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/reader.svg"),
-          },
-          hasChannelMembership: false,
-        }),
-    });
-    const repository = makeRepository({
-      findById: () => Effect.succeed({ topic, messages: [latestMessage] }),
-    });
-
-    const detail = yield* Effect.gen(function* () {
-      const topics = yield* TopicAccess;
-      return yield* topics.getForActor(actorAccountId, workspaceId, channelId, topicId);
-    }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
-
-    expect(detail.topic.id).toBe(topicId);
-    expect(detail.messages).toHaveLength(1);
-  }),
-);
-
 it.effect("carries one stable opaque cursor through authorized Topic archive pages", () =>
   Effect.gen(function* () {
     const actorAccountId = yield* makeUserId("reader-account");
@@ -860,50 +787,5 @@ it.effect("carries one stable opaque cursor through authorized Topic archive pag
     expect(result.second.topics).toEqual([]);
     expect(result.invalid).toBeInstanceOf(TopicArchiveCursorInvalid);
     expect(yield* Ref.get(requests)).toEqual([undefined, "server-owned-cursor", "unknown-cursor"]);
-  }),
-);
-
-it.effect("returns TopicUnavailable when an accessible Channel does not contain the Topic", () =>
-  Effect.gen(function* () {
-    const actorAccountId = yield* makeUserId("reader-account");
-    const actorIdentityId = yield* makeWorkspaceIdentityId("reader-identity");
-    const workspaceId = yield* makeWorkspaceId("workspace");
-    const channelId = yield* makeChannelId("general");
-    const topicId = yield* makeTopicId("missing-topic");
-    const channel = Channel.make({
-      id: channelId,
-      workspaceId,
-      name: ChannelName.make("general"),
-      purpose: ChannelPurpose.make("Coordinate workspace topics."),
-      visibility: "public",
-      maintainerIdentityId: actorIdentityId,
-    });
-    const lookupCount = yield* Ref.make(0);
-    const channelAccess = makeChannelAccess({
-      getConversationContextForActor: () =>
-        Effect.succeed({
-          channel,
-          actor: {
-            id: actorIdentityId,
-            name: WorkspaceIdentityName.make("Channel Reader"),
-            avatarUrl: WorkspaceAvatarUrl.make("/avatars/reader.svg"),
-          },
-          hasChannelMembership: false,
-        }),
-    });
-    const repository = makeRepository({
-      findById: () => Ref.update(lookupCount, (count) => count + 1).pipe(Effect.as(undefined)),
-    });
-
-    const error = yield* Effect.gen(function* () {
-      const topics = yield* TopicAccess;
-      return yield* topics
-        .getForActor(actorAccountId, workspaceId, channelId, topicId)
-        .pipe(Effect.flip);
-    }).pipe(Effect.provide(topicAccessTestLayer(channelAccess, repository)));
-
-    expect(error).toBeInstanceOf(TopicUnavailable);
-    expect(error).toMatchObject({ topicId });
-    expect(yield* Ref.get(lookupCount)).toBe(1);
   }),
 );

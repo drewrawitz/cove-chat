@@ -34,9 +34,6 @@ const AuthPortsTest = Layer.mergeAll(
       listArchiveForActor: Effect.fn("TopicAccess.Test.listArchiveForActor")(() =>
         unmockedTopicAccess("listArchiveForActor"),
       ),
-      getForActor: Effect.fn("TopicAccess.Test.getForActor")(() =>
-        unmockedTopicAccess("getForActor"),
-      ),
       create: Effect.fn("TopicAccess.Test.create")(() => unmockedTopicAccess("create")),
       addMessage: Effect.fn("TopicAccess.Test.addMessage")(() => unmockedTopicAccess("addMessage")),
       editMessage: Effect.fn("TopicAccess.Test.editMessage")(() =>

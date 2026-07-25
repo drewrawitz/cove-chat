@@ -8,7 +8,6 @@ import {
   TopicAccess,
   TopicAccessFailure,
   TopicArchiveCursorInvalid,
-  TopicUnavailable,
 } from "@cove/application";
 import {
   MessageBody,
@@ -100,10 +99,11 @@ const withFixtures = <A, E, R>(use: (fixtures: Fixtures) => Effect.Effect<A, E, 
   );
 
 layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) => {
-  it.effect("creates and opens a Topic through inherited Channel access", () =>
+  it.effect("uses bounded Topic metadata and single-Message persistence lookups", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
+        const repository = yield* TopicRepository;
         const created = yield* topics.create(
           CreateTopicCommand.make({
             actorAccountId: fixtures.authorAccountId,
@@ -127,11 +127,15 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           }),
         );
 
-        const detail = yield* topics.getForActor(
-          fixtures.readerAccountId,
+        const topic = yield* repository.findTopicById(
           fixtures.workspaceId,
           fixtures.publicChannelId,
           fixtures.topicId,
+        );
+        const openingBrief = yield* repository.findMessageById(
+          fixtures.workspaceId,
+          fixtures.topicId,
+          fixtures.messageId,
         );
         const createWithoutMembership = yield* topics
           .create(
@@ -153,20 +157,18 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             fixtures.privateChannelId,
           )
           .pipe(Effect.flip);
-        const wrongChannel = yield* topics
-          .getForActor(
-            fixtures.authorAccountId,
-            fixtures.workspaceId,
-            fixtures.privateChannelId,
-            fixtures.topicId,
-          )
-          .pipe(Effect.flip);
+        const wrongChannel = yield* repository.findTopicById(
+          fixtures.workspaceId,
+          fixtures.privateChannelId,
+          fixtures.topicId,
+        );
 
         expect(created.messages).toHaveLength(1);
-        expect(detail.messages[0]?.message.body).toBe("Capture the remaining launch risks.");
+        expect(topic).toMatchObject({ id: fixtures.topicId, messageCount: 2 });
+        expect(openingBrief?.message.body).toBe("Capture the remaining launch risks.");
         expect(createWithoutMembership).toBeInstanceOf(ChannelUnavailable);
         expect(hiddenPrivateChannel).toBeInstanceOf(ChannelUnavailable);
-        expect(wrongChannel).toBeInstanceOf(TopicUnavailable);
+        expect(wrongChannel).toBeUndefined();
       }),
     ),
   );
@@ -175,6 +177,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
+        const repository = yield* TopicRepository;
         yield* topics.create(
           CreateTopicCommand.make({
             actorAccountId: fixtures.authorAccountId,
@@ -215,14 +218,22 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           { concurrency: "unbounded" },
         );
 
-        const detail = yield* topics.getForActor(
-          fixtures.authorAccountId,
-          fixtures.workspaceId,
-          fixtures.publicChannelId,
-          fixtures.topicId,
-        );
-        expect(detail.messages.map(({ message }) => message.position)).toEqual([1, 2, 3]);
-        expect(detail.messages.slice(1).map(({ message }) => message.body)).toEqual(
+        const messages = yield* Effect.all([
+          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, fixtures.messageId),
+          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, firstReplyId),
+          repository.findMessageById(fixtures.workspaceId, fixtures.topicId, secondReplyId),
+        ]);
+        expect(
+          messages
+            .flatMap((record) => (record === undefined ? [] : [record.message]))
+            .map(({ position }) => position)
+            .sort((left, right) => left - right),
+        ).toEqual([1, 2, 3]);
+        expect(
+          messages
+            .flatMap((record) => (record?.message.body === undefined ? [] : [record.message.body]))
+            .slice(1),
+        ).toEqual(
           expect.arrayContaining([
             "The release candidate passed smoke testing.",
             "Documentation review is complete.",
@@ -270,13 +281,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           createdAt: olderActivity,
         });
 
-        const detail = yield* topics.getForActor(
-          fixtures.authorAccountId,
+        const topic = yield* repository.findTopicById(
           fixtures.workspaceId,
           fixtures.publicChannelId,
           fixtures.topicId,
         );
-        expect(detail.topic).toMatchObject({
+        expect(topic).toMatchObject({
           latestMessageId: olderMessageId,
           latestMessagePosition: 3,
           latestMessageCreatedAt: olderActivity,
@@ -290,6 +300,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const topics = yield* TopicAccess;
+        const repository = yield* TopicRepository;
         const sql = yield* SqlClient.SqlClient;
         yield* topics.create(
           CreateTopicCommand.make({
@@ -332,11 +343,10 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             messageId: replyId,
           }),
         );
-        const detail = yield* topics.getForActor(
-          fixtures.authorAccountId,
+        const stored = yield* repository.findMessageById(
           fixtures.workspaceId,
-          fixtures.publicChannelId,
           fixtures.topicId,
+          replyId,
         );
         const revisions = yield* sql<{ readonly body: string; readonly operation: string }>`
           SELECT body, operation
@@ -349,11 +359,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         expect(edited.message.editedAt).toBeInstanceOf(Date);
         expect(deleted.message).toMatchObject({ id: replyId, position: 2 });
         expect(deleted.message).not.toHaveProperty("body");
-        expect(detail.messages[1]?.message).toMatchObject({
+        expect(stored?.message).toMatchObject({
           id: replyId,
           position: 2,
         });
-        expect(detail.messages[1]?.message).not.toHaveProperty("body");
+        expect(stored?.message).not.toHaveProperty("body");
         expect(revisions).toEqual([
           { body: "The release candidate passed smoke testng.", operation: "edit" },
           { body: "The release candidate passed smoke testing.", operation: "delete" },
@@ -368,6 +378,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
       withFixtures((fixtures) =>
         Effect.gen(function* () {
           const topics = yield* TopicAccess;
+          const repository = yield* TopicRepository;
           const sql = yield* SqlClient.SqlClient;
           yield* topics.create(
             CreateTopicCommand.make({
@@ -381,13 +392,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             }),
           );
 
-          const initial = yield* topics.getForActor(
-            fixtures.authorAccountId,
+          const initial = yield* repository.findTopicById(
             fixtures.workspaceId,
             fixtures.publicChannelId,
             fixtures.topicId,
           );
-          expect(initial.topic).toMatchObject({
+          expect(initial).toMatchObject({
             messageCount: 1,
             latestMessageId: fixtures.messageId,
             latestMessagePreview: "Capture the remaining launch risks.",
@@ -441,13 +451,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               body: MessageBody.make("🙂".repeat(129)),
             }),
           );
-          const afterAppend = yield* topics.getForActor(
-            fixtures.authorAccountId,
+          const afterAppend = yield* repository.findTopicById(
             fixtures.workspaceId,
             fixtures.publicChannelId,
             fixtures.topicId,
           );
-          expect(afterAppend.topic).toMatchObject({
+          expect(afterAppend).toMatchObject({
             messageCount: 2,
             latestMessageId: replyId,
             latestMessagePreview: "🙂".repeat(128),
@@ -478,13 +487,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               body: MessageBody.make("é".repeat(300)),
             }),
           );
-          const afterEdit = yield* topics.getForActor(
-            fixtures.authorAccountId,
+          const afterEdit = yield* repository.findTopicById(
             fixtures.workspaceId,
             fixtures.publicChannelId,
             fixtures.topicId,
           );
-          expect(afterEdit.topic).toMatchObject({
+          expect(afterEdit).toMatchObject({
             messageCount: 2,
             latestMessageId: replyId,
             latestMessagePreview: "é".repeat(256),
@@ -500,19 +508,23 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               messageId: replyId,
             }),
           );
-          const afterDelete = yield* topics.getForActor(
-            fixtures.authorAccountId,
+          const afterDelete = yield* repository.findTopicById(
             fixtures.workspaceId,
             fixtures.publicChannelId,
             fixtures.topicId,
           );
-          expect(afterDelete.topic).toMatchObject({
+          const deletedMessage = yield* repository.findMessageById(
+            fixtures.workspaceId,
+            fixtures.topicId,
+            replyId,
+          );
+          expect(afterDelete).toMatchObject({
             messageCount: 2,
             latestMessageId: replyId,
             lastActivityAt: appended.message.createdAt,
           });
-          expect(afterDelete.topic).not.toHaveProperty("latestMessagePreview");
-          expect(afterDelete.messages.at(-1)?.message).toMatchObject({
+          expect(afterDelete).not.toHaveProperty("latestMessagePreview");
+          expect(deletedMessage?.message).toMatchObject({
             id: replyId,
             deletedAt: expect.any(Date),
           });
