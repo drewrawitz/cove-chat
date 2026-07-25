@@ -112,9 +112,6 @@ export function CreateTopic({ channelId, workspaceId }: CreateTopicProps): React
                   className="mt-3 w-full resize-y rounded-lg border bg-background px-4 py-3 font-normal leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   placeholder="Establish the subject, context, and what participants should consider."
                 />
-                <span className="mt-2 block text-xs font-normal text-muted-foreground">
-                  Up to 8 KiB of UTF-8 text.
-                </span>
               </label>
 
               <label className="text-base font-semibold" htmlFor="topicIntent">

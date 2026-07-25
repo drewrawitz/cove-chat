@@ -71,7 +71,6 @@ export function TopicMessageEditor({
           className="min-h-24 w-full resize-y bg-transparent text-base leading-7 outline-none"
           aria-keyshortcuts="Meta+Enter Control+Enter Escape"
         />
-        <p className="mt-2 text-xs text-muted-foreground">Up to 8 KiB of UTF-8 text.</p>
         {hasError ? (
           <p className="mt-2 text-sm text-destructive" role="alert">
             Cove could not save this edit. Refresh and try again.

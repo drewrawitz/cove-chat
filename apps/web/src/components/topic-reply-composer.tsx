@@ -151,7 +151,6 @@ export function TopicReplyComposer({
                   setDraft(event.currentTarget.value);
                 }}
               />
-              <p className="mt-2 text-xs text-muted-foreground">Up to 8 KiB of UTF-8 text.</p>
               {hasError ? (
                 <p className="mt-2 text-sm text-destructive" role="alert">
                   Cove could not add this reply. Refresh and try again.
