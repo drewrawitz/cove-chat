@@ -381,6 +381,19 @@ test("states how many older Replies remain and loads them deliberately", () => {
 
   rerender(
     topicMessages([openingMessage, unrelatedReply], {
+      hasError: true,
+      isLoading: false,
+      load: onLoadOlderReplies,
+      remainingCount: 1,
+    }),
+  );
+  expect(screen.getByText("1 older Reply remains.")).toBeDefined();
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Cove could not load older Replies. Try again.",
+  );
+
+  rerender(
+    topicMessages([openingMessage, unrelatedReply], {
       hasError: false,
       isLoading: false,
       load: onLoadOlderReplies,
