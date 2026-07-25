@@ -10,10 +10,11 @@ import { ChannelUnavailableResponse } from "../channels/channel-error-response.t
 import {
   MessageMutationForbiddenResponse,
   MessageUnavailableResponse,
+  TopicArchiveCursorInvalidResponse,
   TopicUnavailableResponse,
 } from "./topic-error-response.ts";
 import { MessageMutationRequest, CreateTopicRequest } from "./topic-request.ts";
-import { TopicMessageResponse, TopicListResponse, TopicResponse } from "./topic-response.ts";
+import { TopicArchivePageResponse, TopicMessageResponse, TopicResponse } from "./topic-response.ts";
 
 const ChannelParams = {
   workspaceId: Schema.NonEmptyString,
@@ -22,13 +23,18 @@ const ChannelParams = {
 const TopicParams = { ...ChannelParams, topicId: Schema.NonEmptyString };
 const MessageParams = { ...TopicParams, messageId: Schema.NonEmptyString };
 
-const ListTopicsEndpoint = HttpApiEndpoint.get(
-  "listTopics",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics",
+const ListArchivedTopicsEndpoint = HttpApiEndpoint.get(
+  "listArchivedTopics",
+  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/archive",
   {
     params: ChannelParams,
-    success: TopicListResponse,
-    error: [ChannelUnavailableResponse, InternalServerErrorResponse],
+    query: { cursor: Schema.optionalKey(Schema.String) },
+    success: TopicArchivePageResponse,
+    error: [
+      TopicArchiveCursorInvalidResponse,
+      ChannelUnavailableResponse,
+      InternalServerErrorResponse,
+    ],
   },
 ).middleware(SessionAuth);
 
@@ -106,7 +112,7 @@ const DeleteMessageEndpoint = HttpApiEndpoint.delete(
 ).middleware(SessionAuth);
 
 export const TopicApiGroup = HttpApiGroup.make("topics").add(
-  ListTopicsEndpoint,
+  ListArchivedTopicsEndpoint,
   CreateTopicEndpoint,
   GetTopicEndpoint,
   AddMessageEndpoint,

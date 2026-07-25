@@ -51,11 +51,13 @@ export { PersistenceError } from "./persistence-error.ts";
 export { TransactionManager, type TransactionManagerService } from "./transaction-manager.ts";
 
 export {
+  StoredMessage,
   TopicAuthorRecord,
   TopicMessageRecord,
   TopicRecord,
   TopicRepository,
   TopicSummaryRecord,
+  type TopicArchivePageRecord,
   type TopicRepositoryService,
 } from "./topics/index.ts";
 export {

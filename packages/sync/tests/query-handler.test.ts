@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
-import { handleCoveQueryRequest, InvalidCoveQueryRequestError } from "../src/server.ts";
+import {
+  CoveQueryRequestTooLargeError,
+  handleCoveQueryRequest,
+  InvalidCoveQueryRequestError,
+} from "../src/server.ts";
 
 const queryRequest = (name: string, args: unknown) =>
   new Request("http://api.test/api/zero/query", {
@@ -67,5 +71,46 @@ describe("Cove Zero query handler", () => {
       _tag: "CoveQueryRequest.Invalid",
       reason: "InputValidation",
     } satisfies Partial<InvalidCoveQueryRequestError>);
+  });
+
+  it("rejects a Zero query body above 256 KiB before consuming it", async () => {
+    const request = queryRequest("topics.byId", {
+      workspaceId: "workspace-1",
+      channelId: "channel-1",
+      topicId: "topic-1",
+    });
+    const oversized = new Request(request, {
+      headers: {
+        ...Object.fromEntries(request.headers),
+        "content-length": String(256 * 1024 + 1),
+      },
+    });
+
+    await expect(
+      handleCoveQueryRequest({ request: oversized, userID: "account-1" }),
+    ).rejects.toBeInstanceOf(CoveQueryRequestTooLargeError);
+    expect(oversized.bodyUsed).toBe(false);
+  });
+
+  it("cancels an undeclared oversized stream without pulling the complete body", async () => {
+    let chunksPulled = 0;
+    const requestOptions: RequestInit & { readonly duplex: "half" } = {
+      method: "POST",
+      body: new ReadableStream({
+        pull(controller) {
+          chunksPulled += 1;
+          if (chunksPulled <= 10) controller.enqueue(new Uint8Array(64 * 1024));
+          else controller.close();
+        },
+      }),
+      duplex: "half",
+      headers: { "content-type": "application/json" },
+    };
+    const request = new Request("http://api.test/api/zero/query", requestOptions);
+
+    await expect(handleCoveQueryRequest({ request, userID: "account-1" })).rejects.toBeInstanceOf(
+      CoveQueryRequestTooLargeError,
+    );
+    expect(chunksPulled).toBeLessThan(10);
   });
 });

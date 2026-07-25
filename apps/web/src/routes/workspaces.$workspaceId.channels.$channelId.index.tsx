@@ -1,11 +1,18 @@
 import { Button } from "@cove/ui/components/button";
-import { queries } from "@cove/sync";
+import {
+  CHANNEL_TOPIC_LIVE_INCREMENT,
+  CHANNEL_TOPIC_LIVE_INITIAL,
+  CHANNEL_TOPIC_LIVE_MAXIMUM,
+  queries,
+  type ChannelTopicLiveLimit,
+} from "@cove/sync";
 import { useQuery } from "@rocicorp/zero/react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { type ReactElement } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import {
   getChannelsGetChannelQueryKey,
   getChannelsListPublicChannelsQueryKey,
+  topicsListArchivedTopics,
   useAuthMe,
   useChannelsGetChannel,
   useChannelsJoinPublicChannel,
@@ -20,13 +27,24 @@ import { ConversationShell } from "../components/conversation-shell.tsx";
 import { CreateTopic } from "../components/create-topic.tsx";
 import { LocalTimestamp } from "../components/local-timestamp.tsx";
 import { useJoinChannel } from "../components/use-join-channel.ts";
-import { topicMessageKindLabel } from "../topic-message-kind.ts";
-import { synchronizedTopicSummaries, type TopicSummaryView } from "../topic-sync.ts";
+import {
+  combineTopicSummaries,
+  completeTopicArchiveRequest,
+  failTopicArchiveRequest,
+  initialTopicArchivePagination,
+  startTopicArchiveRequest,
+  synchronizedTopicSummaries,
+  type TopicSummaryView,
+} from "../topic-sync.ts";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel } from "../topic-intent.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId/")({
   component: ChannelPage,
+  remountDeps: ({ params }) => ({
+    workspaceId: params.workspaceId,
+    channelId: params.channelId,
+  }),
 });
 
 function ChannelPage(): ReactElement {
@@ -37,10 +55,22 @@ function ChannelPage(): ReactElement {
     query: { retry: false },
   });
   const joinChannelMutation = useChannelsJoinPublicChannel();
-  const [synchronizedTopics, synchronizedTopicsResult] = useQuery(
-    queries.topics.inChannel({ workspaceId, channelId }),
+  const [liveTopicLimit, setLiveTopicLimit] = useState<ChannelTopicLiveLimit>(
+    CHANNEL_TOPIC_LIVE_INITIAL,
   );
-  const topics = synchronizedTopicSummaries(synchronizedTopics);
+  const [archivedTopics, setArchivedTopics] = useState<ReadonlyArray<TopicSummaryView>>([]);
+  const [archive, setArchive] = useState(initialTopicArchivePagination);
+  const [synchronizedTopics, synchronizedTopicsResult] = useQuery(
+    queries.topics.inChannel({ workspaceId, channelId, limit: liveTopicLimit }),
+  );
+  const liveTopics = useMemo(
+    () => synchronizedTopicSummaries(synchronizedTopics),
+    [synchronizedTopics],
+  );
+  const topics = useMemo(
+    () => combineTopicSummaries(liveTopics, archivedTopics),
+    [archivedTopics, liveTopics],
+  );
   const joinChannel = useJoinChannel({
     queriesToInvalidate: [
       getChannelsGetChannelQueryKey(workspaceId, channelId),
@@ -77,6 +107,40 @@ function ChannelPage(): ReactElement {
       },
     );
   };
+
+  const loadOlderTopics = (): void => {
+    if (liveTopicLimit < CHANNEL_TOPIC_LIVE_MAXIMUM) {
+      setLiveTopicLimit(
+        Math.min(
+          liveTopicLimit + CHANNEL_TOPIC_LIVE_INCREMENT,
+          CHANNEL_TOPIC_LIVE_MAXIMUM,
+        ) as ChannelTopicLiveLimit,
+      );
+      return;
+    }
+
+    if (!archive.started) {
+      setArchivedTopics((current) => combineTopicSummaries(liveTopics, current));
+    }
+    setArchive((current) => startTopicArchiveRequest(current));
+    void topicsListArchivedTopics(
+      workspaceId,
+      channelId,
+      archive.cursor === undefined ? {} : { cursor: archive.cursor },
+    )
+      .then((page) => {
+        setArchivedTopics((current) => combineTopicSummaries(current, page.topics));
+        setArchive(completeTopicArchiveRequest(page.nextCursor));
+      })
+      .catch(() => setArchive(failTopicArchiveRequest()));
+  };
+
+  const canExpandLiveWindow =
+    liveTopicLimit < CHANNEL_TOPIC_LIVE_MAXIMUM && synchronizedTopics.length === liveTopicLimit;
+  const canLoadArchive =
+    liveTopicLimit === CHANNEL_TOPIC_LIVE_MAXIMUM &&
+    synchronizedTopics.length === CHANNEL_TOPIC_LIVE_MAXIMUM &&
+    (!archive.started || archive.cursor !== undefined);
 
   let channelContent: ReactElement;
   if (channel.isPending) {
@@ -186,6 +250,25 @@ function ChannelPage(): ReactElement {
             topics={topics}
             workspaceId={workspaceId}
           />
+          {canExpandLiveWindow || canLoadArchive || archive.error ? (
+            <div className="flex flex-col items-center gap-3 border-b px-4 py-6">
+              {canExpandLiveWindow || canLoadArchive ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={archive.pending}
+                  onClick={loadOlderTopics}
+                >
+                  {archive.pending ? "Loading older Topics…" : "Load older Topics"}
+                </Button>
+              ) : null}
+              {archive.error ? (
+                <p className="text-sm text-destructive" role="alert">
+                  Older Topics are unavailable. Try again.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </section>
       </div>
     );
@@ -288,16 +371,14 @@ function TopicList({
                 </span>
                 <span aria-hidden="true">: </span>
                 <span>
-                  {topic.latestMessage.deleted
-                    ? `${topicMessageKindLabel(topic.latestMessage.position)} deleted`
-                    : topic.latestMessage.body}
+                  {topic.latestMessage.deleted ? "Message deleted" : topic.latestMessage.preview}
                 </span>
               </p>
             </div>
             <LocalTimestamp
               className="text-xs tabular-nums text-muted-foreground"
               mode="relative"
-              value={topic.latestMessage.createdAt}
+              value={topic.lastActivityAt}
             />
           </Link>
         </li>

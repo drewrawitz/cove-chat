@@ -29,6 +29,7 @@ import {
 import {
   MessageMutationForbiddenResponse,
   MessageUnavailableResponse,
+  TopicArchiveCursorInvalidResponse,
   TopicApiGroup,
   TopicUnavailableResponse,
 } from "./topics/index.ts";
@@ -54,6 +55,7 @@ export const CoveAppErrorResponse = Schema.Union([
   TopicUnavailableResponse,
   MessageUnavailableResponse,
   MessageMutationForbiddenResponse,
+  TopicArchiveCursorInvalidResponse,
 ]).annotate({ identifier: "CoveAppErrorResponse" });
 
 export const CoveAppApi = HttpApi.make("CoveAppApi")

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 import {
+  combineTopicSummaries,
+  completeTopicArchiveRequest,
+  failTopicArchiveRequest,
+  initialTopicArchivePagination,
+  startTopicArchiveRequest,
   synchronizedTopicDetail,
   synchronizedTopicSummaries,
   topicProjectionState,
@@ -54,6 +59,16 @@ const topic = {
   title: "Launch readiness",
   intent: "question" as const,
   openedByIdentityId: "identity-1",
+  messageCount: 2,
+  latestMessageId: "message-2",
+  latestMessagePreview: null,
+  latestMessageAuthorIdentityId: "identity-2",
+  latestMessagePosition: 2,
+  latestMessageCreatedAt: Date.UTC(2026, 6, 23, 13),
+  latestMessageEditedAt: Date.UTC(2026, 6, 23, 14),
+  latestMessageDeletedAt: Date.UTC(2026, 6, 23, 15),
+  latestMessageAuthor: messages[1]!.author,
+  lastActivityAt: Date.UTC(2026, 6, 23, 13),
   createdAt: Date.UTC(2026, 6, 23, 12),
   messages,
 };
@@ -71,6 +86,53 @@ describe("synchronized Topic views", () => {
         }),
       }),
     ]);
+  });
+
+  it("deduplicates archived Topics when new activity moves them into the live window", () => {
+    const live = synchronizedTopicSummaries([topic]);
+    const archivedOnly = {
+      ...live[0]!,
+      id: "topic-older",
+      title: "Older Topic",
+    };
+
+    expect(combineTopicSummaries(live, [live[0]!, archivedOnly]).map(({ id }) => id)).toEqual([
+      "topic-1",
+      "topic-older",
+    ]);
+
+    const initialLiveSnapshot = combineTopicSummaries(live, []);
+    expect(combineTopicSummaries([archivedOnly], initialLiveSnapshot).map(({ id }) => id)).toEqual([
+      "topic-older",
+      "topic-1",
+    ]);
+  });
+
+  it("starts a fresh archive traversal after a cursor fails", () => {
+    const loading = startTopicArchiveRequest({
+      cursor: "expired-cursor",
+      started: true,
+      pending: false,
+      error: true,
+    });
+    expect(loading).toEqual({
+      cursor: "expired-cursor",
+      started: true,
+      pending: true,
+      error: false,
+    });
+
+    expect(failTopicArchiveRequest()).toEqual({
+      started: false,
+      pending: false,
+      error: true,
+    });
+    expect(completeTopicArchiveRequest(undefined)).toEqual({
+      started: true,
+      pending: false,
+      error: false,
+    });
+    expect(initialTopicArchivePagination).not.toHaveProperty("cursor");
   });
 
   it("preserves flat Message order and tombstone state without duplicates", () => {

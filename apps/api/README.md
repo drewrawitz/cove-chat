@@ -59,5 +59,7 @@ Runtime configuration:
 - `EXPOSE_APP_API_DOCS` defaults to `false`. The local `.env.example` enables it; leave it disabled
   unless `/internal/docs` is protected from public access.
 - `PUBLIC_WEB_ORIGIN` is required. The local `.env.example` uses `http://localhost:3000`.
+- `TOPIC_ARCHIVE_CURSOR_SIGNING_KEY` is required and must contain at least 32 characters. It
+  authenticates stateless Topic archive cursors and must be shared by all API instances.
 - `HOST` defaults to `0.0.0.0`.
 - `PORT` defaults to `3001` so it does not collide with the local web app.

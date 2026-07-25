@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { protocolUtf8ByteLimit } from "../content-bounds.ts";
 import { TopicIntentValue } from "./topic-intent.ts";
 
 export const TopicAuthorResponse = Schema.Struct({
@@ -19,6 +20,19 @@ export const TopicMessageResponse = Schema.Struct({
 }).annotate({ identifier: "TopicMessageResponse" });
 export interface TopicMessageResponse extends Schema.Schema.Type<typeof TopicMessageResponse> {}
 
+export const TopicSummaryMessageResponse = Schema.Struct({
+  id: Schema.String,
+  preview: Schema.optionalKey(Schema.String.check(protocolUtf8ByteLimit(512))),
+  position: Schema.Int.check(Schema.isGreaterThan(0)),
+  createdAt: Schema.DateFromString,
+  edited: Schema.Boolean,
+  deleted: Schema.Boolean,
+  author: TopicAuthorResponse,
+}).annotate({ identifier: "TopicSummaryMessageResponse" });
+export interface TopicSummaryMessageResponse extends Schema.Schema.Type<
+  typeof TopicSummaryMessageResponse
+> {}
+
 const TopicResponseFields = {
   id: Schema.String,
   workspaceId: Schema.String,
@@ -30,15 +44,19 @@ const TopicResponseFields = {
 
 export const TopicSummaryResponse = Schema.Struct({
   ...TopicResponseFields,
-  latestMessage: TopicMessageResponse,
+  latestMessage: TopicSummaryMessageResponse,
   messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
+  lastActivityAt: Schema.DateFromString,
 }).annotate({ identifier: "TopicSummaryResponse" });
 export interface TopicSummaryResponse extends Schema.Schema.Type<typeof TopicSummaryResponse> {}
 
-export const TopicListResponse = Schema.Struct({
+export const TopicArchivePageResponse = Schema.Struct({
   topics: Schema.Array(TopicSummaryResponse),
-}).annotate({ identifier: "TopicListResponse" });
-export interface TopicListResponse extends Schema.Schema.Type<typeof TopicListResponse> {}
+  nextCursor: Schema.optionalKey(Schema.String),
+}).annotate({ identifier: "TopicArchivePageResponse" });
+export interface TopicArchivePageResponse extends Schema.Schema.Type<
+  typeof TopicArchivePageResponse
+> {}
 
 export const TopicResponse = Schema.Struct({
   ...TopicResponseFields,

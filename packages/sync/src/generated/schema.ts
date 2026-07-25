@@ -75,6 +75,15 @@ export const topicTable = table("topic")
     title: string(),
     intent: enumeration<TopicIntent>().optional(),
     openedByIdentityId: string().from('opened_by_identity_id'),
+    messageCount: number().from('message_count'),
+    latestMessageId: string().from('latest_message_id'),
+    latestMessagePreview: string().from('latest_message_preview').optional(),
+    latestMessageAuthorIdentityId: string().from('latest_message_author_identity_id'),
+    latestMessagePosition: number().from('latest_message_position'),
+    latestMessageCreatedAt: number().from('latest_message_created_at'),
+    latestMessageEditedAt: number().from('latest_message_edited_at').optional(),
+    latestMessageDeletedAt: number().from('latest_message_deleted_at').optional(),
+    lastActivityAt: number().from('last_activity_at'),
     createdAt: number().from('created_at'),
   })
   .primaryKey("workspaceId", "id");
@@ -127,6 +136,11 @@ export const workspaceIdentityTableRelationships = relationships(workspaceIdenti
     destField: ["workspaceId","openedByIdentityId"],
     destSchema: topicTable,
   }),
+  latestMessageTopics: many({
+    sourceField: ["workspaceId","id"],
+    destField: ["workspaceId","latestMessageAuthorIdentityId"],
+    destSchema: topicTable,
+  }),
   messages: many({
     sourceField: ["workspaceId","id"],
     destField: ["workspaceId","authorIdentityId"],
@@ -175,6 +189,11 @@ export const topicTableRelationships = relationships(topicTable, ({ one, many })
   }),
   openedBy: one({
     sourceField: ["workspaceId","openedByIdentityId"],
+    destField: ["workspaceId","id"],
+    destSchema: workspaceIdentityTable,
+  }),
+  latestMessageAuthor: one({
+    sourceField: ["workspaceId","latestMessageAuthorIdentityId"],
     destField: ["workspaceId","id"],
     destSchema: workspaceIdentityTable,
   }),

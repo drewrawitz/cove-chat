@@ -1,6 +1,16 @@
 export { AuthenticationMethod } from "./authentication/index.ts";
 
 export {
+  CHANNEL_PURPOSE_MAX_BYTES,
+  MESSAGE_BODY_MAX_BYTES,
+  TOPIC_SUMMARY_PREVIEW_MAX_BYTES,
+  TOPIC_TITLE_MAX_BYTES,
+  isWithinUtf8ByteLimit,
+  truncateUtf8,
+  utf8ByteLength,
+} from "./content-bounds.ts";
+
+export {
   Channel,
   ChannelAccessFacts,
   ChannelMembershipFacts,
@@ -44,8 +54,10 @@ export {
   InvalidTopicTitle,
   Topic,
   TopicIntent,
+  TopicSummaryPreview,
   TopicTitle,
   makeMessageBody,
+  makeTopicSummaryPreview,
   makeTopicTitle,
 } from "./topics/index.ts";
 

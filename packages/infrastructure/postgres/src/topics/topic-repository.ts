@@ -7,6 +7,7 @@ import {
   Topic,
   TopicId,
   TopicIntent,
+  TopicSummaryPreview,
   TopicTitle,
   WorkspaceAvatarUrl,
   WorkspaceId,
@@ -14,11 +15,22 @@ import {
   WorkspaceIdentityName,
   type Message as MessageType,
   type Topic as TopicType,
+  makeTopicSummaryPreview,
 } from "@cove/domain";
-import { TopicMessageRecord, TopicRecord, TopicRepository, TopicSummaryRecord } from "@cove/ports";
+import {
+  StoredMessage,
+  TopicMessageRecord,
+  TopicRecord,
+  TopicRepository,
+  TopicSummaryRecord,
+} from "@cove/ports";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { persistenceError } from "../persistence-error.ts";
+import { TopicArchiveCursorCodec } from "./topic-archive-cursor.ts";
+
+const ARCHIVE_PAGE_SIZE = 100;
+const LIVE_BOUNDARY_OFFSET = 499;
 
 const TopicRow = Schema.Struct({
   id: TopicId,
@@ -27,6 +39,15 @@ const TopicRow = Schema.Struct({
   title: TopicTitle,
   intent: Schema.NullOr(TopicIntent),
   openedByIdentityId: WorkspaceIdentityId,
+  messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
+  latestMessageId: MessageId,
+  latestMessagePreview: Schema.NullOr(TopicSummaryPreview),
+  latestMessageAuthorIdentityId: WorkspaceIdentityId,
+  latestMessagePosition: MessagePosition,
+  latestMessageCreatedAt: Schema.Date,
+  latestMessageEditedAt: Schema.NullOr(Schema.Date),
+  latestMessageDeletedAt: Schema.NullOr(Schema.Date),
+  lastActivityAt: Schema.Date,
   createdAt: Schema.Date,
 });
 interface TopicRow extends Schema.Schema.Type<typeof TopicRow> {}
@@ -38,18 +59,22 @@ const TopicRequest = Schema.Struct({
 });
 interface TopicRequest extends Schema.Schema.Type<typeof TopicRequest> {}
 
+const ArchiveFirstPageRequest = Schema.Struct({
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+});
+
+const ArchivePageRequest = Schema.Struct({
+  workspaceId: WorkspaceId,
+  channelId: ChannelId,
+  afterLastActivityAt: Schema.Date,
+  afterTopicId: TopicId,
+});
+
 const TopicSummaryRow = Schema.Struct({
   ...TopicRow.fields,
-  messageId: MessageId,
-  messageBody: Schema.NullOr(MessageBody),
-  messagePosition: MessagePosition,
-  messageCreatedAt: Schema.Date,
-  messageEditedAt: Schema.NullOr(Schema.Date),
-  messageDeletedAt: Schema.NullOr(Schema.Date),
-  authorIdentityId: WorkspaceIdentityId,
   authorName: WorkspaceIdentityName,
   authorAvatarUrl: WorkspaceAvatarUrl,
-  messageCount: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 interface TopicSummaryRow extends Schema.Schema.Type<typeof TopicSummaryRow> {}
 
@@ -99,6 +124,21 @@ function topic(row: TopicRow): TopicType {
     channelId: row.channelId,
     title: row.title,
     openedByIdentityId: row.openedByIdentityId,
+    messageCount: row.messageCount,
+    latestMessageId: row.latestMessageId,
+    ...(row.latestMessagePreview === null
+      ? {}
+      : { latestMessagePreview: row.latestMessagePreview }),
+    latestMessageAuthorIdentityId: row.latestMessageAuthorIdentityId,
+    latestMessagePosition: row.latestMessagePosition,
+    latestMessageCreatedAt: row.latestMessageCreatedAt,
+    ...(row.latestMessageEditedAt === null
+      ? {}
+      : { latestMessageEditedAt: row.latestMessageEditedAt }),
+    ...(row.latestMessageDeletedAt === null
+      ? {}
+      : { latestMessageDeletedAt: row.latestMessageDeletedAt }),
+    lastActivityAt: row.lastActivityAt,
     createdAt: row.createdAt,
   };
   return row.intent === null ? Topic.make(fields) : Topic.make({ ...fields, intent: row.intent });
@@ -118,9 +158,23 @@ function message(row: StoredMessageRow): MessageType {
   });
 }
 
+function storedMessage(row: MessageRow): StoredMessage {
+  return StoredMessage.make({
+    id: row.id,
+    workspaceId: row.workspaceId,
+    topicId: row.topicId,
+    authorIdentityId: row.authorIdentityId,
+    ...(row.body === null ? {} : { body: row.body }),
+    position: row.position,
+    createdAt: row.createdAt,
+    ...(row.editedAt === null ? {} : { editedAt: row.editedAt }),
+    ...(row.deletedAt === null ? {} : { deletedAt: row.deletedAt }),
+  });
+}
+
 function messageRecord(row: MessageRow): TopicMessageRecord {
   return TopicMessageRecord.make({
-    message: message(row),
+    message: storedMessage(row),
     author: {
       id: row.authorIdentityId,
       name: row.authorName,
@@ -133,15 +187,15 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
   return TopicSummaryRecord.make({
     topic: topic(row),
     latestMessage: messageRecord({
-      id: row.messageId,
+      id: row.latestMessageId,
       workspaceId: row.workspaceId,
       topicId: row.id,
-      authorIdentityId: row.authorIdentityId,
-      body: row.messageBody,
-      position: row.messagePosition,
-      createdAt: row.messageCreatedAt,
-      editedAt: row.messageEditedAt,
-      deletedAt: row.messageDeletedAt,
+      authorIdentityId: row.latestMessageAuthorIdentityId,
+      body: null,
+      position: row.latestMessagePosition,
+      createdAt: row.latestMessageCreatedAt,
+      editedAt: row.latestMessageEditedAt,
+      deletedAt: row.latestMessageDeletedAt,
       authorName: row.authorName,
       authorAvatarUrl: row.authorAvatarUrl,
     }),
@@ -151,51 +205,7 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
 
 const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-
-  const listSummaryRows = SqlSchema.findAll({
-    Request: Schema.Struct({ workspaceId: WorkspaceId, channelId: ChannelId }),
-    Result: TopicSummaryRow,
-    execute: ({ workspaceId, channelId }) => sql<TopicSummaryRow>`
-      SELECT
-        topic.id,
-        topic.workspace_id AS "workspaceId",
-        topic.channel_id AS "channelId",
-        topic.title,
-        topic.intent,
-        topic.opened_by_identity_id AS "openedByIdentityId",
-        topic.created_at AS "createdAt",
-        latest.id AS "messageId",
-        latest.body AS "messageBody",
-        latest.position AS "messagePosition",
-        latest.created_at AS "messageCreatedAt",
-        latest.edited_at AS "messageEditedAt",
-        latest.deleted_at AS "messageDeletedAt",
-        latest.author_identity_id AS "authorIdentityId",
-        author.name AS "authorName",
-        author.avatar_url AS "authorAvatarUrl",
-        (
-          SELECT count(*)::integer
-          FROM messages AS message
-          WHERE message.workspace_id = topic.workspace_id
-            AND message.topic_id = topic.id
-        ) AS "messageCount"
-      FROM topics AS topic
-      INNER JOIN LATERAL (
-        SELECT message.*
-        FROM messages AS message
-        WHERE message.workspace_id = topic.workspace_id
-          AND message.topic_id = topic.id
-        ORDER BY message.position DESC, message.id DESC
-        LIMIT 1
-      ) AS latest ON TRUE
-      INNER JOIN workspace_identities AS author
-        ON author.workspace_id = latest.workspace_id
-        AND author.id = latest.author_identity_id
-      WHERE topic.workspace_id = ${workspaceId}
-        AND topic.channel_id = ${channelId}
-      ORDER BY topic.created_at DESC, topic.id
-    `,
-  });
+  const archiveCursors = yield* TopicArchiveCursorCodec;
 
   const findTopicRow = SqlSchema.findOneOption({
     Request: TopicRequest,
@@ -208,12 +218,115 @@ const make = Effect.gen(function* () {
         title,
         intent,
         opened_by_identity_id AS "openedByIdentityId",
+        message_count AS "messageCount",
+        latest_message_id AS "latestMessageId",
+        latest_message_preview AS "latestMessagePreview",
+        latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        latest_message_position AS "latestMessagePosition",
+        latest_message_created_at AS "latestMessageCreatedAt",
+        latest_message_edited_at AS "latestMessageEditedAt",
+        latest_message_deleted_at AS "latestMessageDeletedAt",
+        last_activity_at AS "lastActivityAt",
         created_at AS "createdAt"
       FROM topics
       WHERE workspace_id = ${workspaceId}
         AND channel_id = ${channelId}
         AND id = ${topicId}
       LIMIT 1
+    `,
+  });
+
+  const listFirstArchiveRows = SqlSchema.findAll({
+    Request: ArchiveFirstPageRequest,
+    Result: TopicSummaryRow,
+    execute: ({ workspaceId, channelId }) => sql<TopicSummaryRow>`
+      WITH live_boundary AS (
+        SELECT
+          last_activity_at,
+          id
+        FROM topics
+        WHERE workspace_id = ${workspaceId}
+          AND channel_id = ${channelId}
+        ORDER BY last_activity_at DESC, id
+        OFFSET ${LIVE_BOUNDARY_OFFSET}
+        LIMIT 1
+      )
+      SELECT
+        topic.id,
+        topic.workspace_id AS "workspaceId",
+        topic.channel_id AS "channelId",
+        topic.title,
+        topic.intent,
+        topic.opened_by_identity_id AS "openedByIdentityId",
+        topic.message_count AS "messageCount",
+        topic.latest_message_id AS "latestMessageId",
+        topic.latest_message_preview AS "latestMessagePreview",
+        topic.latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        topic.latest_message_position AS "latestMessagePosition",
+        topic.latest_message_created_at AS "latestMessageCreatedAt",
+        topic.latest_message_edited_at AS "latestMessageEditedAt",
+        topic.latest_message_deleted_at AS "latestMessageDeletedAt",
+        topic.last_activity_at AS "lastActivityAt",
+        topic.created_at AS "createdAt",
+        author.name AS "authorName",
+        author.avatar_url AS "authorAvatarUrl"
+      FROM topics AS topic
+      CROSS JOIN live_boundary
+      INNER JOIN workspace_identities AS author
+        ON author.workspace_id = topic.workspace_id
+        AND author.id = topic.latest_message_author_identity_id
+      WHERE topic.workspace_id = ${workspaceId}
+        AND topic.channel_id = ${channelId}
+        AND (
+          topic.last_activity_at < live_boundary.last_activity_at
+          OR (
+            topic.last_activity_at = live_boundary.last_activity_at
+            AND topic.id > live_boundary.id
+          )
+      )
+      ORDER BY topic.last_activity_at DESC, topic.id
+      LIMIT ${ARCHIVE_PAGE_SIZE + 1}
+    `,
+  });
+
+  const listArchiveRows = SqlSchema.findAll({
+    Request: ArchivePageRequest,
+    Result: TopicSummaryRow,
+    execute: (value) => sql<TopicSummaryRow>`
+      SELECT
+        topic.id,
+        topic.workspace_id AS "workspaceId",
+        topic.channel_id AS "channelId",
+        topic.title,
+        topic.intent,
+        topic.opened_by_identity_id AS "openedByIdentityId",
+        topic.message_count AS "messageCount",
+        topic.latest_message_id AS "latestMessageId",
+        topic.latest_message_preview AS "latestMessagePreview",
+        topic.latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        topic.latest_message_position AS "latestMessagePosition",
+        topic.latest_message_created_at AS "latestMessageCreatedAt",
+        topic.latest_message_edited_at AS "latestMessageEditedAt",
+        topic.latest_message_deleted_at AS "latestMessageDeletedAt",
+        topic.last_activity_at AS "lastActivityAt",
+        topic.created_at AS "createdAt",
+        author.name AS "authorName",
+        author.avatar_url AS "authorAvatarUrl"
+      FROM topics AS topic
+      INNER JOIN workspace_identities AS author
+        ON author.workspace_id = topic.workspace_id
+        AND author.id = topic.latest_message_author_identity_id
+      WHERE topic.workspace_id = ${value.workspaceId}
+        AND topic.channel_id = ${value.channelId}
+        AND (
+          topic.last_activity_at < ${value.afterLastActivityAt}
+          OR (
+            topic.last_activity_at = ${value.afterLastActivityAt}
+            AND topic.id > ${value.afterTopicId}
+          )
+      )
+      ORDER BY topic.last_activity_at DESC, topic.id
+      LIMIT ${ARCHIVE_PAGE_SIZE + 1}
     `,
   });
 
@@ -248,11 +361,20 @@ const make = Effect.gen(function* () {
     Result: TopicRow,
     execute: (value) => sql<TopicRow>`
       INSERT INTO topics (
-        id, workspace_id, channel_id, title, intent, opened_by_identity_id, created_at
+        id, workspace_id, channel_id, title, intent, opened_by_identity_id,
+        message_count, latest_message_id, latest_message_preview,
+        latest_message_author_identity_id, latest_message_position,
+        latest_message_created_at, latest_message_edited_at, latest_message_deleted_at,
+        last_activity_at, created_at
       )
       VALUES (
         ${value.id}, ${value.workspaceId}, ${value.channelId}, ${value.title},
-        ${value.intent ?? null}, ${value.openedByIdentityId}, ${value.createdAt}
+        ${value.intent ?? null}, ${value.openedByIdentityId}, ${value.messageCount},
+        ${value.latestMessageId}, ${value.latestMessagePreview ?? null},
+        ${value.latestMessageAuthorIdentityId}, ${value.latestMessagePosition},
+        ${value.latestMessageCreatedAt}, ${value.latestMessageEditedAt ?? null},
+        ${value.latestMessageDeletedAt ?? null},
+        ${value.lastActivityAt}, ${value.createdAt}
       )
       RETURNING
         id,
@@ -261,6 +383,15 @@ const make = Effect.gen(function* () {
         title,
         intent,
         opened_by_identity_id AS "openedByIdentityId",
+        message_count AS "messageCount",
+        latest_message_id AS "latestMessageId",
+        latest_message_preview AS "latestMessagePreview",
+        latest_message_author_identity_id AS "latestMessageAuthorIdentityId",
+        latest_message_position AS "latestMessagePosition",
+        latest_message_created_at AS "latestMessageCreatedAt",
+        latest_message_edited_at AS "latestMessageEditedAt",
+        latest_message_deleted_at AS "latestMessageDeletedAt",
+        last_activity_at AS "lastActivityAt",
         created_at AS "createdAt"
     `,
   });
@@ -311,24 +442,43 @@ const make = Effect.gen(function* () {
           ON message.workspace_id = ${value.workspaceId}
           AND message.topic_id = locked_topic.id
         GROUP BY locked_topic.id
-      )
-      INSERT INTO messages (
-        id, workspace_id, topic_id, author_identity_id, body, position, created_at
+      ), inserted_message AS (
+        INSERT INTO messages (
+          id, workspace_id, topic_id, author_identity_id, body, position, created_at
+        )
+        SELECT
+          ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
+          ${value.body}, next_position.position, ${value.createdAt}
+        FROM next_position
+        RETURNING *
+      ), updated_topic AS (
+        UPDATE topics AS topic
+        SET
+          message_count = topic.message_count + 1,
+          latest_message_id = inserted_message.id,
+          latest_message_preview = ${makeTopicSummaryPreview(value.body)},
+          latest_message_author_identity_id = inserted_message.author_identity_id,
+          latest_message_position = inserted_message.position,
+          latest_message_created_at = inserted_message.created_at,
+          latest_message_edited_at = inserted_message.edited_at,
+          latest_message_deleted_at = inserted_message.deleted_at,
+          last_activity_at = greatest(topic.last_activity_at, inserted_message.created_at)
+        FROM inserted_message
+        WHERE topic.workspace_id = inserted_message.workspace_id
+          AND topic.id = inserted_message.topic_id
+        RETURNING topic.id
       )
       SELECT
-        ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
-        ${value.body}, next_position.position, ${value.createdAt}
-      FROM next_position
-      RETURNING
-        id,
-        workspace_id AS "workspaceId",
-        topic_id AS "topicId",
-        author_identity_id AS "authorIdentityId",
-        body,
-        position,
-        created_at AS "createdAt",
-        edited_at AS "editedAt",
-        deleted_at AS "deletedAt"
+        inserted_message.id,
+        inserted_message.workspace_id AS "workspaceId",
+        inserted_message.topic_id AS "topicId",
+        inserted_message.author_identity_id AS "authorIdentityId",
+        inserted_message.body,
+        inserted_message.position,
+        inserted_message.created_at AS "createdAt",
+        inserted_message.edited_at AS "editedAt",
+        inserted_message.deleted_at AS "deletedAt"
+      FROM inserted_message, updated_topic
     `,
   });
 
@@ -358,31 +508,49 @@ const make = Effect.gen(function* () {
         FROM previous
         RETURNING id
       )
-      UPDATE messages AS message
-      SET
-        body = ${value.body},
-        edited_at = CASE
-          WHEN ${value.operation} = 'edit' THEN ${value.revisedAt}
-          ELSE message.edited_at
-        END,
-        deleted_at = CASE
-          WHEN ${value.operation} = 'delete' THEN ${value.revisedAt}
-          ELSE message.deleted_at
-        END
-      FROM previous, revision
-      WHERE message.workspace_id = previous.workspace_id
-        AND message.topic_id = previous.topic_id
-        AND message.id = previous.id
-      RETURNING
-        message.id,
-        message.workspace_id AS "workspaceId",
-        message.topic_id AS "topicId",
-        message.author_identity_id AS "authorIdentityId",
-        message.body,
-        message.position,
-        message.created_at AS "createdAt",
-        message.edited_at AS "editedAt",
-        message.deleted_at AS "deletedAt"
+      , revised_message AS (
+        UPDATE messages AS message
+        SET
+          body = ${value.body},
+          edited_at = CASE
+            WHEN ${value.operation} = 'edit' THEN ${value.revisedAt}
+            ELSE message.edited_at
+          END,
+          deleted_at = CASE
+            WHEN ${value.operation} = 'delete' THEN ${value.revisedAt}
+            ELSE message.deleted_at
+          END
+        FROM previous, revision
+        WHERE message.workspace_id = previous.workspace_id
+          AND message.topic_id = previous.topic_id
+          AND message.id = previous.id
+        RETURNING message.*
+      ), updated_topic AS (
+        UPDATE topics AS topic
+        SET
+          latest_message_preview = ${
+            value.body === null ? null : makeTopicSummaryPreview(value.body)
+          },
+          latest_message_edited_at = revised_message.edited_at,
+          latest_message_deleted_at = revised_message.deleted_at
+        FROM revised_message
+        WHERE topic.workspace_id = revised_message.workspace_id
+          AND topic.id = revised_message.topic_id
+          AND topic.latest_message_id = revised_message.id
+        RETURNING topic.id
+      )
+      SELECT
+        revised_message.id,
+        revised_message.workspace_id AS "workspaceId",
+        revised_message.topic_id AS "topicId",
+        revised_message.author_identity_id AS "authorIdentityId",
+        revised_message.body,
+        revised_message.position,
+        revised_message.created_at AS "createdAt",
+        revised_message.edited_at AS "editedAt",
+        revised_message.deleted_at AS "deletedAt"
+      FROM revised_message
+      LEFT JOIN updated_topic ON TRUE
     `,
   });
 
@@ -390,12 +558,57 @@ const make = Effect.gen(function* () {
     effect.pipe(Effect.mapError((cause) => persistenceError(operation, cause)));
 
   return TopicRepository.of({
-    listSummariesInChannel: Effect.fn("PostgresTopicRepository.listSummariesInChannel")(
-      (workspaceId, channelId) =>
-        listSummaryRows({ workspaceId, channelId }).pipe(
-          Effect.map((rows) => rows.map(summaryRecord)),
-        ),
-      (effect) => mapFailure("TopicRepository.listSummariesInChannel", effect),
+    listArchivePageInChannel: Effect.fn("PostgresTopicRepository.listArchivePageInChannel")(
+      function* (actorAccountId, workspaceId, channelId, cursor) {
+        const rows =
+          cursor === undefined
+            ? yield* listFirstArchiveRows({ workspaceId, channelId })
+            : yield* Effect.gen(function* () {
+                const position = Option.getOrUndefined(
+                  archiveCursors.decodeForScope(cursor, {
+                    actorAccountId,
+                    workspaceId,
+                    channelId,
+                  }),
+                );
+                if (position === undefined) {
+                  return undefined;
+                }
+                return yield* listArchiveRows({
+                  workspaceId,
+                  channelId,
+                  afterLastActivityAt: position.afterLastActivityAt,
+                  afterTopicId: position.afterTopicId,
+                });
+              });
+        if (rows === undefined) {
+          return { summaries: [], cursorValid: false };
+        }
+
+        const hasMore = rows.length > ARCHIVE_PAGE_SIZE;
+        const pageRows = rows.slice(0, ARCHIVE_PAGE_SIZE);
+        if (!hasMore) {
+          return {
+            summaries: pageRows.map(summaryRecord),
+            cursorValid: true,
+          };
+        }
+
+        const after = pageRows.at(-1)!;
+        return {
+          summaries: pageRows.map(summaryRecord),
+          cursorValid: true,
+          nextCursor: archiveCursors.encode({
+            version: 1,
+            actorAccountId,
+            workspaceId,
+            channelId,
+            afterLastActivityAt: after.lastActivityAt,
+            afterTopicId: after.id,
+          }),
+        };
+      },
+      (effect) => mapFailure("TopicRepository.listArchivePageInChannel", effect),
     ),
     findById: Effect.fn("PostgresTopicRepository.findById")(
       (workspaceId, channelId, topicId) =>

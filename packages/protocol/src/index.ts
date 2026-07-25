@@ -52,14 +52,16 @@ export {
   MessageMutationRequest,
   MessageUnavailableResponse,
   TopicApiGroup,
+  TopicArchiveCursorInvalidResponse,
+  TopicArchivePageResponse,
   TopicAuthorResponse,
   TopicMessageResponse,
   TopicErrorResponses,
   TopicIntentRequest,
   TopicIntentValue,
-  TopicListResponse,
   TopicResponse,
   TopicSummaryResponse,
+  TopicSummaryMessageResponse,
   TopicUnavailableResponse,
 } from "./topics/index.ts";
 export {

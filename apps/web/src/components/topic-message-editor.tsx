@@ -1,5 +1,6 @@
 import { Button } from "@cove/ui/components/button";
 import { type FormEvent, type ReactElement, useEffect, useRef } from "react";
+import { applyMessageBodyValidity } from "../content-bounds.ts";
 import { handleComposerKeyboardShortcut } from "./composer-keyboard-shortcuts.ts";
 
 interface TopicMessageEditorProps {
@@ -66,6 +67,7 @@ export function TopicMessageEditor({
           defaultValue={defaultBody}
           required
           rows={4}
+          onInput={(event) => applyMessageBodyValidity(event.currentTarget)}
           className="min-h-24 w-full resize-y bg-transparent text-base leading-7 outline-none"
           aria-keyshortcuts="Meta+Enter Control+Enter Escape"
         />

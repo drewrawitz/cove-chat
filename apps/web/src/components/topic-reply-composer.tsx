@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@cove/ui/components/dialog";
 import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { applyMessageBodyValidity } from "../content-bounds.ts";
 import { handleComposerKeyboardShortcut } from "./composer-keyboard-shortcuts.ts";
 
 interface ReplyIdentity {
@@ -98,6 +99,14 @@ export function TopicReplyComposer({
     if (body.length === 0 || isBusy) {
       return;
     }
+    const input = textarea.current;
+    if (input === null) {
+      return;
+    }
+    applyMessageBodyValidity(input);
+    if (!input.reportValidity()) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -145,7 +154,10 @@ export function TopicReplyComposer({
                 className="min-h-[clamp(10rem,30dvh,20rem)] w-full resize-y bg-transparent text-base leading-7 outline-none placeholder:text-muted-foreground"
                 placeholder="Write a reply…"
                 aria-keyshortcuts="Meta+Enter Control+Enter Escape"
-                onChange={(event) => setDraft(event.currentTarget.value)}
+                onChange={(event) => {
+                  applyMessageBodyValidity(event.currentTarget);
+                  setDraft(event.currentTarget.value);
+                }}
               />
               {hasError ? (
                 <p className="mt-2 text-sm text-destructive" role="alert">

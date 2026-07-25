@@ -238,6 +238,7 @@ export const BrowserAcceptanceLive = Layer.effect(
           HOST: "127.0.0.1",
           PORT: String(apiPort),
           PUBLIC_WEB_ORIGIN: webUrl,
+          TOPIC_ARCHIVE_CURSOR_SIGNING_KEY: "acceptance-topic-archive-cursor-signing-key",
         },
       },
       apiOutput,

@@ -1,6 +1,8 @@
-import { Message, Topic } from "@cove/domain";
+import { Message, Topic, makeTopicSummaryPreview } from "@cove/domain";
 import {
   type PersistenceError,
+  StoredMessage,
+  type TopicAuthorRecord,
   type TopicMessageRecord,
   type TopicRecord,
   TopicRepository,
@@ -14,6 +16,7 @@ import {
   type ChannelConversationContext,
 } from "../channels/channel-access.ts";
 import { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
+import { TopicArchiveCursorInvalid } from "./topic-archive-cursor.ts";
 import {
   type AddMessageCommand,
   type CreateTopicCommand,
@@ -23,6 +26,7 @@ import {
   type EditMessageCommand,
   TopicAccess,
   TopicAccessFailure,
+  TopicArchivePageView,
   TopicMessageView,
   TopicSummaryView,
   TopicUnavailable,
@@ -31,6 +35,13 @@ import {
 
 function messageView(record: TopicMessageRecord): TopicMessageView {
   return TopicMessageView.make(record);
+}
+
+function messageViewFromDomain(message: Message, author: TopicAuthorRecord): TopicMessageView {
+  return TopicMessageView.make({
+    message: StoredMessage.make(message),
+    author,
+  });
 }
 
 function topicSummaryView(record: TopicSummaryRecord): TopicSummaryView {
@@ -104,13 +115,25 @@ const make = Effect.gen(function* () {
   });
 
   return TopicAccess.of({
-    listForActor: Effect.fn("TopicAccess.listForActor")(
-      function* (actorAccountId, workspaceId, channelId) {
+    listArchiveForActor: Effect.fn("TopicAccess.listArchiveForActor")(
+      function* (actorAccountId, workspaceId, channelId, cursor) {
         yield* conversationContext(actorAccountId, workspaceId, channelId);
-        const summaries = yield* repository.listSummariesInChannel(workspaceId, channelId);
-        return summaries.map(topicSummaryView);
+        const page = yield* repository.listArchivePageInChannel(
+          actorAccountId,
+          workspaceId,
+          channelId,
+          cursor,
+        );
+        if (!page.cursorValid) {
+          return yield* Effect.fail(new TopicArchiveCursorInvalid());
+        }
+        const topics = page.summaries.map(topicSummaryView);
+        return TopicArchivePageView.make({
+          topics,
+          ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+        });
       },
-      (effect) => recoverFailure("TopicAccess.listForActor", effect),
+      (effect) => recoverFailure("TopicAccess.listArchiveForActor", effect),
     ),
     getForActor: Effect.fn("TopicAccess.getForActor")(
       function* (actorAccountId, workspaceId, channelId, topicId) {
@@ -144,6 +167,13 @@ const make = Effect.gen(function* () {
               title: command.title,
               ...(command.intent === undefined ? {} : { intent: command.intent }),
               openedByIdentityId: context.actor.id,
+              messageCount: 1,
+              latestMessageId: command.openingBriefMessageId,
+              latestMessagePreview: makeTopicSummaryPreview(command.openingBrief),
+              latestMessageAuthorIdentityId: context.actor.id,
+              latestMessagePosition: 1,
+              latestMessageCreatedAt: now,
+              lastActivityAt: now,
               createdAt: now,
             });
             const openingBrief = Message.make({
@@ -161,12 +191,7 @@ const make = Effect.gen(function* () {
 
             return TopicView.make({
               topic,
-              messages: [
-                TopicMessageView.make({
-                  message: openingBrief,
-                  author: context.actor,
-                }),
-              ],
+              messages: [messageViewFromDomain(openingBrief, context.actor)],
             });
           }),
         ),
@@ -202,7 +227,7 @@ const make = Effect.gen(function* () {
               body: command.body,
               createdAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: context.actor });
+            return messageViewFromDomain(message, context.actor);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.addMessage", effect),
@@ -220,7 +245,7 @@ const make = Effect.gen(function* () {
               body: command.body,
               editedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: current.author });
+            return messageViewFromDomain(message, current.author);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.editMessage", effect),
@@ -237,7 +262,7 @@ const make = Effect.gen(function* () {
               messageId: command.messageId,
               deletedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: current.author });
+            return messageViewFromDomain(message, current.author);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.deleteMessage", effect),

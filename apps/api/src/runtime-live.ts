@@ -4,7 +4,11 @@ import {
   WorkspaceInvitationEmailNotifier,
 } from "@cove/infrastructure-email";
 import { ChannelAccessLive, TopicAccessLive } from "@cove/application";
-import { PostgresClientLive, PostgresRepositories } from "@cove/infrastructure-postgres";
+import {
+  PostgresClientLive,
+  PostgresRepositories,
+  TopicArchiveCursorCodecLive,
+} from "@cove/infrastructure-postgres";
 import { Effect, Layer } from "effect";
 import { ApiConfiguration, ApiConfigurationLive } from "./api-configuration.ts";
 import { PostgresDatabaseReadiness } from "./health/index.ts";
@@ -23,6 +27,7 @@ const EmailLive = Layer.unwrap(
 
 const PostgresAuthLive = PostgresRepositories.pipe(
   Layer.provide(PostgresClientLive),
+  Layer.provide(TopicArchiveCursorCodecLive),
   Layer.provide(EmailLive),
 );
 
