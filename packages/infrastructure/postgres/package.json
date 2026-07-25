@@ -29,6 +29,8 @@
     "@effect/vitest": "catalog:",
     "@testcontainers/postgresql": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

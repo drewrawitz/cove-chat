@@ -25,4 +25,6 @@ vp run --filter @cove/infrastructure-postgres test:integration
 ```
 
 For a local database reset, use `vp run @cove/db#migrate:reset`. The wrapper removes Cove's
-database-level Zero publication before Prisma resets and replays the schema migrations.
+database-level Zero publication, inactive replication slots, and internal Zero metadata before
+Prisma resets and replays the schema migrations. Stop `@cove/sync#dev` first; the reset refuses to
+run while Zero is actively using a replication slot.

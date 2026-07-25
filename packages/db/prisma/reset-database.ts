@@ -18,7 +18,10 @@ Usage:
   vp run @cove/db#migrate:reset
 
 The command drops Cove's database-level Zero publication before Prisma resets
-the configured schema. It is destructive and does not ask for confirmation.`);
+the configured schema. It also removes inactive Zero replication slots and
+internal metadata. Stop @cove/sync#dev before running it.
+
+It is destructive and does not ask for confirmation.`);
   process.exit(0);
 }
 
