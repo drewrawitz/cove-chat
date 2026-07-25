@@ -592,6 +592,9 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-beta.98
     devDependencies:
+      '@cove/sync':
+        specifier: workspace:*
+        version: link:../../sync
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-beta.98(effect@4.0.0-beta.98)(vitest@4.1.10)

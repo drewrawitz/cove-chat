@@ -29,6 +29,9 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { persistenceError } from "../persistence-error.ts";
 import { TopicArchiveCursorCodec } from "./topic-archive-cursor.ts";
 
+const ARCHIVE_PAGE_SIZE = 100;
+const LIVE_BOUNDARY_OFFSET = 499;
+
 const TopicRow = Schema.Struct({
   id: TopicId,
   workspaceId: WorkspaceId,
@@ -80,7 +83,7 @@ const MessageRow = Schema.Struct({
   workspaceId: WorkspaceId,
   topicId: TopicId,
   authorIdentityId: WorkspaceIdentityId,
-  body: Schema.NullOr(Schema.String),
+  body: Schema.NullOr(MessageBody),
   position: MessagePosition,
   createdAt: Schema.Date,
   editedAt: Schema.NullOr(Schema.Date),
@@ -245,7 +248,7 @@ const make = Effect.gen(function* () {
         WHERE workspace_id = ${workspaceId}
           AND channel_id = ${channelId}
         ORDER BY last_activity_at DESC, id
-        OFFSET 499
+        OFFSET ${LIVE_BOUNDARY_OFFSET}
         LIMIT 1
       )
       SELECT
@@ -280,9 +283,9 @@ const make = Effect.gen(function* () {
             topic.last_activity_at = live_boundary.last_activity_at
             AND topic.id > live_boundary.id
           )
-        )
+      )
       ORDER BY topic.last_activity_at DESC, topic.id
-      LIMIT 101
+      LIMIT ${ARCHIVE_PAGE_SIZE + 1}
     `,
   });
 
@@ -321,9 +324,9 @@ const make = Effect.gen(function* () {
             topic.last_activity_at = ${value.afterLastActivityAt}
             AND topic.id > ${value.afterTopicId}
           )
-        )
+      )
       ORDER BY topic.last_activity_at DESC, topic.id
-      LIMIT 101
+      LIMIT ${ARCHIVE_PAGE_SIZE + 1}
     `,
   });
 
@@ -582,8 +585,8 @@ const make = Effect.gen(function* () {
           return { summaries: [], cursorValid: false };
         }
 
-        const hasMore = rows.length > 100;
-        const pageRows = rows.slice(0, 100);
+        const hasMore = rows.length > ARCHIVE_PAGE_SIZE;
+        const pageRows = rows.slice(0, ARCHIVE_PAGE_SIZE);
         if (!hasMore) {
           return {
             summaries: pageRows.map(summaryRecord),

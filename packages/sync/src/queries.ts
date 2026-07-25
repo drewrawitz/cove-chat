@@ -19,18 +19,16 @@ export const CHANNEL_TOPIC_LIVE_INITIAL = 50;
 export const CHANNEL_TOPIC_LIVE_INCREMENT = 50;
 export const CHANNEL_TOPIC_LIVE_MAXIMUM = 500;
 
-const ChannelTopicLiveLimit = z.union([
-  z.literal(50),
-  z.literal(100),
-  z.literal(150),
-  z.literal(200),
-  z.literal(250),
-  z.literal(300),
-  z.literal(350),
-  z.literal(400),
-  z.literal(450),
-  z.literal(500),
-]);
+type ChannelTopicLiveLimitValue = 50 | 100 | 150 | 200 | 250 | 300 | 350 | 400 | 450 | 500;
+
+const channelTopicLiveLimits = Array.from(
+  {
+    length:
+      (CHANNEL_TOPIC_LIVE_MAXIMUM - CHANNEL_TOPIC_LIVE_INITIAL) / CHANNEL_TOPIC_LIVE_INCREMENT + 1,
+  },
+  (_, index) => CHANNEL_TOPIC_LIVE_INITIAL + index * CHANNEL_TOPIC_LIVE_INCREMENT,
+) as Array<ChannelTopicLiveLimitValue>;
+const ChannelTopicLiveLimit = z.literal(channelTopicLiveLimits);
 export type ChannelTopicLiveLimit = z.output<typeof ChannelTopicLiveLimit>;
 
 const ChannelScopeArguments = z.object({

@@ -27,7 +27,7 @@ export const StoredMessage = Schema.Struct({
   workspaceId: WorkspaceId,
   topicId: TopicId,
   authorIdentityId: WorkspaceIdentityId,
-  body: Schema.optionalKey(Schema.String),
+  body: Schema.optionalKey(MessageBody),
   position: MessagePosition,
   createdAt: Schema.Date,
   editedAt: Schema.optionalKey(Schema.Date),

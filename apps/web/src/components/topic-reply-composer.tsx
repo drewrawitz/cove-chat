@@ -99,6 +99,14 @@ export function TopicReplyComposer({
     if (body.length === 0 || isBusy) {
       return;
     }
+    const input = textarea.current;
+    if (input === null) {
+      return;
+    }
+    applyMessageBodyValidity(input);
+    if (!input.reportValidity()) {
+      return;
+    }
 
     setIsSubmitting(true);
     try {

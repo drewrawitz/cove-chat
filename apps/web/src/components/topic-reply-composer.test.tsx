@@ -131,3 +131,19 @@ test.each([
     expect(screen.queryByLabelText("Write a reply")).toBeNull();
   });
 });
+
+test.each([
+  { shortcut: "Command", modifier: { metaKey: true } },
+  { shortcut: "Control", modifier: { ctrlKey: true } },
+])("does not submit an oversized Reply with $shortcut+Enter", ({ modifier }) => {
+  const onPost = vi.fn(() => Promise.resolve());
+  render(<TopicReplyComposer identity={identity} onPost={onPost} />);
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  const reply = screen.getByLabelText("Write a reply") as HTMLTextAreaElement;
+  fireEvent.change(reply, { target: { value: "é".repeat(4097) } });
+  fireEvent.keyDown(reply, { key: "Enter", ...modifier });
+
+  expect(onPost).not.toHaveBeenCalled();
+  expect(reply.validationMessage).toContain("8 KiB");
+});

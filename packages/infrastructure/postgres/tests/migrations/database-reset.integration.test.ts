@@ -51,6 +51,7 @@ describe("local database reset", () => {
     container = await new PostgreSqlContainer(POSTGRES_IMAGE)
       .withCommand(["postgres", "-c", "wal_level=logical"])
       .start();
+    await resetDatabase();
   }, 120_000);
 
   afterAll(async () => {
@@ -58,7 +59,6 @@ describe("local database reset", () => {
   });
 
   it("removes stale Zero state before replaying migrations", async () => {
-    await resetDatabase();
     await runSql("CREATE DATABASE cove_reset_neighbor;");
     await runSql(
       "SELECT pg_create_logical_replication_slot('cove_0_neighbor', 'pgoutput');",

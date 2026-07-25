@@ -1,15 +1,10 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
 
 const argumentsToForward = process.argv.slice(2);
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
-const prismaExecutable = join(
-  packageDirectory,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "prisma.cmd" : "prisma",
-);
+const isWindows = process.platform === "win32";
+const vitePlusExecutable = isWindows ? "vp.cmd" : "vp";
 
 if (argumentsToForward.includes("--help") || argumentsToForward.includes("-h")) {
   console.log(`Reset the local Cove database and replay all migrations.
@@ -32,8 +27,9 @@ if (argumentsToForward.length > 0) {
 
 const runPrisma = (arguments_: ReadonlyArray<string>): Promise<void> =>
   new Promise((resolve, reject) => {
-    const child = spawn(prismaExecutable, arguments_, {
+    const child = spawn(vitePlusExecutable, ["exec", "prisma", ...arguments_], {
       cwd: packageDirectory,
+      shell: isWindows,
       stdio: "inherit",
     });
     child.on("error", reject);
@@ -46,5 +42,11 @@ const runPrisma = (arguments_: ReadonlyArray<string>): Promise<void> =>
     });
   });
 
-await runPrisma(["db", "execute", "--file", "prisma/reset-before-migrate.sql"]);
-await runPrisma(["migrate", "reset", "--force"]);
+try {
+  await runPrisma(["db", "execute", "--file", "prisma/reset-before-migrate.sql"]);
+  await runPrisma(["migrate", "reset", "--force"]);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Database reset failed: ${message}`);
+  process.exitCode = 1;
+}

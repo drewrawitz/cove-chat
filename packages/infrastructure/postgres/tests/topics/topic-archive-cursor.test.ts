@@ -62,4 +62,12 @@ describe("Topic archive cursor", () => {
       true,
     );
   });
+
+  it("rejects a well-formed cursor signed with a different key", () => {
+    const otherCodec = makeTopicArchiveCursorCodec(
+      Redacted.make("another-test-only-topic-archive-cursor-signing-key"),
+    );
+
+    expect(Option.isNone(codec.decodeForScope(otherCodec.encode(cursor), scope))).toBe(true);
+  });
 });

@@ -136,10 +136,10 @@ function ChannelPage(): ReactElement {
   };
 
   const canExpandLiveWindow =
-    liveTopicLimit < CHANNEL_TOPIC_LIVE_MAXIMUM && liveTopics.length === liveTopicLimit;
+    liveTopicLimit < CHANNEL_TOPIC_LIVE_MAXIMUM && synchronizedTopics.length === liveTopicLimit;
   const canLoadArchive =
     liveTopicLimit === CHANNEL_TOPIC_LIVE_MAXIMUM &&
-    liveTopics.length === CHANNEL_TOPIC_LIVE_MAXIMUM &&
+    synchronizedTopics.length === CHANNEL_TOPIC_LIVE_MAXIMUM &&
     (!archive.started || archive.cursor !== undefined);
 
   let channelContent: ReactElement;

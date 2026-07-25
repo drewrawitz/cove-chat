@@ -21,6 +21,7 @@ import {
   makeWorkspaceIdentityId,
 } from "@cove/domain";
 import { TopicRepository } from "@cove/ports";
+import { CHANNEL_TOPIC_LIVE_MAXIMUM } from "@cove/sync";
 import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { randomUUID } from "node:crypto";
@@ -40,6 +41,10 @@ const makeFixtures = Effect.gen(function* () {
     messageId: yield* makeMessageId(`opening-brief-${suffix}`),
   };
 });
+
+const ARCHIVE_PAGE_SIZE = 100;
+const ARCHIVE_TEST_TOPIC_COUNT = CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE * 2 + 2;
+const archiveTopicId = (position: number) => `archive-topic-${String(position).padStart(3, "0")}`;
 
 type Fixtures = Effect.Success<typeof makeFixtures>;
 
@@ -388,27 +393,41 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             latestMessagePreview: "Capture the remaining launch risks.",
           });
 
-          for (const oversizedUpdate of [
-            sql`
-              UPDATE topics
-              SET title = ${"é".repeat(257)}
-              WHERE workspace_id = ${fixtures.workspaceId}
-                AND id = ${fixtures.topicId}
-            `,
-            sql`
-              UPDATE topics
-              SET latest_message_preview = ${"é".repeat(257)}
-              WHERE workspace_id = ${fixtures.workspaceId}
-                AND id = ${fixtures.topicId}
-            `,
-            sql`
-              UPDATE channels
-              SET purpose = ${"é".repeat(1025)}
-              WHERE workspace_id = ${fixtures.workspaceId}
-                AND id = ${fixtures.publicChannelId}
-            `,
+          for (const { statement, constraint } of [
+            {
+              statement: sql`
+                UPDATE topics
+                SET title = ${"é".repeat(257)}
+                WHERE workspace_id = ${fixtures.workspaceId}
+                  AND id = ${fixtures.topicId}
+              `,
+              constraint: "topics_title_bytes",
+            },
+            {
+              statement: sql`
+                UPDATE topics
+                SET latest_message_preview = ${"é".repeat(257)}
+                WHERE workspace_id = ${fixtures.workspaceId}
+                  AND id = ${fixtures.topicId}
+              `,
+              constraint: "topics_latest_message_preview_bytes",
+            },
+            {
+              statement: sql`
+                UPDATE channels
+                SET purpose = ${"é".repeat(1025)}
+                WHERE workspace_id = ${fixtures.workspaceId}
+                  AND id = ${fixtures.publicChannelId}
+              `,
+              constraint: "channels_purpose_bytes",
+            },
           ]) {
-            expect(yield* oversizedUpdate.pipe(Effect.flip)).toBeDefined();
+            expect(yield* statement.pipe(Effect.flip)).toMatchObject({
+              reason: {
+                _tag: "ConstraintError",
+                cause: { constraint },
+              },
+            });
           }
 
           const replyId = yield* makeMessageId(`reply-${fixtures.messageId}`);
@@ -542,7 +561,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               NULL,
               ${activityAt},
               ${activityAt}
-            FROM generate_series(1, 702) AS number
+            FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
           `;
         yield* sql`
             INSERT INTO messages (
@@ -562,7 +581,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               'Archived summary ' || lpad(number::text, 3, '0'),
               1,
               ${activityAt}
-            FROM generate_series(1, 702) AS number
+            FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
           `;
 
         const first = yield* topics.listArchiveForActor(
@@ -570,9 +589,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.workspaceId,
           fixtures.publicChannelId,
         );
-        expect(first.topics).toHaveLength(100);
-        expect(first.topics.at(0)?.topic.id).toBe("archive-topic-501");
-        expect(first.topics.at(-1)?.topic.id).toBe("archive-topic-600");
+        expect(first.topics).toHaveLength(ARCHIVE_PAGE_SIZE);
+        expect(first.topics.at(0)?.topic.id).toBe(archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + 1));
+        expect(first.topics.at(-1)?.topic.id).toBe(
+          archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE),
+        );
         expect(first.nextCursor).toEqual(expect.any(String));
 
         const crossActorCursor = yield* topics
@@ -589,7 +610,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             UPDATE topics
             SET last_activity_at = ${new Date("2026-07-23T12:00:00.000Z")}
             WHERE workspace_id = ${fixtures.workspaceId}
-              AND id = 'archive-topic-601'
+              AND id = ${archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 1)}
           `;
 
         const freshVisit = yield* topics.listArchiveForActor(
@@ -597,7 +618,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.workspaceId,
           fixtures.publicChannelId,
         );
-        expect(freshVisit.topics.at(0)?.topic.id).toBe("archive-topic-500");
+        expect(freshVisit.topics.at(0)?.topic.id).toBe(archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM));
 
         const second = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
@@ -605,8 +626,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           first.nextCursor,
         );
-        expect(second.topics.at(0)?.topic.id).toBe("archive-topic-602");
-        expect(second.topics.at(-1)?.topic.id).toBe("archive-topic-701");
+        expect(second.topics.at(0)?.topic.id).toBe(
+          archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 2),
+        );
+        expect(second.topics.at(-1)?.topic.id).toBe(
+          archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE * 2 + 1),
+        );
         expect(second.nextCursor).toEqual(expect.any(String));
         const [{ liveAfterActivity }] = yield* sql<{ readonly liveAfterActivity: boolean }>`
           SELECT EXISTS (
@@ -617,9 +642,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
               WHERE workspace_id = ${fixtures.workspaceId}
                 AND channel_id = ${fixtures.publicChannelId}
               ORDER BY last_activity_at DESC, id
-              LIMIT 500
+              LIMIT ${CHANNEL_TOPIC_LIVE_MAXIMUM}
             ) AS live_topic
-            WHERE live_topic.id = 'archive-topic-601'
+            WHERE live_topic.id = ${archiveTopicId(
+              CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + 1,
+            )}
           ) AS "liveAfterActivity"
         `;
         expect(liveAfterActivity).toBe(true);
@@ -629,7 +656,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             actorAccountId: fixtures.authorAccountId,
             workspaceId: fixtures.workspaceId,
             channelId: fixtures.publicChannelId,
-            topicId: yield* makeTopicId("archive-topic-650"),
+            topicId: yield* makeTopicId(
+              archiveTopicId(
+                CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + ARCHIVE_PAGE_SIZE / 2,
+              ),
+            ),
             messageId: yield* makeMessageId(`archive-activity-${randomUUID()}`),
             body: MessageBody.make("Snapshot-visible activity"),
           }),
@@ -641,9 +672,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           first.nextCursor,
         );
         expect(repeatedSecond.topics.map(({ topic }) => topic.id)).not.toContain(
-          "archive-topic-650",
+          archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE + ARCHIVE_PAGE_SIZE / 2),
         );
-        expect(repeatedSecond.topics.at(-1)?.topic.id).toBe("archive-topic-702");
+        expect(repeatedSecond.topics.at(-1)?.topic.id).toBe(
+          archiveTopicId(ARCHIVE_TEST_TOPIC_COUNT),
+        );
         expect(repeatedSecond.nextCursor).toBeUndefined();
 
         const third = yield* topics.listArchiveForActor(
@@ -652,7 +685,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
           fixtures.publicChannelId,
           second.nextCursor,
         );
-        expect(third.topics.map(({ topic }) => topic.id)).toEqual(["archive-topic-702"]);
+        expect(third.topics.map(({ topic }) => topic.id)).toEqual([
+          archiveTopicId(ARCHIVE_TEST_TOPIC_COUNT),
+        ]);
         expect(third.nextCursor).toBeUndefined();
         const traversedTopicIds = [...first.topics, ...second.topics, ...third.topics].map(
           ({ topic }) => topic.id,

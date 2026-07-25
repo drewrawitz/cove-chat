@@ -1,6 +1,8 @@
 import { Message, Topic, makeTopicSummaryPreview } from "@cove/domain";
 import {
   type PersistenceError,
+  StoredMessage,
+  type TopicAuthorRecord,
   type TopicMessageRecord,
   type TopicRecord,
   TopicRepository,
@@ -33,6 +35,13 @@ import {
 
 function messageView(record: TopicMessageRecord): TopicMessageView {
   return TopicMessageView.make(record);
+}
+
+function messageViewFromDomain(message: Message, author: TopicAuthorRecord): TopicMessageView {
+  return TopicMessageView.make({
+    message: StoredMessage.make(message),
+    author,
+  });
 }
 
 function topicSummaryView(record: TopicSummaryRecord): TopicSummaryView {
@@ -182,12 +191,7 @@ const make = Effect.gen(function* () {
 
             return TopicView.make({
               topic,
-              messages: [
-                TopicMessageView.make({
-                  message: openingBrief,
-                  author: context.actor,
-                }),
-              ],
+              messages: [messageViewFromDomain(openingBrief, context.actor)],
             });
           }),
         ),
@@ -223,7 +227,7 @@ const make = Effect.gen(function* () {
               body: command.body,
               createdAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: context.actor });
+            return messageViewFromDomain(message, context.actor);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.addMessage", effect),
@@ -241,7 +245,7 @@ const make = Effect.gen(function* () {
               body: command.body,
               editedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: current.author });
+            return messageViewFromDomain(message, current.author);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.editMessage", effect),
@@ -258,7 +262,7 @@ const make = Effect.gen(function* () {
               messageId: command.messageId,
               deletedAt: new Date(yield* Clock.currentTimeMillis),
             });
-            return TopicMessageView.make({ message, author: current.author });
+            return messageViewFromDomain(message, current.author);
           }),
         ),
       (effect) => recoverFailure("TopicAccess.deleteMessage", effect),
