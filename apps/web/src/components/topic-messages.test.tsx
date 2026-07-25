@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { StrictMode } from "react";
+import { StrictMode, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { SnackbarProvider } from "./snackbar.tsx";
@@ -9,6 +9,7 @@ import { TopicMessages } from "./topic-messages.tsx";
 
 const apiHarness = vi.hoisted(() => ({
   addMessage: vi.fn(),
+  deleteMessage: vi.fn(),
   editMessage: vi.fn(),
 }));
 
@@ -22,8 +23,8 @@ vi.mock("../api/generated/cove-app.ts", () => {
 
   return {
     useTopicsAddMessage: () => ({ ...mutation(), mutateAsync: apiHarness.addMessage }),
-    useTopicsDeleteMessage: mutation,
-    useTopicsEditMessage: () => ({ ...mutation(), mutate: apiHarness.editMessage }),
+    useTopicsDeleteMessage: () => ({ ...mutation(), mutateAsync: apiHarness.deleteMessage }),
+    useTopicsEditMessage: () => ({ ...mutation(), mutateAsync: apiHarness.editMessage }),
   };
 });
 
@@ -37,6 +38,7 @@ const openingMessage = {
   id: "message-1",
   body: "Capture the remaining launch risks.",
   position: 1,
+  version: 1,
   createdAt: "2026-07-22T19:15:00.000Z",
   edited: true,
   deleted: false,
@@ -47,6 +49,7 @@ const newReply = {
   id: "message-4",
   body: "The release candidate passed smoke testing.",
   position: 3,
+  version: 1,
   createdAt: "2026-07-22T19:16:00.000Z",
   edited: false,
   deleted: false,
@@ -57,6 +60,7 @@ const unrelatedReply = {
   id: "message-2",
   body: "An incoming reply from someone else.",
   position: 2,
+  version: 1,
   createdAt: "2026-07-22T19:15:30.000Z",
   edited: false,
   deleted: false,
@@ -73,6 +77,14 @@ const scrollTo = vi.fn();
 beforeEach(() => {
   apiHarness.addMessage.mockReset();
   apiHarness.addMessage.mockResolvedValue(newReply);
+  apiHarness.deleteMessage.mockReset();
+  apiHarness.deleteMessage.mockResolvedValue({
+    status: "succeeded",
+    commandId: "delete-command",
+    kind: "delete",
+    messageId: openingMessage.id,
+    messageVersion: 2,
+  });
   apiHarness.editMessage.mockReset();
   scrollIntoView.mockClear();
   scrollTo.mockClear();
@@ -96,7 +108,7 @@ afterEach(() => {
 });
 
 const topicMessages = (
-  messages: ReadonlyArray<typeof openingMessage>,
+  messages: ComponentProps<typeof TopicMessages>["messages"],
   pagination?: {
     readonly hasError: boolean;
     readonly isLoading: boolean;
@@ -144,6 +156,7 @@ test("identifies messages by author and timestamp instead of a numbered heading"
             id: "message-1",
             body: "Capture the remaining launch risks.",
             position: 1,
+            version: 1,
             createdAt: "2026-07-22T19:15:00.000Z",
             edited: true,
             deleted: false,
@@ -157,6 +170,7 @@ test("identifies messages by author and timestamp instead of a numbered heading"
             id: "message-2",
             body: "A repeated reply.",
             position: 2,
+            version: 1,
             createdAt: "2026-07-22T19:15:20.000Z",
             edited: false,
             deleted: false,
@@ -170,6 +184,7 @@ test("identifies messages by author and timestamp instead of a numbered heading"
             id: "message-3",
             body: "A repeated reply.",
             position: 3,
+            version: 1,
             createdAt: "2026-07-22T19:15:40.000Z",
             edited: false,
             deleted: false,
@@ -289,16 +304,17 @@ test.each([
 
   fireEvent.keyDown(editor, { key: "Enter", ...modifier });
 
-  expect(apiHarness.editMessage).toHaveBeenCalledWith(
-    {
-      workspaceId: "workspace-1",
-      channelId: "channel-1",
-      topicId: "topic-1",
-      messageId: openingMessage.id,
-      data: { body: "A keyboard-first edit" },
+  expect(apiHarness.editMessage).toHaveBeenCalledWith({
+    workspaceId: "workspace-1",
+    channelId: "channel-1",
+    topicId: "topic-1",
+    messageId: openingMessage.id,
+    data: {
+      commandId: expect.any(String),
+      expectedVersion: 1,
+      body: "A keyboard-first edit",
     },
-    expect.objectContaining({ onSuccess: expect.any(Function) }),
-  );
+  });
 });
 
 test("presents message editing as a composer with Cancel before Save", () => {
@@ -329,19 +345,24 @@ test("scrolls the newly posted reply into view after it renders", async () => {
   await waitFor(() => {
     expect(apiHarness.addMessage).toHaveBeenCalled();
   });
-  expect(scrollIntoView).not.toHaveBeenCalled();
+  expect(scrollIntoView).toHaveBeenCalledOnce();
+  expect((scrollIntoView.mock.contexts[0] as Element).id).toMatch(/^topic-message-optimistic-/);
 
   rerender(topicMessages([openingMessage, unrelatedReply]));
-  expect(scrollIntoView).not.toHaveBeenCalled();
+  expect(scrollIntoView).toHaveBeenCalledOnce();
 
-  rerender(topicMessages([openingMessage, unrelatedReply, newReply]));
+  const commandId = apiHarness.addMessage.mock.calls[0]?.[0]?.data.commandId as string;
+  rerender(
+    topicMessages([
+      openingMessage,
+      unrelatedReply,
+      { ...newReply, producedByCommandId: commandId },
+    ]),
+  );
 
   await waitFor(() => {
-    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    expect(scrollIntoView).toHaveBeenCalledOnce();
   });
-  expect(scrollIntoView.mock.contexts[0]).toBe(
-    document.getElementById(`topic-message-${newReply.id}`),
-  );
 });
 
 test("keeps the current scroll position when a reply arrives without a local post", () => {

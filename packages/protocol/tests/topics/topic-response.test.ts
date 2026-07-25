@@ -2,9 +2,9 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   CreatedTopicResponse,
+  CreateReplyRequest,
   CreatePublicChannelRequest,
   CreateTopicRequest,
-  MessageMutationRequest,
   TopicArchivePageResponse,
 } from "../../src/index.ts";
 
@@ -92,7 +92,8 @@ it.effect("rejects multibyte content and summary previews above their UTF-8 byte
       title: "Release readiness",
       openingBrief: "é".repeat(4097),
     });
-    const oversizedMessage = Schema.decodeUnknownEffect(MessageMutationRequest)({
+    const oversizedMessage = Schema.decodeUnknownEffect(CreateReplyRequest)({
+      commandId: "create-reply-command",
       body: "é".repeat(4097),
     });
 
@@ -115,6 +116,7 @@ it.effect("encodes a newly created Topic with only its Opening Brief", () =>
         id: "message-1",
         body: "Capture the remaining launch risks.",
         position: 1,
+        version: 1,
         createdAt: new Date("2026-07-22T12:00:00.000Z"),
         edited: false,
         deleted: false,

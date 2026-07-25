@@ -17,18 +17,12 @@ import {
 import { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
 import { TopicArchiveCursorInvalid } from "./topic-archive-cursor.ts";
 import {
-  type AddMessageCommand,
   type CreateTopicCommand,
-  MessageMutationForbidden,
-  MessageUnavailable,
-  type DeleteMessageCommand,
-  type EditMessageCommand,
   TopicAccess,
   TopicAccessFailure,
   TopicArchivePageView,
   TopicMessageView,
   TopicSummaryView,
-  TopicUnavailable,
   TopicView,
 } from "./topic-access.ts";
 
@@ -74,40 +68,6 @@ const make = Effect.gen(function* () {
     channelId: CreateTopicCommand["channelId"],
   ): Effect.fn.Return<ChannelConversationContext, ChannelUnavailable | ChannelAccessFailure> {
     return yield* channels.getConversationContextForActor(actorAccountId, workspaceId, channelId);
-  });
-
-  const messageMutationTarget = Effect.fn("TopicAccess.messageMutationTarget")(function* (
-    command: EditMessageCommand | DeleteMessageCommand,
-  ) {
-    const context = yield* conversationContext(
-      command.actorAccountId,
-      command.workspaceId,
-      command.channelId,
-    );
-    if (!context.hasChannelMembership) {
-      return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
-    }
-
-    const topic = yield* repository.findTopicById(
-      command.workspaceId,
-      command.channelId,
-      command.topicId,
-    );
-    if (topic === undefined) {
-      return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
-    }
-    const current = yield* repository.findMessageById(
-      command.workspaceId,
-      command.topicId,
-      command.messageId,
-    );
-    if (current === undefined || current.message.deletedAt !== undefined) {
-      return yield* Effect.fail(new MessageUnavailable({ messageId: command.messageId }));
-    }
-    if (current.message.authorIdentityId !== context.actor.id) {
-      return yield* Effect.fail(new MessageMutationForbidden({ messageId: command.messageId }));
-    }
-    return current;
   });
 
   return TopicAccess.of({
@@ -168,6 +128,7 @@ const make = Effect.gen(function* () {
               authorIdentityId: context.actor.id,
               body: command.openingBrief,
               position: 1,
+              version: 1,
               createdAt: now,
             });
 
@@ -181,76 +142,6 @@ const make = Effect.gen(function* () {
           }),
         ),
       (effect) => recoverFailure("TopicAccess.create", effect),
-    ),
-    addMessage: Effect.fn("TopicAccess.addMessage")(
-      (command: AddMessageCommand) =>
-        transactions.run(
-          Effect.gen(function* () {
-            const context = yield* conversationContext(
-              command.actorAccountId,
-              command.workspaceId,
-              command.channelId,
-            );
-            if (!context.hasChannelMembership) {
-              return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
-            }
-
-            const topic = yield* repository.findTopicById(
-              command.workspaceId,
-              command.channelId,
-              command.topicId,
-            );
-            if (topic === undefined) {
-              return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
-            }
-
-            const message = yield* repository.appendMessage({
-              id: command.messageId,
-              workspaceId: command.workspaceId,
-              topicId: command.topicId,
-              authorIdentityId: context.actor.id,
-              body: command.body,
-              createdAt: new Date(yield* Clock.currentTimeMillis),
-            });
-            return messageViewFromDomain(message, context.actor);
-          }),
-        ),
-      (effect) => recoverFailure("TopicAccess.addMessage", effect),
-    ),
-    editMessage: Effect.fn("TopicAccess.editMessage")(
-      (command: EditMessageCommand) =>
-        transactions.run(
-          Effect.gen(function* () {
-            const current = yield* messageMutationTarget(command);
-
-            const message = yield* repository.editMessage({
-              workspaceId: command.workspaceId,
-              topicId: command.topicId,
-              messageId: command.messageId,
-              body: command.body,
-              editedAt: new Date(yield* Clock.currentTimeMillis),
-            });
-            return messageViewFromDomain(message, current.author);
-          }),
-        ),
-      (effect) => recoverFailure("TopicAccess.editMessage", effect),
-    ),
-    deleteMessage: Effect.fn("TopicAccess.deleteMessage")(
-      (command: DeleteMessageCommand) =>
-        transactions.run(
-          Effect.gen(function* () {
-            const current = yield* messageMutationTarget(command);
-
-            const message = yield* repository.tombstoneMessage({
-              workspaceId: command.workspaceId,
-              topicId: command.topicId,
-              messageId: command.messageId,
-              deletedAt: new Date(yield* Clock.currentTimeMillis),
-            });
-            return messageViewFromDomain(message, current.author);
-          }),
-        ),
-      (effect) => recoverFailure("TopicAccess.deleteMessage", effect),
     ),
   });
 });

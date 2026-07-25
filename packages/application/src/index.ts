@@ -44,7 +44,17 @@ export {
   type ChannelAccessService,
 } from "./channels/index.ts";
 export {
-  AddMessageCommand,
+  CreateReplyCommand,
+  MessageCommand,
+  MessageCommandConflict,
+  MessageCommandFailure,
+  MessageCommandRejected,
+  MessageCommandRejection,
+  MessageCommandStatus,
+  MessageCommandSucceeded,
+  MessageCommands,
+  StaleMessageVersion,
+  type MessageCommandsService,
   MessageMutationForbidden,
   MessageUnavailable,
   CreateTopicCommand,

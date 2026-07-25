@@ -6,9 +6,12 @@ This package uses explicit parameterized SQL through Effect's PostgreSQL client.
 decoded before they become domain values, and driver failures are translated into the ports'
 typed `PersistenceError`.
 
-Workspace Access is the intentional exception to the port-adapter pattern: its Postgres adapter
-implements the restricted application-owned `@cove/application/workspaces/internal` persistence
-interface and translates failures to `WorkspaceAccessPersistenceFailure`.
+Workspace Access and durable Message Commands are the intentional exceptions to the port-adapter
+pattern. Workspace Access implements the restricted application-owned
+`@cove/application/workspaces/internal` persistence interface and translates failures to
+`WorkspaceAccessPersistenceFailure`. Message Commands keep receipt claiming, fingerprinting,
+version checks, Message mutation, and terminal outcome persistence together in one PostgreSQL
+transaction behind the small application-owned `MessageCommands` interface.
 
 `PostgresLive` reads `DATABASE_URL` and `TOPIC_ARCHIVE_CURSOR_SIGNING_KEY` through Effect `Config`
 and provides the Workspace Access module alongside the repository, audit, and transaction ports.

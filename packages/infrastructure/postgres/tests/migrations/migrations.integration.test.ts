@@ -5,6 +5,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 const TARGET_MIGRATION = "20260723234500_bounded_channel_topic_summaries";
+const MESSAGE_COMMAND_MIGRATION = "20260725120000_message_commands";
 const migrationsDirectory = fileURLToPath(
   new URL("../../../../db/prisma/migrations/", import.meta.url),
 );
@@ -244,5 +245,57 @@ describe("PostgreSQL migrations", () => {
           AND table_name IN ('topic_activity_versions', 'topic_archive_cursors');
       `),
     ).toBe("0");
+
+    await runSql(`
+      INSERT INTO message_revisions (
+        workspace_id, topic_id, message_id, body, operation, revised_at
+      )
+      VALUES (
+        'migration-workspace',
+        'active-topic',
+        'active-latest',
+        'Opening',
+        'edit',
+        '2026-07-20T12:05:00Z'
+      );
+    `);
+    await runFile(join(migrationsDirectory, MESSAGE_COMMAND_MIGRATION, "migration.sql"));
+
+    expect(
+      await runSql(`
+        SELECT string_agg(
+          concat_ws(
+            '|',
+            id,
+            version,
+            coalesce(produced_by_command_id, '<null>'),
+            coalesce(body, '<null>'),
+            coalesce(
+              to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS'),
+              '<null>'
+            )
+          ),
+          E'\n'
+          ORDER BY id
+        )
+        FROM messages
+        WHERE workspace_id = 'migration-workspace';
+      `),
+    ).toBe(
+      [
+        "active-latest|1|<null>|" + multibyteLatestBody + "|<null>",
+        "active-opening|1|<null>|Opening|<null>",
+        "deleted-latest|1|<null>|<null>|2026-07-20T13:05:00",
+      ].join("\n"),
+    );
+    expect(
+      await runSql(`
+        SELECT concat(
+          (SELECT count(*) FROM message_revisions WHERE workspace_id = 'migration-workspace'),
+          '|',
+          (SELECT count(*) FROM message_command_receipts)
+        );
+      `),
+    ).toBe("1|0");
   }, 60_000);
 });

@@ -1,13 +1,5 @@
 import { Button, buttonVariants } from "@cove/ui/components/button";
 import {
-  DialogBackdrop,
-  DialogDescription,
-  DialogPopup,
-  DialogPortal,
-  DialogRoot,
-  DialogTitle,
-} from "@cove/ui/components/dialog";
-import {
   MenuItem,
   MenuPopup,
   MenuPortal,
@@ -15,32 +7,20 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@cove/ui/components/menu";
-import { Fragment, type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactElement, useEffect, useRef, useState } from "react";
 import {
-  useTopicsAddMessage,
-  useTopicsDeleteMessage,
-  useTopicsEditMessage,
-} from "../api/generated/cove-app.ts";
-import { requiredFormValue } from "../form-data.ts";
+  type EditMessageOverlayCommand,
+  type OverlayMessageCommand,
+  type OverlayTopicMessage,
+} from "../message-command-overlay.ts";
 import { topicMessageKind, topicMessageKindLabel } from "../topic-message-kind.ts";
 import { LocalTimestamp } from "./local-timestamp.tsx";
-import { useSnackbar } from "./snackbar.tsx";
+import { TopicMessageDeleteDialog } from "./topic-message-delete-dialog.tsx";
 import { TopicMessageEditor } from "./topic-message-editor.tsx";
 import { TopicReplyComposer } from "./topic-reply-composer.tsx";
+import { useTopicMessageCommands } from "./use-topic-message-commands.ts";
 
-interface TopicMessage {
-  readonly id: string;
-  readonly body?: string;
-  readonly position: number;
-  readonly createdAt: string;
-  readonly edited: boolean;
-  readonly deleted: boolean;
-  readonly author: {
-    readonly id: string;
-    readonly name: string;
-    readonly avatarUrl: string;
-  };
-}
+type TopicMessage = OverlayTopicMessage;
 
 export interface OlderRepliesPagination {
   readonly hasError: boolean;
@@ -105,6 +85,19 @@ const messageExcerpt = (body: string | undefined): string => {
   return normalized.length > 60 ? `${normalized.slice(0, 59)}…` : normalized;
 };
 
+const optimisticPhaseLabel = (command: OverlayMessageCommand): string => {
+  switch (command.phase) {
+    case "pending":
+      return "Pending…";
+    case "syncing":
+      return "Syncing…";
+    case "uncertain":
+      return "Delivery uncertain.";
+    case "rejected":
+      return "Rejected.";
+  }
+};
+
 export function TopicMessages({
   canReply,
   channelId,
@@ -114,18 +107,33 @@ export function TopicMessages({
   topicId,
   workspaceId,
 }: TopicMessagesProps): ReactElement {
-  const addMessage = useTopicsAddMessage();
-  const editMessage = useTopicsEditMessage();
-  const deleteMessage = useTopicsDeleteMessage();
-  const { showSnackbar } = useSnackbar();
   const initiallyPositionedTopicId = useRef<string | undefined>(undefined);
-  const scrollAfterMessageId = useRef<string | undefined>(undefined);
-  const [editingId, setEditingId] = useState<string>();
+  const {
+    add,
+    deleteMutation,
+    edit,
+    editMutation,
+    mutationPending,
+    overlay,
+    projectedMessages,
+    remove,
+    retry,
+    scrollAfterMessageId,
+  } = useTopicMessageCommands({
+    channelId,
+    currentIdentity,
+    messages,
+    topicId,
+    workspaceId,
+  });
+  const [editing, setEditing] = useState<{
+    readonly messageId: string;
+    readonly defaultBody?: string;
+  }>();
   const [deletingId, setDeletingId] = useState<string>();
-  const deletingMessage = messages.find((message) => message.id === deletingId);
+  const deletingMessage = projectedMessages.find((message) => message.id === deletingId);
   const deletingMessageKind =
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
-  const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
   const olderRepliesControl = <OlderRepliesControl {...olderRepliesPagination} />;
 
   useEffect(() => {
@@ -134,12 +142,12 @@ export function TopicMessages({
     const frame = window.requestAnimationFrame(() => {
       initiallyPositionedTopicId.current = topicId;
       window.scrollTo({
-        top: messages.length > 1 ? document.documentElement.scrollHeight : 0,
+        top: projectedMessages.length > 1 ? document.documentElement.scrollHeight : 0,
         behavior: "auto",
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [messages.length, topicId]);
+  }, [projectedMessages.length, topicId]);
 
   useEffect(() => {
     const messageId = scrollAfterMessageId.current;
@@ -160,65 +168,33 @@ export function TopicMessages({
       behavior: reduceMotion ? "auto" : "smooth",
       block: "center",
     });
-  }, [messages]);
-
-  const add = async (body: string): Promise<void> => {
-    try {
-      const createdMessage = await addMessage.mutateAsync({
-        workspaceId,
-        channelId,
-        topicId,
-        data: { body },
-      });
-      scrollAfterMessageId.current = createdMessage.id;
-    } catch (error) {
-      scrollAfterMessageId.current = undefined;
-      throw error;
-    }
-  };
-
-  const edit = (event: FormEvent<HTMLFormElement>, messageId: string): void => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    editMessage.mutate(
-      {
-        workspaceId,
-        channelId,
-        topicId,
-        messageId,
-        data: { body: requiredFormValue(form, "messageBody") },
-      },
-      {
-        onSuccess: () => {
-          setEditingId(undefined);
-        },
-      },
-    );
-  };
-
-  const remove = (message: TopicMessage): void => {
-    deleteMessage.mutate(
-      { workspaceId, channelId, topicId, messageId: message.id },
-      {
-        onSuccess: () => {
-          setDeletingId(undefined);
-          showSnackbar(`${topicMessageKindLabel(message.position)} deleted.`);
-        },
-      },
-    );
-  };
+  }, [projectedMessages, scrollAfterMessageId]);
 
   return (
     <>
       <ol className="divide-y" aria-label="Topic messages">
-        {messages.map((message, index) => {
+        {projectedMessages.map((message, index) => {
           const kind = topicMessageKind(message.position);
           const kindLabel = topicMessageKindLabel(message.position);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
           const excerpt = messageExcerpt(message.body);
           const isAuthor = message.author.id === currentIdentity.id;
-          const canChange = canReply && isAuthor && !message.deleted;
-          const isEditing = editingId === message.id;
+          const canChange =
+            canReply && isAuthor && !message.deleted && message.optimisticPhase === undefined;
+          const isEditing = editing?.messageId === message.id;
+          const optimisticCommand =
+            message.producedByCommandId === undefined
+              ? undefined
+              : overlay.commands.find(
+                  ({ commandId, phase }) =>
+                    commandId === message.producedByCommandId && phase !== "rejected",
+                );
+          const rejectedEdit = overlay.commands.find(
+            (command): command is EditMessageOverlayCommand =>
+              command.kind === "edit" &&
+              command.messageId === message.id &&
+              command.phase === "rejected",
+          );
 
           return (
             <Fragment key={message.id}>
@@ -231,14 +207,17 @@ export function TopicMessages({
                   {isEditing ? (
                     <TopicMessageEditor
                       authorAvatarUrl={message.author.avatarUrl}
-                      defaultBody={message.body}
+                      defaultBody={editing.defaultBody ?? message.body}
                       editorId={`edit-message-${message.id}`}
                       editorLabel={`Edit ${kind}`}
-                      hasError={editMessage.isError}
+                      hasError={rejectedEdit !== undefined}
                       isDisabled={mutationPending}
-                      isSaving={editMessage.isPending}
-                      onCancel={() => setEditingId(undefined)}
-                      onSubmit={(event) => edit(event, message.id)}
+                      isSaving={editMutation.isPending}
+                      onCancel={() => setEditing(undefined)}
+                      onSubmit={(event) => {
+                        edit(event, message);
+                        setEditing(undefined);
+                      }}
                     />
                   ) : (
                     <div className="flex items-start gap-3">
@@ -293,8 +272,8 @@ export function TopicMessages({
                                   <MenuPopup>
                                     <MenuItem
                                       onClick={() => {
-                                        editMessage.reset();
-                                        setEditingId(message.id);
+                                        editMutation.reset();
+                                        setEditing({ messageId: message.id });
                                       }}
                                     >
                                       Edit {kind}
@@ -302,7 +281,7 @@ export function TopicMessages({
                                     <MenuItem
                                       className="text-destructive data-highlighted:text-destructive"
                                       onClick={() => {
-                                        deleteMessage.reset();
+                                        deleteMutation.reset();
                                         setDeletingId(message.id);
                                       }}
                                     >
@@ -315,6 +294,22 @@ export function TopicMessages({
                           ) : null}
                         </header>
 
+                        {optimisticCommand === undefined ? null : (
+                          <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                            <span role="status">{optimisticPhaseLabel(optimisticCommand)}</span>
+                            {optimisticCommand.phase === "uncertain" ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => retry(optimisticCommand)}
+                              >
+                                Retry
+                              </Button>
+                            ) : null}
+                          </div>
+                        )}
+
                         {message.deleted ? (
                           <p className="mt-1 text-sm leading-6 italic text-muted-foreground">
                             {kindLabel} deleted
@@ -324,6 +319,26 @@ export function TopicMessages({
                             {message.body}
                           </p>
                         )}
+                        {rejectedEdit === undefined ? null : (
+                          <div className="mt-2 flex items-center gap-2 text-sm text-destructive">
+                            <span role="alert">
+                              This edit was rejected. Your text is still available.
+                            </span>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() =>
+                                setEditing({
+                                  messageId: message.id,
+                                  defaultBody: rejectedEdit.body,
+                                })
+                              }
+                            >
+                              Review edit
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -332,7 +347,7 @@ export function TopicMessages({
             </Fragment>
           );
         })}
-        {messages.length === 1 ? olderRepliesControl : null}
+        {projectedMessages.length === 1 ? olderRepliesControl : null}
       </ol>
 
       {canReply ? (
@@ -340,7 +355,9 @@ export function TopicMessages({
           <div className="h-24" aria-hidden="true" />
           <TopicReplyComposer
             identity={currentIdentity}
-            hasError={addMessage.isError}
+            hasError={overlay.commands.some(
+              ({ kind, phase }) => kind === "create" && phase === "rejected",
+            )}
             isPending={mutationPending}
             onPost={add}
           />
@@ -348,47 +365,16 @@ export function TopicMessages({
       ) : null}
 
       {deletingMessage === undefined ? null : (
-        <DialogRoot
-          open
-          onOpenChange={(open) => {
-            if (!open && !deleteMessage.isPending) {
-              setDeletingId(undefined);
-            }
+        <TopicMessageDeleteDialog
+          isError={deleteMutation.isError}
+          isPending={deleteMutation.isPending}
+          kind={deletingMessageKind ?? "message"}
+          onClose={() => setDeletingId(undefined)}
+          onConfirm={() => {
+            remove(deletingMessage);
+            setDeletingId(undefined);
           }}
-        >
-          <DialogPortal>
-            <DialogBackdrop />
-            <DialogPopup className="max-w-md p-6 sm:p-7">
-              <DialogTitle>Delete {deletingMessageKind}?</DialogTitle>
-              <DialogDescription className="mt-2 leading-6">
-                This removes the text but keeps its place in the Topic.
-              </DialogDescription>
-              {deleteMessage.isError ? (
-                <p className="mt-4 text-sm text-destructive" role="alert">
-                  Cove could not delete this {deletingMessageKind}. Refresh and try again.
-                </p>
-              ) : null}
-              <div className="mt-6 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={deleteMessage.isPending}
-                  onClick={() => setDeletingId(undefined)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={deleteMessage.isPending}
-                  onClick={() => remove(deletingMessage)}
-                >
-                  {deleteMessage.isPending ? "Deleting…" : `Delete ${deletingMessageKind}`}
-                </Button>
-              </div>
-            </DialogPopup>
-          </DialogPortal>
-        </DialogRoot>
+        />
       )}
     </>
   );

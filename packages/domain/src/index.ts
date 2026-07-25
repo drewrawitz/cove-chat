@@ -30,6 +30,7 @@ export {
 
 export {
   ChannelId,
+  MessageCommandId,
   MessageId,
   InvalidIdentifier,
   TopicId,
@@ -38,6 +39,7 @@ export {
   WorkspaceIdentityId,
   WorkspaceInvitationId,
   makeChannelId,
+  makeMessageCommandId,
   makeMessageId,
   makeTopicId,
   makeUserId,
@@ -50,6 +52,7 @@ export {
   Message,
   MessageBody,
   MessagePosition,
+  MessageVersion,
   InvalidMessageBody,
   InvalidTopicTitle,
   Topic,

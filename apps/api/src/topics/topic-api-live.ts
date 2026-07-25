@@ -1,13 +1,16 @@
 import {
-  AddMessageCommand,
   CreateTopicCommand,
+  CreateReplyCommand,
   DeleteMessageCommand,
   EditMessageCommand,
+  MessageCommands,
   TopicAccess,
 } from "@cove/application";
 import {
   MessageBody,
+  MessageVersion,
   makeChannelId,
+  makeMessageCommandId,
   makeMessageId,
   makeTopicId,
   makeTopicTitle,
@@ -27,8 +30,9 @@ import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
 import {
   createdTopicResponse,
+  messageCommandAcceptedResponse,
+  messageCommandStatusResponse,
   topicArchivePageResponse,
-  topicResponseMessage,
 } from "./topic-response.ts";
 
 const errorTag = (error: unknown): unknown =>
@@ -72,6 +76,12 @@ const messageMutationErrorResponse = (error: unknown) => {
   if (errorTag(error) === "Application.MessageMutationForbidden") {
     return TopicErrorResponses.messageMutationForbidden;
   }
+  if (errorTag(error) === "Application.MessageCommandConflict") {
+    return TopicErrorResponses.messageCommandConflict;
+  }
+  if (errorTag(error) === "Application.StaleMessageVersion") {
+    return TopicErrorResponses.staleMessageVersion;
+  }
   if (
     errorTag(error) === "Application.MessageUnavailable" ||
     invalidIdentifier(error) === "message"
@@ -81,18 +91,35 @@ const messageMutationErrorResponse = (error: unknown) => {
   return topicErrorResponse(error);
 };
 
-const addMessageErrorResponse = (error: unknown) =>
-  error === AuthErrorResponses.csrfValidationFailed
-    ? AuthErrorResponses.csrfValidationFailed
-    : topicErrorResponse(error);
+const addMessageErrorResponse = (error: unknown) => {
+  if (error === AuthErrorResponses.csrfValidationFailed) {
+    return AuthErrorResponses.csrfValidationFailed;
+  }
+  if (errorTag(error) === "Application.MessageCommandConflict") {
+    return TopicErrorResponses.messageCommandConflict;
+  }
+  return topicErrorResponse(error);
+};
+
+const messageCommandStatusErrorResponse = (error: unknown) =>
+  errorTag(error) === "Application.MessageCommandFailure"
+    ? AuthErrorResponses.internalServerError
+    : TopicErrorResponses.messageCommandUnavailable;
+
+const resolveActorAndWorkspace = Effect.fn("TopicApi.resolveActorAndWorkspace")(function* (params: {
+  readonly workspaceId: string;
+}) {
+  const actor = yield* AuthenticatedActor;
+  const actorId = yield* makeUserId(actor.userId);
+  const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+  return { actorId, workspaceId };
+});
 
 const resolveActorAndChannel = Effect.fn("TopicApi.resolveActorAndChannel")(function* (params: {
   readonly workspaceId: string;
   readonly channelId: string;
 }) {
-  const actor = yield* AuthenticatedActor;
-  const actorId = yield* makeUserId(actor.userId);
-  const workspaceId = yield* makeWorkspaceId(params.workspaceId);
+  const { actorId, workspaceId } = yield* resolveActorAndWorkspace(params);
   const channelId = yield* makeChannelId(params.channelId);
   return { actorId, workspaceId, channelId };
 });
@@ -137,16 +164,16 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(params.topicId);
-        const messageId = yield* makeMessageId(randomUUID());
-        const topics = yield* TopicAccess;
-        return topicResponseMessage(
-          yield* topics.addMessage(
-            AddMessageCommand.make({
+        const commandId = yield* makeMessageCommandId(payload.commandId);
+        const commands = yield* MessageCommands;
+        return messageCommandAcceptedResponse(
+          yield* commands.execute(
+            CreateReplyCommand.make({
               actorAccountId: actorId,
               workspaceId,
               channelId,
               topicId,
-              messageId,
+              commandId,
               body: MessageBody.make(payload.body),
             }),
           ),
@@ -159,39 +186,57 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(params.topicId);
         const messageId = yield* makeMessageId(params.messageId);
-        const topics = yield* TopicAccess;
-        return topicResponseMessage(
-          yield* topics.editMessage(
+        const commandId = yield* makeMessageCommandId(payload.commandId);
+        const commands = yield* MessageCommands;
+        return messageCommandAcceptedResponse(
+          yield* commands.execute(
             EditMessageCommand.make({
               actorAccountId: actorId,
               workspaceId,
               channelId,
               topicId,
+              commandId,
               messageId,
+              expectedVersion: MessageVersion.make(payload.expectedVersion),
               body: MessageBody.make(payload.body),
             }),
           ),
         );
       }).pipe(Effect.mapError(messageMutationErrorResponse)),
     )
-    .handle("deleteMessage", ({ headers, params }) =>
+    .handle("deleteMessage", ({ headers, params, payload }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(params.topicId);
         const messageId = yield* makeMessageId(params.messageId);
-        const topics = yield* TopicAccess;
-        return topicResponseMessage(
-          yield* topics.deleteMessage(
+        const commandId = yield* makeMessageCommandId(payload.commandId);
+        const commands = yield* MessageCommands;
+        return messageCommandAcceptedResponse(
+          yield* commands.execute(
             DeleteMessageCommand.make({
               actorAccountId: actorId,
               workspaceId,
               channelId,
               topicId,
+              commandId,
               messageId,
+              expectedVersion: MessageVersion.make(payload.expectedVersion),
             }),
           ),
         );
       }).pipe(Effect.mapError(messageMutationErrorResponse)),
+    )
+    .handle("getMessageCommandStatus", ({ params }) =>
+      Effect.gen(function* () {
+        const { actorId, workspaceId } = yield* resolveActorAndWorkspace(params);
+        const commandId = yield* makeMessageCommandId(params.commandId);
+        const commands = yield* MessageCommands;
+        const status = yield* commands.status(actorId, workspaceId, commandId);
+        if (status === undefined) {
+          return yield* Effect.fail(TopicErrorResponses.messageCommandUnavailable);
+        }
+        return messageCommandStatusResponse(status);
+      }).pipe(Effect.mapError(messageCommandStatusErrorResponse)),
     ),
 );

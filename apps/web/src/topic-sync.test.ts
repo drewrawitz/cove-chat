@@ -20,6 +20,7 @@ const messages = [
     authorIdentityId: "identity-1",
     body: "Opening context",
     position: 1,
+    version: 1,
     createdAt: Date.UTC(2026, 6, 23, 12),
     author: {
       id: "identity-1",
@@ -38,6 +39,7 @@ const messages = [
     topicId: "topic-1",
     authorIdentityId: "identity-2",
     position: 2,
+    version: 2,
     createdAt: Date.UTC(2026, 6, 23, 13),
     editedAt: Date.UTC(2026, 6, 23, 14),
     deletedAt: Date.UTC(2026, 6, 23, 15),

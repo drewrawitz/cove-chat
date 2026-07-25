@@ -2,8 +2,10 @@ import {
   ChannelId,
   Message,
   MessageBody,
+  MessageCommandId,
   MessageId,
   MessagePosition,
+  MessageVersion,
   Topic,
   TopicId,
   TopicIntent,
@@ -15,7 +17,6 @@ import {
   WorkspaceIdentityName,
   type Message as MessageType,
   type Topic as TopicType,
-  makeTopicSummaryPreview,
 } from "@cove/domain";
 import {
   StoredMessage,
@@ -90,6 +91,8 @@ const MessageRow = Schema.Struct({
   authorIdentityId: WorkspaceIdentityId,
   body: Schema.NullOr(MessageBody),
   position: MessagePosition,
+  version: MessageVersion,
+  producedByCommandId: Schema.NullOr(MessageCommandId),
   createdAt: Schema.Date,
   editedAt: Schema.NullOr(Schema.Date),
   deletedAt: Schema.NullOr(Schema.Date),
@@ -97,30 +100,6 @@ const MessageRow = Schema.Struct({
   authorAvatarUrl: WorkspaceAvatarUrl,
 });
 interface MessageRow extends Schema.Schema.Type<typeof MessageRow> {}
-
-const StoredMessageRow = Schema.Struct({
-  id: MessageId,
-  workspaceId: WorkspaceId,
-  topicId: TopicId,
-  authorIdentityId: WorkspaceIdentityId,
-  body: Schema.NullOr(MessageBody),
-  position: MessagePosition,
-  createdAt: Schema.Date,
-  editedAt: Schema.NullOr(Schema.Date),
-  deletedAt: Schema.NullOr(Schema.Date),
-});
-interface StoredMessageRow extends Schema.Schema.Type<typeof StoredMessageRow> {}
-
-const MessageRevisionOperation = Schema.Literals(["edit", "delete"]);
-
-const ReviseMessageRequest = Schema.Struct({
-  workspaceId: WorkspaceId,
-  topicId: TopicId,
-  messageId: MessageId,
-  body: Schema.NullOr(MessageBody),
-  operation: MessageRevisionOperation,
-  revisedAt: Schema.Date,
-});
 
 function topic(row: TopicRow): TopicType {
   const fields = {
@@ -149,20 +128,6 @@ function topic(row: TopicRow): TopicType {
   return row.intent === null ? Topic.make(fields) : Topic.make({ ...fields, intent: row.intent });
 }
 
-function message(row: StoredMessageRow): MessageType {
-  return Message.make({
-    id: row.id,
-    workspaceId: row.workspaceId,
-    topicId: row.topicId,
-    authorIdentityId: row.authorIdentityId,
-    ...(row.body === null ? {} : { body: row.body }),
-    position: row.position,
-    createdAt: row.createdAt,
-    ...(row.editedAt === null ? {} : { editedAt: row.editedAt }),
-    ...(row.deletedAt === null ? {} : { deletedAt: row.deletedAt }),
-  });
-}
-
 function storedMessage(row: MessageRow): StoredMessage {
   return StoredMessage.make({
     id: row.id,
@@ -171,6 +136,8 @@ function storedMessage(row: MessageRow): StoredMessage {
     authorIdentityId: row.authorIdentityId,
     ...(row.body === null ? {} : { body: row.body }),
     position: row.position,
+    version: row.version,
+    ...(row.producedByCommandId === null ? {} : { producedByCommandId: row.producedByCommandId }),
     createdAt: row.createdAt,
     ...(row.editedAt === null ? {} : { editedAt: row.editedAt }),
     ...(row.deletedAt === null ? {} : { deletedAt: row.deletedAt }),
@@ -198,6 +165,8 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
       authorIdentityId: row.latestMessageAuthorIdentityId,
       body: null,
       position: row.latestMessagePosition,
+      version: 1,
+      producedByCommandId: null,
       createdAt: row.latestMessageCreatedAt,
       editedAt: row.latestMessageEditedAt,
       deletedAt: row.latestMessageDeletedAt,
@@ -346,6 +315,8 @@ const make = Effect.gen(function* () {
         message.author_identity_id AS "authorIdentityId",
         message.body,
         message.position,
+        message.version,
+        message.produced_by_command_id AS "producedByCommandId",
         message.created_at AS "createdAt",
         message.edited_at AS "editedAt",
         message.deleted_at AS "deletedAt",
@@ -407,11 +378,11 @@ const make = Effect.gen(function* () {
     Result: Message,
     execute: (value) => sql<MessageType>`
       INSERT INTO messages (
-        id, workspace_id, topic_id, author_identity_id, body, position, created_at
+        id, workspace_id, topic_id, author_identity_id, body, position, version, created_at
       )
       VALUES (
         ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
-        ${value.body}, ${value.position}, ${value.createdAt}
+        ${value.body}, ${value.position}, ${value.version}, ${value.createdAt}
       )
       RETURNING
         id,
@@ -420,136 +391,9 @@ const make = Effect.gen(function* () {
         author_identity_id AS "authorIdentityId",
         body,
         position,
+        version,
+        produced_by_command_id AS "producedByCommandId",
         created_at AS "createdAt"
-    `,
-  });
-
-  const appendMessage = SqlSchema.findOne({
-    Request: Schema.Struct({
-      id: MessageId,
-      workspaceId: WorkspaceId,
-      topicId: TopicId,
-      authorIdentityId: WorkspaceIdentityId,
-      body: MessageBody,
-      createdAt: Schema.Date,
-    }),
-    Result: StoredMessageRow,
-    execute: (value) => sql<StoredMessageRow>`
-      WITH locked_topic AS (
-        SELECT id, latest_message_position + 1 AS next_position
-        FROM topics
-        WHERE workspace_id = ${value.workspaceId}
-          AND id = ${value.topicId}
-        FOR UPDATE
-      ), inserted_message AS (
-        INSERT INTO messages (
-          id, workspace_id, topic_id, author_identity_id, body, position, created_at
-        )
-        SELECT
-          ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
-          ${value.body}, locked_topic.next_position, ${value.createdAt}
-        FROM locked_topic
-        RETURNING *
-      ), updated_topic AS (
-        UPDATE topics AS topic
-        SET
-          message_count = topic.message_count + 1,
-          latest_message_id = inserted_message.id,
-          latest_message_preview = ${makeTopicSummaryPreview(value.body)},
-          latest_message_author_identity_id = inserted_message.author_identity_id,
-          latest_message_position = inserted_message.position,
-          latest_message_created_at = inserted_message.created_at,
-          latest_message_edited_at = inserted_message.edited_at,
-          latest_message_deleted_at = inserted_message.deleted_at,
-          last_activity_at = greatest(topic.last_activity_at, inserted_message.created_at)
-        FROM inserted_message
-        WHERE topic.workspace_id = inserted_message.workspace_id
-          AND topic.id = inserted_message.topic_id
-        RETURNING topic.id
-      )
-      SELECT
-        inserted_message.id,
-        inserted_message.workspace_id AS "workspaceId",
-        inserted_message.topic_id AS "topicId",
-        inserted_message.author_identity_id AS "authorIdentityId",
-        inserted_message.body,
-        inserted_message.position,
-        inserted_message.created_at AS "createdAt",
-        inserted_message.edited_at AS "editedAt",
-        inserted_message.deleted_at AS "deletedAt"
-      FROM inserted_message, updated_topic
-    `,
-  });
-
-  const reviseMessage = SqlSchema.findOne({
-    Request: ReviseMessageRequest,
-    Result: StoredMessageRow,
-    execute: (value) => sql<StoredMessageRow>`
-      WITH previous AS (
-        SELECT workspace_id, topic_id, id, body
-        FROM messages
-        WHERE workspace_id = ${value.workspaceId}
-          AND topic_id = ${value.topicId}
-          AND id = ${value.messageId}
-          AND deleted_at IS NULL
-        FOR UPDATE
-      ), revision AS (
-        INSERT INTO message_revisions (
-          workspace_id, topic_id, message_id, body, operation, revised_at
-        )
-        SELECT
-          workspace_id,
-          topic_id,
-          id,
-          body,
-          CAST(${value.operation} AS "MessageRevisionOperation"),
-          ${value.revisedAt}
-        FROM previous
-        RETURNING id
-      )
-      , revised_message AS (
-        UPDATE messages AS message
-        SET
-          body = ${value.body},
-          edited_at = CASE
-            WHEN ${value.operation} = 'edit' THEN ${value.revisedAt}
-            ELSE message.edited_at
-          END,
-          deleted_at = CASE
-            WHEN ${value.operation} = 'delete' THEN ${value.revisedAt}
-            ELSE message.deleted_at
-          END
-        FROM previous, revision
-        WHERE message.workspace_id = previous.workspace_id
-          AND message.topic_id = previous.topic_id
-          AND message.id = previous.id
-        RETURNING message.*
-      ), updated_topic AS (
-        UPDATE topics AS topic
-        SET
-          latest_message_preview = ${
-            value.body === null ? null : makeTopicSummaryPreview(value.body)
-          },
-          latest_message_edited_at = revised_message.edited_at,
-          latest_message_deleted_at = revised_message.deleted_at
-        FROM revised_message
-        WHERE topic.workspace_id = revised_message.workspace_id
-          AND topic.id = revised_message.topic_id
-          AND topic.latest_message_id = revised_message.id
-        RETURNING topic.id
-      )
-      SELECT
-        revised_message.id,
-        revised_message.workspace_id AS "workspaceId",
-        revised_message.topic_id AS "topicId",
-        revised_message.author_identity_id AS "authorIdentityId",
-        revised_message.body,
-        revised_message.position,
-        revised_message.created_at AS "createdAt",
-        revised_message.edited_at AS "editedAt",
-        revised_message.deleted_at AS "deletedAt"
-      FROM revised_message
-      LEFT JOIN updated_topic ON TRUE
     `,
   });
 
@@ -632,34 +476,6 @@ const make = Effect.gen(function* () {
     insertMessage: Effect.fn("PostgresTopicRepository.insertMessage")(
       (value) => insertMessage(value).pipe(Effect.asVoid),
       (effect) => mapFailure("TopicRepository.insertMessage", effect),
-    ),
-    appendMessage: Effect.fn("PostgresTopicRepository.appendMessage")(
-      (value) => appendMessage(value).pipe(Effect.map(message)),
-      (effect) => mapFailure("TopicRepository.appendMessage", effect),
-    ),
-    editMessage: Effect.fn("PostgresTopicRepository.editMessage")(
-      (value) =>
-        reviseMessage({
-          workspaceId: value.workspaceId,
-          topicId: value.topicId,
-          messageId: value.messageId,
-          body: value.body,
-          operation: "edit",
-          revisedAt: value.editedAt,
-        }).pipe(Effect.map(message)),
-      (effect) => mapFailure("TopicRepository.editMessage", effect),
-    ),
-    tombstoneMessage: Effect.fn("PostgresTopicRepository.tombstoneMessage")(
-      (value) =>
-        reviseMessage({
-          workspaceId: value.workspaceId,
-          topicId: value.topicId,
-          messageId: value.messageId,
-          body: null,
-          operation: "delete",
-          revisedAt: value.deletedAt,
-        }).pipe(Effect.map(message)),
-      (effect) => mapFailure("TopicRepository.tombstoneMessage", effect),
     ),
   });
 });

@@ -55,18 +55,19 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
       "/api/app/v1/workspaces/{workspaceId}/members/{workspaceIdentityId}",
       "/api/app/v1/workspaces/{workspaceId}/members/{workspaceIdentityId}/role",
       "/api/app/v1/workspaces/{workspaceId}/membership",
+      "/api/app/v1/workspaces/{workspaceId}/message-commands/{commandId}",
     ]);
     expect(document.paths).not.toHaveProperty("/health/live");
     expect(document.paths).not.toHaveProperty(
       "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/messages",
     );
     expect(document.components.schemas).toMatchObject({
-      MessageMutationRequest: {
-        properties: { body: expect.any(Object) },
-        required: ["body"],
+      CreateReplyRequest: {
+        properties: { body: expect.any(Object), commandId: expect.any(Object) },
+        required: ["commandId", "body"],
       },
     });
-    expect(document.components.schemas?.MessageMutationRequest?.properties).not.toHaveProperty(
+    expect(document.components.schemas?.CreateReplyRequest?.properties).not.toHaveProperty(
       "parentMessageId",
     );
     expect(document.paths["/api/app/v1/auth/login"]?.post?.responses).toHaveProperty("202");
