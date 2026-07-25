@@ -11,8 +11,7 @@ CREATE TYPE "MessageCommandRejection" AS ENUM (
 CREATE TABLE "message_command_receipts" (
   "workspace_id" TEXT NOT NULL,
   "command_id" TEXT NOT NULL,
-  "actor_account_id" TEXT NOT NULL,
-  "actor_identity_id" TEXT,
+  "actor_identity_id" TEXT NOT NULL,
   "kind" "MessageCommandKind" NOT NULL,
   "fingerprint" TEXT NOT NULL,
   "outcome" "MessageCommandOutcome" NOT NULL DEFAULT 'pending',
@@ -55,7 +54,7 @@ CREATE TABLE "message_command_receipts" (
 CREATE INDEX "message_command_receipts_actor_created_idx"
   ON "message_command_receipts" (
     "workspace_id",
-    "actor_account_id",
+    "actor_identity_id",
     "created_at"
   );
 
@@ -64,10 +63,6 @@ ALTER TABLE "message_command_receipts"
     FOREIGN KEY ("workspace_id")
     REFERENCES "workspaces" ("id")
     ON DELETE CASCADE,
-  ADD CONSTRAINT "message_command_receipts_actor_account_fkey"
-    FOREIGN KEY ("actor_account_id")
-    REFERENCES "users" ("id")
-    ON DELETE RESTRICT,
   ADD CONSTRAINT "message_command_receipts_actor_fkey"
     FOREIGN KEY ("workspace_id", "actor_identity_id")
     REFERENCES "workspace_identities" ("workspace_id", "id")

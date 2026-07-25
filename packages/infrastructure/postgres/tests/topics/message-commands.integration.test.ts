@@ -322,7 +322,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
     ),
   );
 
-  it.effect("receipts a terminal rejection without an active Workspace Identity", () =>
+  it.effect("does not claim a command receipt without an active Workspace Identity", () =>
     withFixtures((fixtures) =>
       Effect.gen(function* () {
         const commands = yield* MessageCommands;
@@ -340,19 +340,11 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
         `;
 
         const rejected = yield* commands.execute(command).pipe(Effect.flip);
-        const receipt = yield* sql<{
-          readonly actorAccountId: string;
-          readonly actorIdentityId: string | null;
-          readonly outcome: string;
-        }>`
-          SELECT
-            actor_account_id AS "actorAccountId",
-            actor_identity_id AS "actorIdentityId",
-            outcome
-          FROM message_command_receipts
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND command_id = ${commandId}
-        `;
+        const initialStatus = yield* commands.status(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          commandId,
+        );
 
         yield* sql`
           UPDATE workspace_identities
@@ -364,24 +356,17 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
           INSERT INTO channel_memberships (workspace_id, channel_id, identity_id)
           VALUES (${fixtures.workspaceId}, ${fixtures.channelId}, ${fixtures.readerIdentityId})
         `;
-        const retry = yield* commands.execute(command).pipe(Effect.flip);
-        const messages = yield* sql<{ readonly count: number }>`
-          SELECT count(*)::integer AS count
-          FROM messages
-          WHERE workspace_id = ${fixtures.workspaceId}
-            AND produced_by_command_id = ${commandId}
-        `;
+        const retry = yield* commands.execute(command);
+        const status = yield* commands.status(
+          fixtures.readerAccountId,
+          fixtures.workspaceId,
+          commandId,
+        );
 
         expect(rejected).toBeInstanceOf(ChannelUnavailable);
-        expect(retry).toBeInstanceOf(ChannelUnavailable);
-        expect(receipt).toEqual([
-          {
-            actorAccountId: fixtures.readerAccountId,
-            actorIdentityId: null,
-            outcome: "rejected",
-          },
-        ]);
-        expect(messages).toEqual([{ count: 0 }]);
+        expect(initialStatus).toBeUndefined();
+        expect(retry).toMatchObject({ _tag: "succeeded", commandId });
+        expect(status).toEqual(retry);
       }),
     ),
   );

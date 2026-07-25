@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { StrictMode, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { CoveApiError } from "../api/cove-fetch.ts";
 import { SnackbarProvider } from "./snackbar.tsx";
 import { TopicMessages } from "./topic-messages.tsx";
 
@@ -363,6 +364,33 @@ test("scrolls the newly posted reply into view after it renders", async () => {
   await waitFor(() => {
     expect(scrollIntoView).toHaveBeenCalledOnce();
   });
+});
+
+test.each([
+  new CoveApiError(401, {
+    code: "UNAUTHENTICATED",
+    message: "Authentication is required.",
+  }),
+  new CoveApiError(403, {
+    code: "CSRF_VALIDATION_FAILED",
+    message: "CSRF validation failed.",
+  }),
+])("keeps an unreceipted $status response on the explicit retry path", async (error) => {
+  apiHarness.addMessage.mockRejectedValue(error);
+  render(topicMessages([openingMessage]));
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  fireEvent.change(screen.getByLabelText("Write a reply"), {
+    target: { value: newReply.body },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Post" }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("status").textContent).toBe("Delivery uncertain.");
+  });
+  expect(screen.getByText(newReply.body)).toBeDefined();
+  expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
+  expect(screen.queryByText("Cove could not add this reply. Refresh and try again.")).toBeNull();
 });
 
 test("keeps the current scroll position when a reply arrives without a local post", () => {

@@ -37,7 +37,6 @@ model User {
   magicLinks          MagicLink[]
   sessions            Session[]
   auditEvents         AuditEvent[]
-  messageCommands     MessageCommandReceipt[]
   invitationsSent     WorkspaceInvitation[] @relation("WorkspaceInvitationInviter")
   invitationsAccepted WorkspaceInvitation[] @relation("WorkspaceInvitationAccepter")
   createdAt           DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -232,8 +231,7 @@ model Message {
 model MessageCommandReceipt {
   workspaceId      String                  @map("workspace_id")
   commandId        String                  @map("command_id")
-  actorAccountId   String                  @map("actor_account_id")
-  actorIdentityId  String?                 @map("actor_identity_id")
+  actorIdentityId  String                  @map("actor_identity_id")
   kind             MessageCommandKind
   fingerprint      String
   outcome          MessageCommandOutcome   @default(pending)
@@ -243,14 +241,13 @@ model MessageCommandReceipt {
   messageId        String?                 @map("message_id")
   messageVersion   Int?                    @map("message_version")
   workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actorAccount     User                    @relation(fields: [actorAccountId], references: [id], onDelete: Restrict)
-  actorIdentity    WorkspaceIdentity?      @relation(fields: [workspaceId, actorIdentityId], references: [workspaceId, id], onDelete: Restrict)
+  actorIdentity    WorkspaceIdentity       @relation(fields: [workspaceId, actorIdentityId], references: [workspaceId, id], onDelete: Restrict)
   producedMessages Message[]
   createdAt        DateTime                @map("created_at") @db.Timestamptz(6)
   completedAt      DateTime?               @map("completed_at") @db.Timestamptz(6)
 
   @@id([workspaceId, commandId])
-  @@index([workspaceId, actorAccountId, createdAt])
+  @@index([workspaceId, actorIdentityId, createdAt])
   @@map("message_command_receipts")
 }
 

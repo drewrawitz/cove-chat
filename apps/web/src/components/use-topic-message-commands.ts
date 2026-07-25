@@ -45,7 +45,7 @@ const rejectionFor = (error: unknown): MessageCommandRejection | undefined => {
     case "MESSAGE_COMMAND_CONFLICT":
       return "conflict";
     default:
-      return "conflict";
+      return undefined;
   }
 };
 

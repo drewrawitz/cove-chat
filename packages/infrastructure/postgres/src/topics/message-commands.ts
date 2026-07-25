@@ -46,8 +46,7 @@ interface ActiveActorRow extends Schema.Schema.Type<typeof ActiveActorRow> {}
 const ClaimReceiptRequest = Schema.Struct({
   workspaceId: WorkspaceId,
   commandId: MessageCommandId,
-  actorAccountId: UserId,
-  actorIdentityId: Schema.NullOr(WorkspaceIdentityId),
+  actorIdentityId: WorkspaceIdentityId,
   kind: CommandKind,
   fingerprint: Schema.String,
   channelId: ChannelId,
@@ -63,8 +62,7 @@ const ReceiptRequest = Schema.Struct({
 
 const ReceiptRow = Schema.Struct({
   commandId: MessageCommandId,
-  actorAccountId: UserId,
-  actorIdentityId: Schema.NullOr(WorkspaceIdentityId),
+  actorIdentityId: WorkspaceIdentityId,
   kind: CommandKind,
   fingerprint: Schema.String,
   outcome: Schema.Literals(["pending", "succeeded", "rejected"]),
@@ -81,6 +79,12 @@ const ReceiptRow = Schema.Struct({
   messageVersion: Schema.NullOr(MessageVersion),
 });
 interface ReceiptRow extends Schema.Schema.Type<typeof ReceiptRow> {}
+
+const ExistingReceiptRow = Schema.Struct({
+  ...ReceiptRow.fields,
+  actorAccountId: UserId,
+});
+interface ExistingReceiptRow extends Schema.Schema.Type<typeof ExistingReceiptRow> {}
 
 const CommandContextRequest = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -265,6 +269,7 @@ const make = Effect.gen(function* () {
         AND identity.account_id = ${actorAccountId}
         AND identity.membership_ended_at IS NULL
       LIMIT 1
+      FOR SHARE
     `,
   });
 
@@ -275,7 +280,6 @@ const make = Effect.gen(function* () {
       INSERT INTO message_command_receipts (
         workspace_id,
         command_id,
-        actor_account_id,
         actor_identity_id,
         kind,
         fingerprint,
@@ -287,7 +291,6 @@ const make = Effect.gen(function* () {
       VALUES (
         ${value.workspaceId},
         ${value.commandId},
-        ${value.actorAccountId},
         ${value.actorIdentityId},
         CAST(${value.kind} AS "MessageCommandKind"),
         ${value.fingerprint},
@@ -299,7 +302,6 @@ const make = Effect.gen(function* () {
       ON CONFLICT (workspace_id, command_id) DO NOTHING
       RETURNING
         command_id AS "commandId",
-        actor_account_id AS "actorAccountId",
         actor_identity_id AS "actorIdentityId",
         kind,
         fingerprint,
@@ -312,22 +314,25 @@ const make = Effect.gen(function* () {
 
   const findReceiptForUpdate = SqlSchema.findOneOption({
     Request: ReceiptRequest,
-    Result: ReceiptRow,
-    execute: ({ workspaceId, commandId }) => sql<ReceiptRow>`
+    Result: ExistingReceiptRow,
+    execute: ({ workspaceId, commandId }) => sql<ExistingReceiptRow>`
       SELECT
-        command_id AS "commandId",
-        actor_account_id AS "actorAccountId",
-        actor_identity_id AS "actorIdentityId",
-        kind,
-        fingerprint,
-        outcome,
-        rejection,
-        message_id AS "messageId",
-        message_version AS "messageVersion"
-      FROM message_command_receipts
-      WHERE workspace_id = ${workspaceId}
-        AND command_id = ${commandId}
-      FOR UPDATE
+        receipt.command_id AS "commandId",
+        actor.account_id AS "actorAccountId",
+        receipt.actor_identity_id AS "actorIdentityId",
+        receipt.kind,
+        receipt.fingerprint,
+        receipt.outcome,
+        receipt.rejection,
+        receipt.message_id AS "messageId",
+        receipt.message_version AS "messageVersion"
+      FROM message_command_receipts AS receipt
+      INNER JOIN workspace_identities AS actor
+        ON actor.workspace_id = receipt.workspace_id
+        AND actor.id = receipt.actor_identity_id
+      WHERE receipt.workspace_id = ${workspaceId}
+        AND receipt.command_id = ${commandId}
+      FOR UPDATE OF receipt
     `,
   });
 
@@ -509,7 +514,6 @@ const make = Effect.gen(function* () {
         AND command_id = ${value.commandId}
       RETURNING
         command_id AS "commandId",
-        actor_account_id AS "actorAccountId",
         actor_identity_id AS "actorIdentityId",
         kind,
         fingerprint,
@@ -533,7 +537,6 @@ const make = Effect.gen(function* () {
         AND command_id = ${value.commandId}
       RETURNING
         command_id AS "commandId",
-        actor_account_id AS "actorAccountId",
         actor_identity_id AS "actorIdentityId",
         kind,
         fingerprint,
@@ -550,7 +553,6 @@ const make = Effect.gen(function* () {
     execute: (value) => sql<ReceiptRow>`
       SELECT
         receipt.command_id AS "commandId",
-        receipt.actor_account_id AS "actorAccountId",
         receipt.actor_identity_id AS "actorIdentityId",
         receipt.kind,
         receipt.fingerprint,
@@ -559,9 +561,12 @@ const make = Effect.gen(function* () {
         receipt.message_id AS "messageId",
         receipt.message_version AS "messageVersion"
       FROM message_command_receipts AS receipt
+      INNER JOIN workspace_identities AS actor
+        ON actor.workspace_id = receipt.workspace_id
+        AND actor.id = receipt.actor_identity_id
       WHERE receipt.workspace_id = ${value.workspaceId}
         AND receipt.command_id = ${value.commandId}
-        AND receipt.actor_account_id = ${value.actorAccountId}
+        AND actor.account_id = ${value.actorAccountId}
       LIMIT 1
     `,
   });
@@ -574,7 +579,11 @@ const make = Effect.gen(function* () {
       completedAt,
     }).pipe(Effect.map(receiptStatus));
 
-  const replay = (command: MessageCommand, requestFingerprint: string, receipt: ReceiptRow) =>
+  const replay = (
+    command: MessageCommand,
+    requestFingerprint: string,
+    receipt: ExistingReceiptRow,
+  ) =>
     receipt.actorAccountId !== command.actorAccountId ||
     receipt.kind !== command._tag ||
     receipt.fingerprint !== requestFingerprint
@@ -677,14 +686,14 @@ const make = Effect.gen(function* () {
               actorAccountId: command.actorAccountId,
               workspaceId: command.workspaceId,
             });
+            if (Option.isNone(actorOption)) {
+              return { _tag: "unreceipted-channel-rejection" } as const;
+            }
             const now = new Date(yield* Clock.currentTimeMillis);
             const claimed = yield* claimReceipt({
               workspaceId: command.workspaceId,
               commandId: command.commandId,
-              actorAccountId: command.actorAccountId,
-              actorIdentityId: Option.isNone(actorOption)
-                ? null
-                : actorOption.value.actorIdentityId,
+              actorIdentityId: actorOption.value.actorIdentityId,
               kind: command._tag,
               fingerprint: requestFingerprint,
               channelId: command.channelId,
@@ -693,9 +702,7 @@ const make = Effect.gen(function* () {
               createdAt: now,
             });
             if (Option.isSome(claimed)) {
-              return Option.isNone(actorOption)
-                ? yield* reject(command, "channel_unavailable", now)
-                : yield* executeClaimed(command, actorOption.value.actorIdentityId, now);
+              return yield* executeClaimed(command, actorOption.value.actorIdentityId, now);
             }
 
             const receipt = yield* findReceiptForUpdate({
@@ -717,6 +724,9 @@ const make = Effect.gen(function* () {
         return yield* Effect.fail(
           new MessageCommandFailure({ operation: "MessageCommands.execute.pendingReceipt" }),
         );
+      }
+      if (result._tag === "unreceipted-channel-rejection") {
+        return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
       }
       if (result._tag === "conflict") {
         return yield* Effect.fail(new MessageCommandConflict({ commandId: command.commandId }));
