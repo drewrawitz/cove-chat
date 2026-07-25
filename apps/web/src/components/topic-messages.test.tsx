@@ -141,6 +141,11 @@ const openOpeningBriefEditor = (): HTMLTextAreaElement => {
   return screen.getByLabelText("Edit opening brief") as HTMLTextAreaElement;
 };
 
+const openMessageDeleteDialog = (actionName: string, menuItemName: string): void => {
+  fireEvent.click(screen.getByRole("button", { name: actionName }));
+  fireEvent.click(screen.getByRole("menuitem", { name: menuItemName }));
+};
+
 test("identifies messages by author and timestamp instead of a numbered heading", () => {
   const markup = renderToStaticMarkup(
     <SnackbarProvider>
@@ -332,6 +337,58 @@ test("presents message editing as a composer with Cancel before Save", () => {
       .getAllByRole("button")
       .map((button) => button.textContent),
   ).toEqual(["Cancel", "Save"]);
+});
+
+test("keeps unrelated Reply and Message controls enabled during an edit", async () => {
+  apiHarness.editMessage.mockReturnValue(new Promise(() => undefined));
+  render(topicMessages([openingMessage, newReply]));
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: `More actions for reply 2 by ${currentIdentity.name}: ${newReply.body}`,
+    }),
+  );
+  fireEvent.click(screen.getByRole("menuitem", { name: "Edit reply" }));
+  fireEvent.change(screen.getByLabelText("Edit reply"), {
+    target: { value: "An edit still awaiting HTTP." },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(apiHarness.editMessage).toHaveBeenCalledOnce());
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  fireEvent.change(screen.getByLabelText("Write a reply"), {
+    target: { value: "An independent reply." },
+  });
+  expect(screen.getByRole("button", { name: "Post" }).hasAttribute("disabled")).toBe(false);
+
+  openOpeningBriefEditor();
+  expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false);
+});
+
+test("restores a rejected deletion with an explanation that can be dismissed", async () => {
+  apiHarness.deleteMessage.mockRejectedValue(
+    new CoveApiError(409, {
+      code: "CHANNEL_UNAVAILABLE",
+      message: "Channel is unavailable.",
+    }),
+  );
+  render(topicMessages([openingMessage]));
+
+  openMessageDeleteDialog(
+    `More actions for opening brief by ${currentIdentity.name}: ${openingMessage.body}`,
+    "Delete opening brief",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Delete opening brief" }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert").textContent).toBe(
+      "This deletion was rejected. The opening brief was restored.",
+    );
+  });
+  expect(screen.getByText(openingMessage.body)).toBeDefined();
+
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss deletion error" }));
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 test("scrolls the newly posted reply into view after it renders", async () => {

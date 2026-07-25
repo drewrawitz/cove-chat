@@ -72,8 +72,17 @@ ALTER TABLE "messages"
   ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1,
   ADD COLUMN "produced_by_command_id" TEXT,
   ADD CONSTRAINT "messages_version_positive"
-    CHECK ("version" > 0),
+    CHECK ("version" > 0)
+    NOT VALID,
   ADD CONSTRAINT "messages_producing_command_fkey"
     FOREIGN KEY ("workspace_id", "produced_by_command_id")
     REFERENCES "message_command_receipts" ("workspace_id", "command_id")
-    ON DELETE RESTRICT;
+    ON DELETE SET NULL ("produced_by_command_id")
+    NOT VALID;
+
+CREATE INDEX "messages_producing_command_idx"
+  ON "messages" ("workspace_id", "produced_by_command_id");
+
+ALTER TABLE "messages"
+  VALIDATE CONSTRAINT "messages_version_positive",
+  VALIDATE CONSTRAINT "messages_producing_command_fkey";

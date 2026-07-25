@@ -131,7 +131,13 @@ it.effect("encodes a newly created Topic with only its Opening Brief", () =>
 
     expect(encoded).toMatchObject({
       id: "topic-1",
-      openingBrief: { id: "message-1", position: 1, edited: false, deleted: false },
+      openingBrief: {
+        id: "message-1",
+        position: 1,
+        version: 1,
+        edited: false,
+        deleted: false,
+      },
     });
     expect(encoded).not.toHaveProperty("intent");
     expect(encoded).not.toHaveProperty("messages");

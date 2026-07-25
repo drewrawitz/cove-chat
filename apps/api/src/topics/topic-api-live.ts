@@ -24,7 +24,7 @@ import {
   CoveAppApi,
   TopicErrorResponses,
 } from "@cove/protocol";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { randomUUID } from "node:crypto";
 import { validateMutationCsrf } from "../support/validate-mutation-csrf.ts";
@@ -102,9 +102,9 @@ const addMessageErrorResponse = (error: unknown) => {
 };
 
 const messageCommandStatusErrorResponse = (error: unknown) =>
-  errorTag(error) === "Application.MessageCommandFailure"
-    ? AuthErrorResponses.internalServerError
-    : TopicErrorResponses.messageCommandUnavailable;
+  error === TopicErrorResponses.messageCommandUnavailable
+    ? TopicErrorResponses.messageCommandUnavailable
+    : AuthErrorResponses.internalServerError;
 
 const resolveActorAndWorkspace = Effect.fn("TopicApi.resolveActorAndWorkspace")(function* (params: {
   readonly workspaceId: string;
@@ -204,13 +204,13 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         );
       }).pipe(Effect.mapError(messageMutationErrorResponse)),
     )
-    .handle("deleteMessage", ({ headers, params, payload }) =>
+    .handle("deleteMessage", ({ headers, params, query }) =>
       Effect.gen(function* () {
         yield* validateMutationCsrf(headers["x-csrf-token"]);
         const { actorId, workspaceId, channelId } = yield* resolveActorAndChannel(params);
         const topicId = yield* makeTopicId(params.topicId);
         const messageId = yield* makeMessageId(params.messageId);
-        const commandId = yield* makeMessageCommandId(payload.commandId);
+        const commandId = yield* makeMessageCommandId(query.commandId);
         const commands = yield* MessageCommands;
         return messageCommandAcceptedResponse(
           yield* commands.execute(
@@ -221,7 +221,7 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
               topicId,
               commandId,
               messageId,
-              expectedVersion: MessageVersion.make(payload.expectedVersion),
+              expectedVersion: MessageVersion.make(query.expectedVersion),
             }),
           ),
         );
@@ -233,10 +233,10 @@ export const TopicApiLive = HttpApiBuilder.group(CoveAppApi, "topics", (handlers
         const commandId = yield* makeMessageCommandId(params.commandId);
         const commands = yield* MessageCommands;
         const status = yield* commands.status(actorId, workspaceId, commandId);
-        if (status === undefined) {
+        if (Option.isNone(status)) {
           return yield* Effect.fail(TopicErrorResponses.messageCommandUnavailable);
         }
-        return messageCommandStatusResponse(status);
+        return messageCommandStatusResponse(status.value);
       }).pipe(Effect.mapError(messageCommandStatusErrorResponse)),
     ),
 );

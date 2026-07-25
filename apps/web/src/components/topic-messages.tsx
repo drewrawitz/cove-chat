@@ -9,6 +9,7 @@ import {
 } from "@cove/ui/components/menu";
 import { Fragment, type ReactElement, useEffect, useRef, useState } from "react";
 import {
+  type DeleteMessageOverlayCommand,
   type EditMessageOverlayCommand,
   type OverlayMessageCommand,
   type OverlayTopicMessage,
@@ -98,6 +99,42 @@ const optimisticPhaseLabel = (command: OverlayMessageCommand): string => {
   }
 };
 
+function RejectedEditNotice({ onReview }: { readonly onReview: () => void }): ReactElement {
+  return (
+    <div className="mt-2 flex items-center gap-2 text-sm text-destructive">
+      <span role="alert">This edit was rejected. Your text is still available.</span>
+      <Button type="button" variant="secondary" size="sm" onClick={onReview}>
+        Review edit
+      </Button>
+    </div>
+  );
+}
+
+function RejectedDeleteNotice({
+  command,
+  kind,
+  onDismiss,
+}: {
+  readonly command: DeleteMessageOverlayCommand;
+  readonly kind: string;
+  readonly onDismiss: (commandId: string) => void;
+}): ReactElement {
+  return (
+    <div className="mt-2 flex items-center gap-2 text-sm text-destructive">
+      <span role="alert">This deletion was rejected. The {kind} was restored.</span>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        aria-label="Dismiss deletion error"
+        onClick={() => onDismiss(command.commandId)}
+      >
+        Dismiss
+      </Button>
+    </div>
+  );
+}
+
 export function TopicMessages({
   canReply,
   channelId,
@@ -111,9 +148,11 @@ export function TopicMessages({
   const {
     add,
     deleteMutation,
+    dismiss,
     edit,
     editMutation,
-    mutationPending,
+    isMessageEditSaving,
+    isMessageMutationPending,
     overlay,
     projectedMessages,
     remove,
@@ -195,6 +234,12 @@ export function TopicMessages({
               command.messageId === message.id &&
               command.phase === "rejected",
           );
+          const rejectedDelete = overlay.commands.find(
+            (command): command is DeleteMessageOverlayCommand =>
+              command.kind === "delete" &&
+              command.messageId === message.id &&
+              command.phase === "rejected",
+          );
 
           return (
             <Fragment key={message.id}>
@@ -211,8 +256,8 @@ export function TopicMessages({
                       editorId={`edit-message-${message.id}`}
                       editorLabel={`Edit ${kind}`}
                       hasError={rejectedEdit !== undefined}
-                      isDisabled={mutationPending}
-                      isSaving={editMutation.isPending}
+                      isDisabled={isMessageMutationPending(message.id)}
+                      isSaving={isMessageEditSaving(message.id)}
                       onCancel={() => setEditing(undefined)}
                       onSubmit={(event) => {
                         edit(event, message);
@@ -320,24 +365,21 @@ export function TopicMessages({
                           </p>
                         )}
                         {rejectedEdit === undefined ? null : (
-                          <div className="mt-2 flex items-center gap-2 text-sm text-destructive">
-                            <span role="alert">
-                              This edit was rejected. Your text is still available.
-                            </span>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() =>
-                                setEditing({
-                                  messageId: message.id,
-                                  defaultBody: rejectedEdit.body,
-                                })
-                              }
-                            >
-                              Review edit
-                            </Button>
-                          </div>
+                          <RejectedEditNotice
+                            onReview={() =>
+                              setEditing({
+                                messageId: message.id,
+                                defaultBody: rejectedEdit.body,
+                              })
+                            }
+                          />
+                        )}
+                        {rejectedDelete === undefined ? null : (
+                          <RejectedDeleteNotice
+                            command={rejectedDelete}
+                            kind={kind}
+                            onDismiss={dismiss}
+                          />
                         )}
                       </div>
                     </div>
@@ -358,7 +400,6 @@ export function TopicMessages({
             hasError={overlay.commands.some(
               ({ kind, phase }) => kind === "create" && phase === "rejected",
             )}
-            isPending={mutationPending}
             onPost={add}
           />
         </>
@@ -366,8 +407,6 @@ export function TopicMessages({
 
       {deletingMessage === undefined ? null : (
         <TopicMessageDeleteDialog
-          isError={deleteMutation.isError}
-          isPending={deleteMutation.isPending}
           kind={deletingMessageKind ?? "message"}
           onClose={() => setDeletingId(undefined)}
           onConfirm={() => {

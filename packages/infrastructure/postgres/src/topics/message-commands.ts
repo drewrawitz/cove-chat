@@ -2,6 +2,7 @@ import {
   ChannelUnavailable,
   MessageCommandConflict,
   MessageCommandFailure,
+  MessageCommandKind,
   MessageCommandRejected,
   MessageCommandSucceeded,
   MessageCommands,
@@ -20,6 +21,7 @@ import {
   MessageId,
   MessageVersion,
   TopicId,
+  TopicSummaryPreview,
   UserId,
   WorkspaceId,
   WorkspaceIdentityId,
@@ -29,9 +31,6 @@ import {
 import { Clock, Effect, Layer, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { createHash, randomUUID } from "node:crypto";
-
-const CommandKind = Schema.Literals(["create", "edit", "delete"]);
-type CommandKind = typeof CommandKind.Type;
 
 const ActiveActorRequest = Schema.Struct({
   actorAccountId: UserId,
@@ -47,7 +46,7 @@ const ClaimReceiptRequest = Schema.Struct({
   workspaceId: WorkspaceId,
   commandId: MessageCommandId,
   actorIdentityId: WorkspaceIdentityId,
-  kind: CommandKind,
+  kind: MessageCommandKind,
   fingerprint: Schema.String,
   channelId: ChannelId,
   topicId: TopicId,
@@ -63,7 +62,7 @@ const ReceiptRequest = Schema.Struct({
 const ReceiptRow = Schema.Struct({
   commandId: MessageCommandId,
   actorIdentityId: WorkspaceIdentityId,
-  kind: CommandKind,
+  kind: MessageCommandKind,
   fingerprint: Schema.String,
   outcome: Schema.Literals(["pending", "succeeded", "rejected"]),
   rejection: Schema.NullOr(
@@ -107,7 +106,7 @@ const AppendRequest = Schema.Struct({
   commandId: MessageCommandId,
   body: MessageBody,
   createdAt: Schema.Date,
-  preview: Schema.optionalKey(Schema.String),
+  preview: TopicSummaryPreview,
 });
 
 const MessageResultRow = Schema.Struct({
@@ -715,12 +714,17 @@ const make = Effect.gen(function* () {
           }),
         )
         .pipe(
+          Effect.tapError((cause) => Effect.logError("MessageCommands.execute", cause)),
           Effect.mapError(
             () => new MessageCommandFailure({ operation: "MessageCommands.execute" }),
           ),
         );
 
       if (result === undefined) {
+        yield* Effect.logError("MessageCommands.execute.pendingReceipt", {
+          workspaceId: command.workspaceId,
+          commandId: command.commandId,
+        });
         return yield* Effect.fail(
           new MessageCommandFailure({ operation: "MessageCommands.execute.pendingReceipt" }),
         );
@@ -739,10 +743,11 @@ const make = Effect.gen(function* () {
     status: Effect.fn("PostgresMessageCommands.status")(
       function* (actorAccountId, workspaceId, commandId) {
         const receipt = yield* readStatus({ actorAccountId, workspaceId, commandId });
-        return Option.isNone(receipt) ? undefined : receiptStatus(receipt.value);
+        return Option.flatMap(receipt, (value) => Option.fromNullishOr(receiptStatus(value)));
       },
       (effect) =>
         effect.pipe(
+          Effect.tapError((cause) => Effect.logError("MessageCommands.status", cause)),
           Effect.mapError(() => new MessageCommandFailure({ operation: "MessageCommands.status" })),
         ),
     ),

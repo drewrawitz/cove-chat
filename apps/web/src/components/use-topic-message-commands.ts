@@ -65,7 +65,6 @@ export function useTopicMessageCommands({
     () => overlayTopicMessages(messages, overlay),
     [messages, overlay],
   );
-  const mutationPending = overlay.commands.some(({ phase }) => phase !== "rejected");
 
   useEffect(() => {
     dispatchOverlay({ type: "synchronized", messages });
@@ -103,9 +102,9 @@ export function useTopicMessageCommands({
             channelId,
             topicId,
             messageId: command.messageId,
-            data: {
+            params: {
               commandId: command.commandId,
-              expectedVersion: command.expectedVersion,
+              expectedVersion: String(command.expectedVersion),
             },
           });
           break;
@@ -188,12 +187,32 @@ export function useTopicMessageCommands({
     void send(command);
   };
 
+  const dismiss = (commandId: string): void => {
+    dispatchOverlay({ type: "dismissed", commandId });
+  };
+
+  const isMessageMutationPending = (messageId: string): boolean =>
+    overlay.commands.some(
+      (command) =>
+        command.kind !== "create" &&
+        command.messageId === messageId &&
+        command.phase !== "rejected",
+    );
+
+  const isMessageEditSaving = (messageId: string): boolean =>
+    overlay.commands.some(
+      (command) =>
+        command.kind === "edit" && command.messageId === messageId && command.phase === "pending",
+    );
+
   return {
     add,
     deleteMutation,
+    dismiss,
     edit,
     editMutation,
-    mutationPending,
+    isMessageEditSaving,
+    isMessageMutationPending,
     overlay,
     projectedMessages,
     remove,

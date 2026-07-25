@@ -18,6 +18,7 @@ export {
   MessageCommand,
   MessageCommandConflict,
   MessageCommandFailure,
+  MessageCommandKind,
   MessageCommandRejected,
   MessageCommandRejection,
   MessageCommandStatus,

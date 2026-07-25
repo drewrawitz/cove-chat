@@ -79,6 +79,7 @@ const ArchivePageRequest = Schema.Struct({
 
 const TopicSummaryRow = Schema.Struct({
   ...TopicRow.fields,
+  latestMessageVersion: MessageVersion,
   authorName: WorkspaceIdentityName,
   authorAvatarUrl: WorkspaceAvatarUrl,
 });
@@ -165,7 +166,7 @@ function summaryRecord(row: TopicSummaryRow): TopicSummaryRecord {
       authorIdentityId: row.latestMessageAuthorIdentityId,
       body: null,
       position: row.latestMessagePosition,
-      version: 1,
+      version: row.latestMessageVersion,
       producedByCommandId: null,
       createdAt: row.latestMessageCreatedAt,
       editedAt: row.latestMessageEditedAt,
@@ -240,6 +241,7 @@ const make = Effect.gen(function* () {
         topic.latest_message_created_at AS "latestMessageCreatedAt",
         topic.latest_message_edited_at AS "latestMessageEditedAt",
         topic.latest_message_deleted_at AS "latestMessageDeletedAt",
+        latest_message.version AS "latestMessageVersion",
         topic.last_activity_at AS "lastActivityAt",
         topic.created_at AS "createdAt",
         author.name AS "authorName",
@@ -249,6 +251,10 @@ const make = Effect.gen(function* () {
       INNER JOIN workspace_identities AS author
         ON author.workspace_id = topic.workspace_id
         AND author.id = topic.latest_message_author_identity_id
+      INNER JOIN messages AS latest_message
+        ON latest_message.workspace_id = topic.workspace_id
+        AND latest_message.topic_id = topic.id
+        AND latest_message.id = topic.latest_message_id
       WHERE topic.workspace_id = ${workspaceId}
         AND topic.channel_id = ${channelId}
         AND (
@@ -282,6 +288,7 @@ const make = Effect.gen(function* () {
         topic.latest_message_created_at AS "latestMessageCreatedAt",
         topic.latest_message_edited_at AS "latestMessageEditedAt",
         topic.latest_message_deleted_at AS "latestMessageDeletedAt",
+        latest_message.version AS "latestMessageVersion",
         topic.last_activity_at AS "lastActivityAt",
         topic.created_at AS "createdAt",
         author.name AS "authorName",
@@ -290,6 +297,10 @@ const make = Effect.gen(function* () {
       INNER JOIN workspace_identities AS author
         ON author.workspace_id = topic.workspace_id
         AND author.id = topic.latest_message_author_identity_id
+      INNER JOIN messages AS latest_message
+        ON latest_message.workspace_id = topic.workspace_id
+        AND latest_message.topic_id = topic.id
+        AND latest_message.id = topic.latest_message_id
       WHERE topic.workspace_id = ${value.workspaceId}
         AND topic.channel_id = ${value.channelId}
         AND (
@@ -392,7 +403,6 @@ const make = Effect.gen(function* () {
         body,
         position,
         version,
-        produced_by_command_id AS "producedByCommandId",
         created_at AS "createdAt"
     `,
   });

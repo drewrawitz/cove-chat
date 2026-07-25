@@ -18,7 +18,7 @@ import {
   UserId,
   WorkspaceId,
 } from "@cove/domain";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { HttpBody, HttpClient, HttpClientRequest } from "effect/unstable/http";
 import { beforeEach, vi } from "vite-plus/test";
 import { DatabaseReadiness } from "../../src/health/index.ts";
@@ -62,29 +62,38 @@ const TestMessageCommands = MessageCommands.of({
     actorAccountId,
     workspaceId,
     commandId,
-  ): Effect.Effect<MessageCommandStatus | undefined, MessageCommandFailure> => {
+  ): Effect.Effect<Option.Option<MessageCommandStatus>, MessageCommandFailure> => {
     statusObserved(actorAccountId, workspaceId, commandId);
+    if (commandId === "status-infrastructure-command") {
+      return Effect.fail(
+        new MessageCommandFailure({ operation: "MessageCommands.HttpTest.status" }),
+      );
+    }
     if (commandId === "known-command") {
       return Effect.succeed(
-        MessageCommandSucceeded.make({
-          commandId,
-          kind: "edit",
-          messageId: MessageId.make("known-message"),
-          messageVersion: MessageVersion.make(3),
-        }),
+        Option.some(
+          MessageCommandSucceeded.make({
+            commandId,
+            kind: "edit",
+            messageId: MessageId.make("known-message"),
+            messageVersion: MessageVersion.make(3),
+          }),
+        ),
       );
     }
     if (commandId === "rejected-command") {
       return Effect.succeed(
-        MessageCommandRejected.make({
-          commandId,
-          kind: "delete",
-          rejection: "stale_version",
-          messageId: MessageId.make("rejected-message"),
-        }),
+        Option.some(
+          MessageCommandRejected.make({
+            commandId,
+            kind: "delete",
+            rejection: "stale_version",
+            messageId: MessageId.make("rejected-message"),
+          }),
+        ),
       );
     }
-    return Effect.succeed(undefined);
+    return Effect.succeed(Option.none());
   },
 });
 
@@ -137,6 +146,26 @@ layer(Api)("Message command HTTP routes", (it) => {
           workspaceId: WorkspaceId.make("workspace-1"),
           topicId: TopicId.make("topic-1"),
           commandId: MessageCommandId.make("create-command"),
+        }),
+      );
+    }),
+  );
+
+  it.effect("accepts delete command metadata through query parameters", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.execute(
+        HttpClientRequest.make("DELETE")(
+          `${messageUrl}?commandId=delete-command&expectedVersion=1`,
+          { headers: authenticatedHeaders },
+        ),
+      );
+
+      expect(response.status).toBe(200);
+      expect(executeObserved).toHaveBeenCalledWith(
+        expect.objectContaining({
+          _tag: "delete",
+          commandId: MessageCommandId.make("delete-command"),
+          expectedVersion: MessageVersion.make(1),
         }),
       );
     }),
@@ -211,13 +240,10 @@ layer(Api)("Message command HTTP routes", (it) => {
   it.effect("leaves transient infrastructure failures outside a terminal response", () =>
     Effect.gen(function* () {
       const response = yield* HttpClient.execute(
-        HttpClientRequest.make("DELETE")(messageUrl, {
-          headers: authenticatedHeaders,
-          body: HttpBody.jsonUnsafe({
-            commandId: "infrastructure-command",
-            expectedVersion: 1,
-          }),
-        }),
+        HttpClientRequest.make("DELETE")(
+          `${messageUrl}?commandId=infrastructure-command&expectedVersion=1`,
+          { headers: authenticatedHeaders },
+        ),
       );
 
       expect(response.status).toBe(500);
@@ -245,6 +271,14 @@ layer(Api)("Message command HTTP routes", (it) => {
       const unauthenticated = yield* HttpClient.get(
         "/api/app/v1/workspaces/workspace-1/message-commands/known-command",
       );
+      const invalidIdentifier = yield* HttpClient.get(
+        "/api/app/v1/workspaces/workspace-1/message-commands/%20",
+        { headers: { cookie: authenticatedHeaders.cookie } },
+      );
+      const infrastructureFailure = yield* HttpClient.get(
+        "/api/app/v1/workspaces/workspace-1/message-commands/status-infrastructure-command",
+        { headers: { cookie: authenticatedHeaders.cookie } },
+      );
 
       expect(known.status).toBe(200);
       expect(yield* known.json).toEqual({
@@ -268,12 +302,14 @@ layer(Api)("Message command HTTP routes", (it) => {
         message: "Message command status is unavailable.",
       });
       expect(unauthenticated.status).toBe(401);
+      expect(invalidIdentifier.status).toBe(500);
+      expect(infrastructureFailure.status).toBe(500);
       expect(statusObserved).toHaveBeenCalledWith(
         UserId.make("http-test-actor"),
         WorkspaceId.make("workspace-1"),
         MessageCommandId.make("known-command"),
       );
-      expect(statusObserved).toHaveBeenCalledTimes(3);
+      expect(statusObserved).toHaveBeenCalledTimes(4);
     }),
   );
 });

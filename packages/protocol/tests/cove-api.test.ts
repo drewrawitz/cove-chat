@@ -92,6 +92,22 @@ it.effect("keeps first-party operations in the app HTTP contract", () =>
     expect(
       document.paths["/api/app/v1/workspaces/{workspaceId}/identity"]?.patch?.responses,
     ).toHaveProperty("200");
+    const deleteMessage =
+      document.paths[
+        "/api/app/v1/workspaces/{workspaceId}/channels/{channelId}/topics/{topicId}/messages/{messageId}"
+      ]?.delete;
+    expect(deleteMessage?.requestBody).toBeUndefined();
+    expect(deleteMessage?.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ in: "query", name: "commandId", required: true }),
+        expect.objectContaining({ in: "query", name: "expectedVersion", required: true }),
+      ]),
+    );
+    const messageCommandStatus =
+      document.paths["/api/app/v1/workspaces/{workspaceId}/message-commands/{commandId}"]?.get;
+    expect(messageCommandStatus?.security).toEqual([{ sessionCookie: [] }]);
+    expect(messageCommandStatus?.responses).toHaveProperty("200");
+    expect(messageCommandStatus?.responses).toHaveProperty("404");
     expect(document.paths["/api/app/v1/workspaces"]?.post?.parameters).toContainEqual(
       expect.objectContaining({
         in: "header",

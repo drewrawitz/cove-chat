@@ -116,7 +116,7 @@ const DeleteMessageEndpoint = HttpApiEndpoint.delete(
   {
     params: MessageParams,
     headers: CsrfHeaders,
-    payload: DeleteMessageRequest,
+    query: DeleteMessageRequest,
     success: MessageCommandAcceptedResponse,
     error: messageChangeErrors,
   },

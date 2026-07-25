@@ -13,6 +13,7 @@ import {
 } from "@cove/application";
 import {
   MessageBody,
+  MessageVersion,
   makeChannelId,
   makeMessageCommandId,
   makeMessageId,
@@ -22,7 +23,7 @@ import {
   makeWorkspaceId,
   makeWorkspaceIdentityId,
 } from "@cove/domain";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { randomUUID } from "node:crypto";
 import { TestPostgres } from "../support/database.ts";
@@ -187,7 +188,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
           messageVersion: 1,
         });
         expect(rows).toEqual([{ count: 1 }]);
-        expect(otherActorStatus).toBeUndefined();
+        expect(Option.isNone(otherActorStatus)).toBe(true);
         expect(receipts).toEqual([
           { fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/), outcome: "succeeded" },
         ]);
@@ -313,7 +314,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
         expect(rejected).toBeInstanceOf(ChannelUnavailable);
         expect(retry).toBeInstanceOf(ChannelUnavailable);
         expect(endedMembershipRetry).toBeInstanceOf(ChannelUnavailable);
-        expect(status).toMatchObject({
+        expect(Option.getOrUndefined(status)).toMatchObject({
           _tag: "rejected",
           rejection: "channel_unavailable",
         });
@@ -364,9 +365,9 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
         );
 
         expect(rejected).toBeInstanceOf(ChannelUnavailable);
-        expect(initialStatus).toBeUndefined();
+        expect(Option.isNone(initialStatus)).toBe(true);
         expect(retry).toMatchObject({ _tag: "succeeded", commandId });
-        expect(status).toEqual(retry);
+        expect(Option.getOrUndefined(status)).toEqual(retry);
       }),
     ),
   );
@@ -388,7 +389,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
             topicId: fixtures.topicId,
             commandId: yield* makeMessageCommandId(randomUUID()),
             messageId: create.messageId,
-            expectedVersion: 1,
+            expectedVersion: MessageVersion.make(1),
             body: MessageBody.make("Committed edit."),
           });
           yield* commands.execute(firstEdit);
@@ -547,7 +548,15 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
           EXECUTE FUNCTION fail_edit_command_completion()
         `;
 
-        const failed = yield* commands.execute(editCommand).pipe(Effect.flip);
+        const failed = yield* commands.execute(editCommand).pipe(
+          Effect.flip,
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* sql`DROP TRIGGER fail_edit_command_completion ON message_command_receipts`;
+              yield* sql`DROP FUNCTION fail_edit_command_completion()`;
+            }).pipe(Effect.orDie),
+          ),
+        );
         const rolledBack = yield* sql<{
           readonly body: string;
           readonly version: number;
@@ -582,8 +591,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
             AND message.topic_id = ${fixtures.topicId}
             AND message.id = ${created.messageId}
         `;
-        yield* sql`DROP TRIGGER fail_edit_command_completion ON message_command_receipts`;
-        yield* sql`DROP FUNCTION fail_edit_command_completion()`;
 
         const retried = yield* commands.execute(editCommand);
         const committed = yield* sql<{
@@ -675,7 +682,15 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
           EXECUTE FUNCTION fail_message_command_completion()
         `;
 
-        const failed = yield* commands.execute(command).pipe(Effect.flip);
+        const failed = yield* commands.execute(command).pipe(
+          Effect.flip,
+          Effect.ensuring(
+            Effect.gen(function* () {
+              yield* sql`DROP TRIGGER fail_message_command_completion ON message_command_receipts`;
+              yield* sql`DROP FUNCTION fail_message_command_completion()`;
+            }).pipe(Effect.orDie),
+          ),
+        );
         const afterFailure = yield* sql<{
           readonly messages: number;
           readonly receipts: number;
@@ -694,8 +709,6 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Message commands", (it
                 AND command_id = ${commandId}
             ) AS receipts
         `;
-        yield* sql`DROP TRIGGER fail_message_command_completion ON message_command_receipts`;
-        yield* sql`DROP FUNCTION fail_message_command_completion()`;
 
         const retried = yield* commands.execute(command);
         const afterRetry = yield* sql<{ readonly messages: number; readonly receipts: number }>`

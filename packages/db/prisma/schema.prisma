@@ -213,10 +213,10 @@ model Message {
   body                  String?
   position              Int
   version               Int                    @default(1)
+  /// Constrained by a partial-column ON DELETE SET NULL foreign key in the SQL migration.
   producedByCommandId   String?                @map("produced_by_command_id")
   topic                 Topic                  @relation(fields: [workspaceId, topicId], references: [workspaceId, id], onDelete: Cascade)
   author                WorkspaceIdentity      @relation("MessageAuthor", fields: [workspaceId, authorIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  producingCommand      MessageCommandReceipt? @relation(fields: [workspaceId, producedByCommandId], references: [workspaceId, commandId], onDelete: Restrict)
   createdAt             DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
   editedAt              DateTime?              @map("edited_at") @db.Timestamptz(6)
   deletedAt             DateTime?              @map("deleted_at") @db.Timestamptz(6)
@@ -225,6 +225,7 @@ model Message {
   @@id([workspaceId, topicId, id])
   @@unique([workspaceId, topicId, position])
   @@index([workspaceId, authorIdentityId])
+  @@index([workspaceId, producedByCommandId])
   @@map("messages")
 }
 
@@ -242,7 +243,6 @@ model MessageCommandReceipt {
   messageVersion   Int?                    @map("message_version")
   workspace        Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   actorIdentity    WorkspaceIdentity       @relation(fields: [workspaceId, actorIdentityId], references: [workspaceId, id], onDelete: Restrict)
-  producedMessages Message[]
   createdAt        DateTime                @map("created_at") @db.Timestamptz(6)
   completedAt      DateTime?               @map("completed_at") @db.Timestamptz(6)
 

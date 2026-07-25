@@ -261,6 +261,123 @@ describe("PostgreSQL migrations", () => {
     `);
     await runFile(join(migrationsDirectory, MESSAGE_COMMAND_MIGRATION, "migration.sql"));
 
+    await expect(
+      runSql(`
+        INSERT INTO message_command_receipts (
+          workspace_id,
+          command_id,
+          actor_identity_id,
+          kind,
+          fingerprint,
+          outcome,
+          channel_id,
+          topic_id,
+          message_id,
+          message_version,
+          created_at,
+          completed_at
+        )
+        VALUES (
+          'migration-workspace',
+          'missing-completion',
+          'migration-identity',
+          'create',
+          '${"a".repeat(64)}',
+          'succeeded',
+          'migration-channel',
+          'active-topic',
+          'active-latest',
+          1,
+          '2026-07-20T14:00:00Z',
+          NULL
+        );
+      `),
+    ).rejects.toThrow("message_command_receipts_terminal_outcome");
+    await expect(
+      runSql(`
+        INSERT INTO message_command_receipts (
+          workspace_id,
+          command_id,
+          actor_identity_id,
+          kind,
+          fingerprint,
+          channel_id,
+          topic_id,
+          created_at
+        )
+        VALUES (
+          'migration-workspace',
+          'invalid-fingerprint',
+          'migration-identity',
+          'create',
+          'not-a-sha256-fingerprint',
+          'migration-channel',
+          'active-topic',
+          '2026-07-20T14:00:00Z'
+        );
+      `),
+    ).rejects.toThrow("message_command_receipts_fingerprint_sha256");
+    await runSql(`
+      INSERT INTO message_command_receipts (
+        workspace_id,
+        command_id,
+        actor_identity_id,
+        kind,
+        fingerprint,
+        outcome,
+        channel_id,
+        topic_id,
+        message_id,
+        message_version,
+        created_at,
+        completed_at
+      )
+      VALUES (
+        'migration-workspace',
+        'valid-completion',
+        'migration-identity',
+        'edit',
+        '${"b".repeat(64)}',
+        'succeeded',
+        'migration-channel',
+        'active-topic',
+        'active-latest',
+        1,
+        '2026-07-20T14:00:00Z',
+        '2026-07-20T14:00:01Z'
+      );
+      UPDATE messages
+      SET produced_by_command_id = 'valid-completion'
+      WHERE workspace_id = 'migration-workspace'
+        AND topic_id = 'active-topic'
+        AND id = 'active-latest';
+      DELETE FROM message_command_receipts
+      WHERE workspace_id = 'migration-workspace'
+        AND command_id = 'valid-completion';
+    `);
+    expect(
+      await runSql(`
+        SELECT concat(
+          coalesce(
+            (
+              SELECT produced_by_command_id
+              FROM messages
+              WHERE workspace_id = 'migration-workspace'
+                AND topic_id = 'active-topic'
+                AND id = 'active-latest'
+            ),
+            '<null>'
+          ),
+          '|',
+          (
+            SELECT count(*)
+            FROM pg_indexes
+            WHERE indexname = 'messages_producing_command_idx'
+          )
+        );
+      `),
+    ).toBe("<null>|1");
+
     expect(
       await runSql(`
         SELECT string_agg(

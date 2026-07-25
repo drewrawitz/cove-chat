@@ -8,7 +8,7 @@ import {
   UserId,
   WorkspaceId,
 } from "@cove/domain";
-import { Context, type Effect, Schema } from "effect";
+import { Context, type Effect, type Option, Schema } from "effect";
 import type { ChannelUnavailable } from "../channels/get-channel-for-actor.ts";
 import type { TopicUnavailable } from "./topic-access.ts";
 
@@ -57,9 +57,16 @@ export const MessageCommandRejection = Schema.Literals([
 ]);
 export type MessageCommandRejection = typeof MessageCommandRejection.Type;
 
+export const MessageCommandKind = Schema.Union([
+  CreateReplyCommand.fields._tag,
+  EditMessageCommand.fields._tag,
+  DeleteMessageCommand.fields._tag,
+]);
+export type MessageCommandKind = typeof MessageCommandKind.Type;
+
 export const MessageCommandSucceeded = Schema.TaggedStruct("succeeded", {
   commandId: MessageCommandId,
-  kind: Schema.Literals(["create", "edit", "delete"]),
+  kind: MessageCommandKind,
   messageId: MessageId,
   messageVersion: MessageVersion,
 });
@@ -69,7 +76,7 @@ export interface MessageCommandSucceeded extends Schema.Schema.Type<
 
 export const MessageCommandRejected = Schema.TaggedStruct("rejected", {
   commandId: MessageCommandId,
-  kind: Schema.Literals(["create", "edit", "delete"]),
+  kind: MessageCommandKind,
   rejection: MessageCommandRejection,
   messageId: Schema.optionalKey(MessageId),
 });
@@ -123,7 +130,7 @@ export interface MessageCommandsService {
     actorAccountId: UserId,
     workspaceId: WorkspaceId,
     commandId: MessageCommandId,
-  ) => Effect.Effect<MessageCommandStatus | undefined, MessageCommandFailure>;
+  ) => Effect.Effect<Option.Option<MessageCommandStatus>, MessageCommandFailure>;
 }
 
 export class MessageCommands extends Context.Service<MessageCommands, MessageCommandsService>()(

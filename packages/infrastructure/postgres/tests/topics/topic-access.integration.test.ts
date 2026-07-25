@@ -225,6 +225,12 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
             ${activityAt}
           FROM generate_series(1, ${ARCHIVE_TEST_TOPIC_COUNT}) AS number
         `;
+        yield* sql`
+          UPDATE messages
+          SET version = 3
+          WHERE workspace_id = ${fixtures.workspaceId}
+            AND topic_id = ${archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + 1)}
+        `;
 
         const first = yield* topics.listArchiveForActor(
           fixtures.readerAccountId,
@@ -233,6 +239,7 @@ layer(TestPostgres, { timeout: "2 minutes" })("PostgreSQL Topic access", (it) =>
         );
         expect(first.topics).toHaveLength(ARCHIVE_PAGE_SIZE);
         expect(first.topics.at(0)?.topic.id).toBe(archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + 1));
+        expect(first.topics.at(0)?.latestMessage.message.version).toBe(3);
         expect(first.topics.at(-1)?.topic.id).toBe(
           archiveTopicId(CHANNEL_TOPIC_LIVE_MAXIMUM + ARCHIVE_PAGE_SIZE),
         );
