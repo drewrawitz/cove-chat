@@ -9,10 +9,10 @@ export {
 export { TopicIntentValue } from "./topic-intent.ts";
 export { MessageMutationRequest, CreateTopicRequest, TopicIntentRequest } from "./topic-request.ts";
 export {
+  CreatedTopicResponse,
   TopicAuthorResponse,
   TopicArchivePageResponse,
   TopicMessageResponse,
-  TopicResponse,
   TopicSummaryResponse,
   TopicSummaryMessageResponse,
 } from "./topic-response.ts";

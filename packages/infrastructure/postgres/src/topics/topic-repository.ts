@@ -20,7 +20,6 @@ import {
 import {
   StoredMessage,
   TopicMessageRecord,
-  TopicRecord,
   TopicRepository,
   TopicSummaryRecord,
 } from "@cove/ports";
@@ -58,6 +57,12 @@ const TopicRequest = Schema.Struct({
   topicId: TopicId,
 });
 interface TopicRequest extends Schema.Schema.Type<typeof TopicRequest> {}
+
+const MessageRequest = Schema.Struct({
+  workspaceId: WorkspaceId,
+  topicId: TopicId,
+  messageId: MessageId,
+});
 
 const ArchiveFirstPageRequest = Schema.Struct({
   workspaceId: WorkspaceId,
@@ -330,10 +335,10 @@ const make = Effect.gen(function* () {
     `,
   });
 
-  const listMessageRows = SqlSchema.findAll({
-    Request: Schema.Struct({ workspaceId: WorkspaceId, topicId: TopicId }),
+  const findMessageRow = SqlSchema.findOneOption({
+    Request: MessageRequest,
     Result: MessageRow,
-    execute: ({ workspaceId, topicId }) => sql<MessageRow>`
+    execute: ({ workspaceId, topicId, messageId }) => sql<MessageRow>`
       SELECT
         message.id,
         message.workspace_id AS "workspaceId",
@@ -352,7 +357,8 @@ const make = Effect.gen(function* () {
         AND author.id = message.author_identity_id
       WHERE message.workspace_id = ${workspaceId}
         AND message.topic_id = ${topicId}
-      ORDER BY message.position, message.id
+        AND message.id = ${messageId}
+      LIMIT 1
     `,
   });
 
@@ -430,26 +436,19 @@ const make = Effect.gen(function* () {
     Result: StoredMessageRow,
     execute: (value) => sql<StoredMessageRow>`
       WITH locked_topic AS (
-        SELECT id
+        SELECT id, latest_message_position + 1 AS next_position
         FROM topics
         WHERE workspace_id = ${value.workspaceId}
           AND id = ${value.topicId}
         FOR UPDATE
-      ), next_position AS (
-        SELECT coalesce(max(message.position), 0)::integer + 1 AS position
-        FROM locked_topic
-        LEFT JOIN messages AS message
-          ON message.workspace_id = ${value.workspaceId}
-          AND message.topic_id = locked_topic.id
-        GROUP BY locked_topic.id
       ), inserted_message AS (
         INSERT INTO messages (
           id, workspace_id, topic_id, author_identity_id, body, position, created_at
         )
         SELECT
           ${value.id}, ${value.workspaceId}, ${value.topicId}, ${value.authorIdentityId},
-          ${value.body}, next_position.position, ${value.createdAt}
-        FROM next_position
+          ${value.body}, locked_topic.next_position, ${value.createdAt}
+        FROM locked_topic
         RETURNING *
       ), updated_topic AS (
         UPDATE topics AS topic
@@ -610,18 +609,21 @@ const make = Effect.gen(function* () {
       },
       (effect) => mapFailure("TopicRepository.listArchivePageInChannel", effect),
     ),
-    findById: Effect.fn("PostgresTopicRepository.findById")(
+    findTopicById: Effect.fn("PostgresTopicRepository.findTopicById")(
       (workspaceId, channelId, topicId) =>
         Effect.gen(function* () {
           const row = yield* findTopicRow({ workspaceId, channelId, topicId });
-          if (Option.isNone(row)) return undefined;
-          const messages = yield* listMessageRows({ workspaceId, topicId });
-          return TopicRecord.make({
-            topic: topic(row.value),
-            messages: messages.map(messageRecord),
-          });
+          return Option.isNone(row) ? undefined : topic(row.value);
         }),
-      (effect) => mapFailure("TopicRepository.findById", effect),
+      (effect) => mapFailure("TopicRepository.findTopicById", effect),
+    ),
+    findMessageById: Effect.fn("PostgresTopicRepository.findMessageById")(
+      (workspaceId, topicId, messageId) =>
+        Effect.gen(function* () {
+          const row = yield* findMessageRow({ workspaceId, topicId, messageId });
+          return Option.isNone(row) ? undefined : messageRecord(row.value);
+        }),
+      (effect) => mapFailure("TopicRepository.findMessageById", effect),
     ),
     insertTopic: Effect.fn("PostgresTopicRepository.insertTopic")(
       (value) => insertTopic(value).pipe(Effect.asVoid),

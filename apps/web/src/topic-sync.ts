@@ -6,7 +6,7 @@ interface SynchronizedTopicAuthor {
   readonly avatarUrl: string;
 }
 
-interface SynchronizedTopicMessage {
+export interface SynchronizedTopicMessage {
   readonly id: string;
   readonly body?: string | null;
   readonly position: number;
@@ -28,7 +28,6 @@ export interface SynchronizedTopic {
   readonly latestMessageEditedAt?: number | null;
   readonly latestMessageDeletedAt?: number | null;
   readonly lastActivityAt: number;
-  readonly messages?: ReadonlyArray<SynchronizedTopicMessage>;
   readonly latestMessageAuthor?: SynchronizedTopicAuthor;
 }
 
@@ -134,18 +133,67 @@ const topicMessageView = (message: SynchronizedTopicMessage): TopicMessageView |
 
 export function synchronizedTopicDetail(
   topic: SynchronizedTopic | undefined,
+  openingBrief: SynchronizedTopicMessage | undefined,
+  replies: ReadonlyArray<SynchronizedTopicMessage>,
 ): TopicDetailView | undefined {
-  if (topic === undefined || topic.messages === undefined) return undefined;
+  if (topic === undefined || openingBrief === undefined || openingBrief.position !== 1) {
+    return undefined;
+  }
 
   const fields = {
     id: topic.id,
     title: topic.title,
-    messages: topic.messages.flatMap((message) => {
+    messages: [openingBrief, ...replies].flatMap((message) => {
       const view = topicMessageView(message);
       return view === undefined ? [] : [view];
     }),
   };
   return topic.intent == null ? fields : { ...fields, intent: topic.intent };
+}
+
+export function mergeTopicReplies(
+  loaded: ReadonlyArray<SynchronizedTopicMessage>,
+  incoming: ReadonlyArray<SynchronizedTopicMessage>,
+): ReadonlyArray<SynchronizedTopicMessage> {
+  const byId = new Map<string, SynchronizedTopicMessage>();
+  for (const message of loaded) {
+    if (message.position > 1) byId.set(message.id, message);
+  }
+  for (const message of incoming) {
+    if (message.position > 1) byId.set(message.id, message);
+  }
+  const merged = [...byId.values()].sort(
+    (left, right) => left.position - right.position || left.id.localeCompare(right.id),
+  );
+  const unchanged =
+    merged.length === loaded.length &&
+    merged.every((message, index) => sameSynchronizedTopicMessage(message, loaded[index]));
+  return unchanged ? loaded : merged;
+}
+
+function sameSynchronizedTopicMessage(
+  message: SynchronizedTopicMessage,
+  previous: SynchronizedTopicMessage | undefined,
+): boolean {
+  return (
+    previous !== undefined &&
+    message.id === previous.id &&
+    message.body === previous.body &&
+    message.position === previous.position &&
+    message.createdAt === previous.createdAt &&
+    message.editedAt === previous.editedAt &&
+    message.deletedAt === previous.deletedAt &&
+    message.author?.id === previous.author?.id &&
+    message.author?.name === previous.author?.name &&
+    message.author?.avatarUrl === previous.author?.avatarUrl
+  );
+}
+
+export function remainingTopicReplyCount(
+  messageCount: number,
+  loadedReplies: ReadonlyArray<SynchronizedTopicMessage>,
+): number {
+  return Math.max(0, messageCount - 1 - loadedReplies.length);
 }
 
 export function synchronizedTopicSummaries(

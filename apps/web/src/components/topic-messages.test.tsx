@@ -95,13 +95,22 @@ afterEach(() => {
   cleanup();
 });
 
-const topicMessages = (messages: ReadonlyArray<typeof openingMessage>) => (
+const topicMessages = (
+  messages: ReadonlyArray<typeof openingMessage>,
+  pagination?: {
+    readonly hasError: boolean;
+    readonly isLoading: boolean;
+    readonly load: () => void;
+    readonly remainingCount: number;
+  },
+) => (
   <SnackbarProvider>
     <TopicMessages
       canReply
       channelId="channel-1"
       currentIdentity={currentIdentity}
       messages={messages}
+      olderRepliesPagination={pagination}
       topicId="topic-1"
       workspaceId="workspace-1"
     />
@@ -341,4 +350,55 @@ test("keeps the current scroll position when a reply arrives without a local pos
   rerender(topicMessages([openingMessage, newReply]));
 
   expect(scrollIntoView).not.toHaveBeenCalled();
+});
+
+test("states how many older Replies remain and loads them deliberately", () => {
+  const onLoadOlderReplies = vi.fn();
+  const { rerender } = render(
+    topicMessages([openingMessage, unrelatedReply], {
+      hasError: false,
+      isLoading: false,
+      load: onLoadOlderReplies,
+      remainingCount: 800,
+    }),
+  );
+
+  expect(screen.getByText("800 older Replies remain.")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Load older Replies" }));
+  expect(onLoadOlderReplies).toHaveBeenCalledOnce();
+
+  rerender(
+    topicMessages([openingMessage, unrelatedReply], {
+      hasError: false,
+      isLoading: true,
+      load: onLoadOlderReplies,
+      remainingCount: 800,
+    }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Loading older Replies…" }).hasAttribute("disabled"),
+  ).toBe(true);
+
+  rerender(
+    topicMessages([openingMessage, unrelatedReply], {
+      hasError: true,
+      isLoading: false,
+      load: onLoadOlderReplies,
+      remainingCount: 1,
+    }),
+  );
+  expect(screen.getByText("1 older Reply remains.")).toBeDefined();
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Cove could not load older Replies. Try again.",
+  );
+
+  rerender(
+    topicMessages([openingMessage, unrelatedReply], {
+      hasError: false,
+      isLoading: false,
+      load: onLoadOlderReplies,
+      remainingCount: 0,
+    }),
+  );
+  expect(screen.queryByRole("button", { name: "Load older Replies" })).toBeNull();
 });

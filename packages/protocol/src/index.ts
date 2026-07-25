@@ -47,6 +47,7 @@ export {
 } from "./auth/index.ts";
 export { HealthOkResponse, HealthUnavailableResponse } from "./health/index.ts";
 export {
+  CreatedTopicResponse,
   CreateTopicRequest,
   MessageMutationForbiddenResponse,
   MessageMutationRequest,
@@ -59,7 +60,6 @@ export {
   TopicErrorResponses,
   TopicIntentRequest,
   TopicIntentValue,
-  TopicResponse,
   TopicSummaryResponse,
   TopicSummaryMessageResponse,
   TopicUnavailableResponse,

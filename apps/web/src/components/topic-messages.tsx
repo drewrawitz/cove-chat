@@ -15,7 +15,7 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@cove/ui/components/menu";
-import { type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
+import { Fragment, type FormEvent, type ReactElement, useEffect, useRef, useState } from "react";
 import {
   useTopicsAddMessage,
   useTopicsDeleteMessage,
@@ -42,6 +42,13 @@ interface TopicMessage {
   };
 }
 
+export interface OlderRepliesPagination {
+  readonly hasError: boolean;
+  readonly isLoading: boolean;
+  readonly load?: () => void;
+  readonly remainingCount: number;
+}
+
 interface TopicMessagesProps {
   readonly canReply: boolean;
   readonly channelId: string;
@@ -51,8 +58,46 @@ interface TopicMessagesProps {
     readonly name: string;
   };
   readonly messages: ReadonlyArray<TopicMessage>;
+  readonly olderRepliesPagination?: OlderRepliesPagination;
   readonly topicId: string;
   readonly workspaceId: string;
+}
+
+const hiddenOlderRepliesPagination: OlderRepliesPagination = {
+  hasError: false,
+  isLoading: false,
+  remainingCount: 0,
+};
+
+function OlderRepliesControl({
+  hasError,
+  isLoading,
+  load,
+  remainingCount,
+}: OlderRepliesPagination): ReactElement | null {
+  if (remainingCount === 0) return null;
+
+  return (
+    <li className="py-6 text-center">
+      <p className="text-sm text-muted-foreground">
+        {remainingCount} older {remainingCount === 1 ? "Reply remains." : "Replies remain."}
+      </p>
+      <Button
+        className="mt-3"
+        type="button"
+        variant="secondary"
+        disabled={isLoading || load === undefined}
+        onClick={load}
+      >
+        {isLoading ? "Loading older Replies…" : "Load older Replies"}
+      </Button>
+      {hasError ? (
+        <p className="mt-3 text-sm text-destructive" role="alert">
+          Cove could not load older Replies. Try again.
+        </p>
+      ) : null}
+    </li>
+  );
 }
 
 const messageExcerpt = (body: string | undefined): string => {
@@ -65,6 +110,7 @@ export function TopicMessages({
   channelId,
   messages,
   currentIdentity,
+  olderRepliesPagination = hiddenOlderRepliesPagination,
   topicId,
   workspaceId,
 }: TopicMessagesProps): ReactElement {
@@ -80,6 +126,7 @@ export function TopicMessages({
   const deletingMessageKind =
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const mutationPending = addMessage.isPending || editMessage.isPending || deleteMessage.isPending;
+  const olderRepliesControl = <OlderRepliesControl {...olderRepliesPagination} />;
 
   useEffect(() => {
     if (initiallyPositionedTopicId.current === topicId) return;
@@ -164,7 +211,7 @@ export function TopicMessages({
   return (
     <>
       <ol className="divide-y" aria-label="Topic messages">
-        {messages.map((message) => {
+        {messages.map((message, index) => {
           const kind = topicMessageKind(message.position);
           const kindLabel = topicMessageKindLabel(message.position);
           const actionKind = kind === "reply" ? `${kind} ${message.position - 1}` : kind;
@@ -174,114 +221,118 @@ export function TopicMessages({
           const isEditing = editingId === message.id;
 
           return (
-            <li key={message.id} id={`topic-message-${message.id}`} className="message-row py-5">
-              <article
-                aria-label={isEditing ? `Edit ${kind} by ${message.author.name}` : undefined}
-                aria-labelledby={isEditing ? undefined : `message-${message.id}`}
-              >
-                {isEditing ? (
-                  <TopicMessageEditor
-                    authorAvatarUrl={message.author.avatarUrl}
-                    defaultBody={message.body}
-                    editorId={`edit-message-${message.id}`}
-                    editorLabel={`Edit ${kind}`}
-                    hasError={editMessage.isError}
-                    isDisabled={mutationPending}
-                    isSaving={editMessage.isPending}
-                    onCancel={() => setEditingId(undefined)}
-                    onSubmit={(event) => edit(event, message.id)}
-                  />
-                ) : (
-                  <div className="flex items-start gap-3">
-                    <img
-                      className="size-10 shrink-0 rounded-full border border-border bg-muted object-cover"
-                      src={message.author.avatarUrl}
-                      alt=""
+            <Fragment key={message.id}>
+              {index === 1 ? olderRepliesControl : null}
+              <li id={`topic-message-${message.id}`} className="message-row py-5">
+                <article
+                  aria-label={isEditing ? `Edit ${kind} by ${message.author.name}` : undefined}
+                  aria-labelledby={isEditing ? undefined : `message-${message.id}`}
+                >
+                  {isEditing ? (
+                    <TopicMessageEditor
+                      authorAvatarUrl={message.author.avatarUrl}
+                      defaultBody={message.body}
+                      editorId={`edit-message-${message.id}`}
+                      editorLabel={`Edit ${kind}`}
+                      hasError={editMessage.isError}
+                      isDisabled={mutationPending}
+                      isSaving={editMessage.isPending}
+                      onCancel={() => setEditingId(undefined)}
+                      onSubmit={(event) => edit(event, message.id)}
                     />
-                    <div className="min-w-0 flex-1">
-                      <header className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                          <h3
-                            id={`message-${message.id}`}
-                            className="truncate font-semibold leading-5"
-                          >
-                            {message.author.name}
-                          </h3>
-                          <p className="shrink-0 text-sm leading-5 text-muted-foreground">
-                            <LocalTimestamp mode="message" value={message.createdAt} />
-                            {message.edited && !message.deleted ? (
-                              <>
-                                {" "}
-                                <span aria-hidden="true">·</span> <span>Edited</span>
-                              </>
-                            ) : null}
-                          </p>
-                        </div>
-
-                        {canChange ? (
-                          <MenuRoot>
-                            <MenuTrigger
-                              className={buttonVariants({
-                                variant: "ghost",
-                                size: "icon-sm",
-                                className: "message-actions",
-                              })}
-                              aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <img
+                        className="size-10 shrink-0 rounded-full border border-border bg-muted object-cover"
+                        src={message.author.avatarUrl}
+                        alt=""
+                      />
+                      <div className="min-w-0 flex-1">
+                        <header className="flex items-start justify-between gap-3">
+                          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                            <h3
+                              id={`message-${message.id}`}
+                              className="truncate font-semibold leading-5"
                             >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="currentColor"
-                                aria-hidden="true"
-                                className="size-4"
-                              >
-                                <circle cx="5" cy="12" r="1.5" />
-                                <circle cx="12" cy="12" r="1.5" />
-                                <circle cx="19" cy="12" r="1.5" />
-                              </svg>
-                            </MenuTrigger>
-                            <MenuPortal>
-                              <MenuPositioner side="bottom" align="end">
-                                <MenuPopup>
-                                  <MenuItem
-                                    onClick={() => {
-                                      editMessage.reset();
-                                      setEditingId(message.id);
-                                    }}
-                                  >
-                                    Edit {kind}
-                                  </MenuItem>
-                                  <MenuItem
-                                    className="text-destructive data-highlighted:text-destructive"
-                                    onClick={() => {
-                                      deleteMessage.reset();
-                                      setDeletingId(message.id);
-                                    }}
-                                  >
-                                    Delete {kind}
-                                  </MenuItem>
-                                </MenuPopup>
-                              </MenuPositioner>
-                            </MenuPortal>
-                          </MenuRoot>
-                        ) : null}
-                      </header>
+                              {message.author.name}
+                            </h3>
+                            <p className="shrink-0 text-sm leading-5 text-muted-foreground">
+                              <LocalTimestamp mode="message" value={message.createdAt} />
+                              {message.edited && !message.deleted ? (
+                                <>
+                                  {" "}
+                                  <span aria-hidden="true">·</span> <span>Edited</span>
+                                </>
+                              ) : null}
+                            </p>
+                          </div>
 
-                      {message.deleted ? (
-                        <p className="mt-1 text-sm leading-6 italic text-muted-foreground">
-                          {kindLabel} deleted
-                        </p>
-                      ) : (
-                        <p className="mt-1 whitespace-pre-wrap text-base leading-6 text-foreground/90">
-                          {message.body}
-                        </p>
-                      )}
+                          {canChange ? (
+                            <MenuRoot>
+                              <MenuTrigger
+                                className={buttonVariants({
+                                  variant: "ghost",
+                                  size: "icon-sm",
+                                  className: "message-actions",
+                                })}
+                                aria-label={`More actions for ${actionKind} by ${message.author.name}: ${excerpt}`}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  aria-hidden="true"
+                                  className="size-4"
+                                >
+                                  <circle cx="5" cy="12" r="1.5" />
+                                  <circle cx="12" cy="12" r="1.5" />
+                                  <circle cx="19" cy="12" r="1.5" />
+                                </svg>
+                              </MenuTrigger>
+                              <MenuPortal>
+                                <MenuPositioner side="bottom" align="end">
+                                  <MenuPopup>
+                                    <MenuItem
+                                      onClick={() => {
+                                        editMessage.reset();
+                                        setEditingId(message.id);
+                                      }}
+                                    >
+                                      Edit {kind}
+                                    </MenuItem>
+                                    <MenuItem
+                                      className="text-destructive data-highlighted:text-destructive"
+                                      onClick={() => {
+                                        deleteMessage.reset();
+                                        setDeletingId(message.id);
+                                      }}
+                                    >
+                                      Delete {kind}
+                                    </MenuItem>
+                                  </MenuPopup>
+                                </MenuPositioner>
+                              </MenuPortal>
+                            </MenuRoot>
+                          ) : null}
+                        </header>
+
+                        {message.deleted ? (
+                          <p className="mt-1 text-sm leading-6 italic text-muted-foreground">
+                            {kindLabel} deleted
+                          </p>
+                        ) : (
+                          <p className="mt-1 whitespace-pre-wrap text-base leading-6 text-foreground/90">
+                            {message.body}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </article>
-            </li>
+                  )}
+                </article>
+              </li>
+            </Fragment>
           );
         })}
+        {messages.length === 1 ? olderRepliesControl : null}
       </ol>
 
       {canReply ? (

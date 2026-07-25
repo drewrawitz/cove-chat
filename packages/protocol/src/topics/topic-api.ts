@@ -14,7 +14,11 @@ import {
   TopicUnavailableResponse,
 } from "./topic-error-response.ts";
 import { MessageMutationRequest, CreateTopicRequest } from "./topic-request.ts";
-import { TopicArchivePageResponse, TopicMessageResponse, TopicResponse } from "./topic-response.ts";
+import {
+  CreatedTopicResponse,
+  TopicArchivePageResponse,
+  TopicMessageResponse,
+} from "./topic-response.ts";
 
 const ChannelParams = {
   workspaceId: Schema.NonEmptyString,
@@ -45,18 +49,8 @@ const CreateTopicEndpoint = HttpApiEndpoint.post(
     params: ChannelParams,
     headers: CsrfHeaders,
     payload: CreateTopicRequest,
-    success: TopicResponse,
+    success: CreatedTopicResponse,
     error: [CsrfValidationFailedResponse, ChannelUnavailableResponse, InternalServerErrorResponse],
-  },
-).middleware(SessionAuth);
-
-const GetTopicEndpoint = HttpApiEndpoint.get(
-  "getTopic",
-  "/api/app/v1/workspaces/:workspaceId/channels/:channelId/topics/:topicId",
-  {
-    params: TopicParams,
-    success: TopicResponse,
-    error: [TopicUnavailableResponse, ChannelUnavailableResponse, InternalServerErrorResponse],
   },
 ).middleware(SessionAuth);
 
@@ -114,7 +108,6 @@ const DeleteMessageEndpoint = HttpApiEndpoint.delete(
 export const TopicApiGroup = HttpApiGroup.make("topics").add(
   ListArchivedTopicsEndpoint,
   CreateTopicEndpoint,
-  GetTopicEndpoint,
   AddMessageEndpoint,
   EditMessageEndpoint,
   DeleteMessageEndpoint,

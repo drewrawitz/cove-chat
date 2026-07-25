@@ -4,7 +4,6 @@ import {
   StoredMessage,
   type TopicAuthorRecord,
   type TopicMessageRecord,
-  type TopicRecord,
   TopicRepository,
   type TopicSummaryRecord,
   TransactionManager,
@@ -52,13 +51,6 @@ function topicSummaryView(record: TopicSummaryRecord): TopicSummaryView {
   });
 }
 
-function topicView(record: TopicRecord): TopicView {
-  return TopicView.make({
-    topic: record.topic,
-    messages: record.messages.map(messageView),
-  });
-}
-
 const make = Effect.gen(function* () {
   const channels = yield* ChannelAccess;
   const repository = yield* TopicRepository;
@@ -96,7 +88,7 @@ const make = Effect.gen(function* () {
       return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
     }
 
-    const topic = yield* repository.findById(
+    const topic = yield* repository.findTopicById(
       command.workspaceId,
       command.channelId,
       command.topicId,
@@ -104,7 +96,11 @@ const make = Effect.gen(function* () {
     if (topic === undefined) {
       return yield* Effect.fail(new TopicUnavailable({ topicId: command.topicId }));
     }
-    const current = topic.messages.find(({ message }) => message.id === command.messageId);
+    const current = yield* repository.findMessageById(
+      command.workspaceId,
+      command.topicId,
+      command.messageId,
+    );
     if (current === undefined || current.message.deletedAt !== undefined) {
       return yield* Effect.fail(new MessageUnavailable({ messageId: command.messageId }));
     }
@@ -134,17 +130,6 @@ const make = Effect.gen(function* () {
         });
       },
       (effect) => recoverFailure("TopicAccess.listArchiveForActor", effect),
-    ),
-    getForActor: Effect.fn("TopicAccess.getForActor")(
-      function* (actorAccountId, workspaceId, channelId, topicId) {
-        yield* conversationContext(actorAccountId, workspaceId, channelId);
-        const record = yield* repository.findById(workspaceId, channelId, topicId);
-        if (record === undefined) {
-          return yield* Effect.fail(new TopicUnavailable({ topicId }));
-        }
-        return topicView(record);
-      },
-      (effect) => recoverFailure("TopicAccess.getForActor", effect),
     ),
     create: Effect.fn("TopicAccess.create")(
       (command) =>
@@ -210,7 +195,7 @@ const make = Effect.gen(function* () {
               return yield* Effect.fail(new ChannelUnavailable({ channelId: command.channelId }));
             }
 
-            const topic = yield* repository.findById(
+            const topic = yield* repository.findTopicById(
               command.workspaceId,
               command.channelId,
               command.topicId,

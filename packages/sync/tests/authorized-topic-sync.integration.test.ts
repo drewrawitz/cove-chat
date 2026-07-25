@@ -346,6 +346,77 @@ beforeAll(async () => {
       'Only one Message belongs in each synchronized summary.',
       1
     FROM generate_series(1, 51) AS number;
+
+    INSERT INTO topics (
+      id,
+      workspace_id,
+      channel_id,
+      title,
+      opened_by_identity_id,
+      message_count,
+      latest_message_id,
+      latest_message_preview,
+      latest_message_author_identity_id,
+      latest_message_position,
+      latest_message_created_at,
+      latest_message_edited_at,
+      latest_message_deleted_at,
+      last_activity_at
+    )
+    SELECT
+      'page-topic-' || reply_count,
+      'sync-workspace',
+      'private-channel',
+      'Reply fixture ' || reply_count,
+      'sync-alice-identity',
+      reply_count + 1,
+      CASE
+        WHEN reply_count = 0 THEN 'page-opening-' || reply_count
+        ELSE 'page-reply-' || reply_count || '-' || reply_count
+      END,
+      'Latest bounded Message',
+      'sync-alice-identity',
+      reply_count + 1,
+      now(),
+      NULL,
+      NULL,
+      now()
+    FROM (VALUES (0), (100), (101), (1000)) AS fixture(reply_count);
+
+    INSERT INTO messages (
+      id,
+      workspace_id,
+      topic_id,
+      author_identity_id,
+      body,
+      position
+    )
+    SELECT
+      'page-opening-' || reply_count,
+      'sync-workspace',
+      'page-topic-' || reply_count,
+      'sync-alice-identity',
+      'Opening Brief for ' || reply_count || ' Replies.',
+      1
+    FROM (VALUES (0), (100), (101), (1000)) AS fixture(reply_count);
+
+    INSERT INTO messages (
+      id,
+      workspace_id,
+      topic_id,
+      author_identity_id,
+      body,
+      position
+    )
+    SELECT
+      'page-reply-' || reply_count || '-' || reply_number,
+      'sync-workspace',
+      'page-topic-' || reply_count,
+      'sync-alice-identity',
+      'Reply ' || reply_number || ' of ' || reply_count,
+      reply_number + 1
+    FROM (VALUES (100), (101), (1000)) AS fixture(reply_count)
+    CROSS JOIN LATERAL generate_series(1, reply_count) AS reply_number;
   `);
 
   const queryPort = await allocatePort();
@@ -455,10 +526,25 @@ describe("authorized Topic synchronization", () => {
         }),
         { type: "complete" },
       );
+      const openingBriefForMember = await alice.run(
+        queries.messages.openingBrief(privateArguments),
+        { type: "complete" },
+      );
+      const openingBriefForOwnerWithoutMembership = await bob.run(
+        queries.messages.openingBrief(privateArguments),
+        { type: "complete" },
+      );
+      const repliesForOwnerWithoutMembership = await bob.run(
+        queries.messages.replies(privateArguments),
+        { type: "complete" },
+      );
       expect(privateForMember?.title).toBe("Private synchronization contract");
-      expect(privateForMember?.messages).toHaveLength(1);
+      expect(privateForMember).not.toHaveProperty("messages");
       expect(privateForOwnerWithoutMembership).toBeUndefined();
       expect(crossWorkspaceForUnknownActor).toBeUndefined();
+      expect(openingBriefForMember?.position).toBe(1);
+      expect(openingBriefForOwnerWithoutMembership).toBeUndefined();
+      expect(repliesForOwnerWithoutMembership).toEqual([]);
       expect(boundedForMember).toHaveLength(50);
       expect(
         boundedForMember.every(
@@ -471,4 +557,68 @@ describe("authorized Topic synchronization", () => {
       await Promise.all([alice.close(), bob.close()]);
     }
   }, 120_000);
+
+  it.each([0, 100, 101, 1_000])(
+    "loads all %i Replies through stable authorized 100-row pages",
+    async (replyCount) => {
+      if (cacheURL === undefined) throw new Error("Zero cache is unavailable.");
+      const alice = new Zero({
+        cacheURL,
+        context: { userID: "sync-alice" },
+        kvStore: "mem",
+        queryHeaders: { authorization: "Bearer sync-alice" },
+        schema,
+        userID: `sync-alice-pages-${replyCount}`,
+      });
+      const scope = {
+        workspaceId: "sync-workspace",
+        channelId: "private-channel",
+        topicId: `page-topic-${replyCount}`,
+      };
+
+      try {
+        const topic = await alice.run(queries.topics.byId(scope), { type: "complete" });
+        const openingBrief = await alice.run(queries.messages.openingBrief(scope), {
+          type: "complete",
+        });
+        const initial = await alice.run(queries.messages.replies(scope), { type: "complete" });
+        const loaded = new Map(initial.map((message) => [message.id, message]));
+
+        expect(topic?.messageCount).toBe(replyCount + 1);
+        expect(topic).not.toHaveProperty("messages");
+        expect(openingBrief?.position).toBe(1);
+        expect(initial).toHaveLength(Math.min(100, replyCount));
+        expect(initial.every(({ position }) => position > 1)).toBe(true);
+        expect(initial.map(({ position }) => position)).toEqual(
+          initial.map(({ position }) => position).sort((left, right) => right - left),
+        );
+
+        while (loaded.size < replyCount) {
+          const beforePosition = Math.min(...[...loaded.values()].map(({ position }) => position));
+          const page = await alice.run(queries.messages.replies({ ...scope, beforePosition }), {
+            type: "complete",
+          });
+          const repeated = await alice.run(queries.messages.replies({ ...scope, beforePosition }), {
+            type: "complete",
+          });
+
+          expect(page).toHaveLength(Math.min(100, replyCount - loaded.size));
+          expect(page.map(({ id }) => id)).toEqual(repeated.map(({ id }) => id));
+          expect(page.every(({ position }) => position > 1 && position < beforePosition)).toBe(
+            true,
+          );
+          for (const message of page) loaded.set(message.id, message);
+        }
+
+        expect(
+          [...loaded.values()]
+            .sort((left, right) => left.position - right.position)
+            .map(({ position }) => position),
+        ).toEqual(Array.from({ length: replyCount }, (_, index) => index + 2));
+      } finally {
+        await alice.close();
+      }
+    },
+    120_000,
+  );
 });

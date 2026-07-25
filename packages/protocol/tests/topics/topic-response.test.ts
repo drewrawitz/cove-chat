@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
+  CreatedTopicResponse,
   CreatePublicChannelRequest,
   CreateTopicRequest,
   MessageMutationRequest,
   TopicArchivePageResponse,
-  TopicResponse,
 } from "../../src/index.ts";
 
 const latestMessage = {
@@ -104,47 +104,34 @@ it.effect("rejects multibyte content and summary previews above their UTF-8 byte
   }),
 );
 
-it.effect("encodes the complete Topic as a flat Message list", () =>
+it.effect("encodes a newly created Topic with only its Opening Brief", () =>
   Effect.gen(function* () {
-    const encoded = yield* Schema.encodeUnknownEffect(TopicResponse)({
+    const encoded = yield* Schema.encodeUnknownEffect(CreatedTopicResponse)({
       id: "topic-1",
       workspaceId: "workspace-1",
       channelId: "channel-1",
       title: "Release readiness",
-      messages: [
-        {
-          id: "message-1",
-          body: "Capture the remaining launch risks.",
-          position: 1,
-          createdAt: new Date("2026-07-22T12:00:00.000Z"),
-          edited: false,
-          deleted: false,
-          author: {
-            id: "identity-1",
-            name: "Alice",
-            avatarUrl: "/avatars/alice.svg",
-          },
+      openingBrief: {
+        id: "message-1",
+        body: "Capture the remaining launch risks.",
+        position: 1,
+        createdAt: new Date("2026-07-22T12:00:00.000Z"),
+        edited: false,
+        deleted: false,
+        author: {
+          id: "identity-1",
+          name: "Alice",
+          avatarUrl: "/avatars/alice.svg",
         },
-        {
-          id: "message-2",
-          position: 2,
-          createdAt: new Date("2026-07-22T12:05:00.000Z"),
-          edited: true,
-          deleted: true,
-          author: latestMessage.author,
-        },
-      ],
+      },
       createdAt: new Date("2026-07-22T12:00:00.000Z"),
     });
 
     expect(encoded).toMatchObject({
       id: "topic-1",
-      messages: [
-        { id: "message-1", position: 1, edited: false, deleted: false },
-        { id: "message-2", position: 2, edited: true, deleted: true },
-      ],
+      openingBrief: { id: "message-1", position: 1, edited: false, deleted: false },
     });
-    expect(encoded.messages[1]).not.toHaveProperty("body");
     expect(encoded).not.toHaveProperty("intent");
+    expect(encoded).not.toHaveProperty("messages");
   }),
 );

@@ -111,12 +111,6 @@ export interface TopicAccessService {
     TopicArchivePageView,
     ChannelUnavailable | TopicArchiveCursorInvalid | TopicAccessFailure
   >;
-  readonly getForActor: (
-    actorAccountId: UserId,
-    workspaceId: WorkspaceId,
-    channelId: ChannelId,
-    topicId: TopicId,
-  ) => Effect.Effect<TopicView, ChannelUnavailable | TopicUnavailable | TopicAccessFailure>;
   readonly create: (
     command: CreateTopicCommand,
   ) => Effect.Effect<TopicView, ChannelUnavailable | TopicAccessFailure>;
