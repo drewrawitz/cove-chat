@@ -95,6 +95,9 @@ function AccessProbe({
       <button type="button" onClick={access.retryCleanup}>
         Retry cleanup
       </button>
+      <button type="button" onClick={access.retryAccessCheck}>
+        Retry access
+      </button>
     </>
   );
 }
@@ -178,4 +181,12 @@ test("does not carry a draft-cleanup failure into another Channel", async () => 
   view.rerender(<AccessProbe channelId="channel-2" error={undefined} />);
 
   expect(await screen.findByText("available")).toBeDefined();
+});
+
+test("retries authoritative Workspace and Channel access checks", async () => {
+  render(<AccessProbe error={undefined} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Retry access" }));
+
+  await waitFor(() => expect(harness.refetch).toHaveBeenCalledTimes(2));
 });

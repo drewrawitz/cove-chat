@@ -46,8 +46,9 @@ it.live(
       });
       let messageRequestCount = 0;
 
+      const browserContext = sourcePage.context();
       yield* browserAction(() =>
-        sourcePage.route(messageRequestPattern, async (route) => {
+        browserContext.route(messageRequestPattern, async (route) => {
           messageRequestCount += 1;
           await requestGate;
           await route.continue();
@@ -85,7 +86,7 @@ it.live(
       ).toBe(1);
 
       yield* Effect.sync(() => releaseRequest?.());
-      yield* browserAction(() => sourcePage.unroute(messageRequestPattern));
+      yield* browserAction(() => browserContext.unroute(messageRequestPattern));
       yield* browserAction(() =>
         sourcePage.getByRole("button", { name: "Reply", exact: true }).waitFor(),
       );

@@ -12,6 +12,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ConversationShell } from "../components/conversation-shell.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { PrivateChannelStatusMessage } from "../components/private-channel-status-message.tsx";
 import {
   SynchronizedTopicReplies,
   TOPIC_QUERY_TTL,
@@ -132,13 +133,10 @@ function TopicPage(): ReactElement {
   } else if (channel.data?.visibility === "private" && privateAccess.state !== "available") {
     content = (
       <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
-        <p className="text-muted-foreground" role="status">
-          {privateAccess.state === "offline"
-            ? "Private Channel content is unavailable while Cove is offline."
-            : privateAccess.state === "revoked"
-              ? "This Private Channel is no longer available to your Account."
-              : "Confirming access before opening this Private Channel…"}
-        </p>
+        <PrivateChannelStatusMessage
+          retryAccessCheck={privateAccess.retryAccessCheck}
+          state={privateAccess.state}
+        />
       </div>
     );
   } else if (topicPending) {

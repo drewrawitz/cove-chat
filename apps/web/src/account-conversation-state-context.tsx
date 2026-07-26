@@ -50,9 +50,18 @@ function DelayedCommandReconciliation({
     () => state.getSnapshot(),
     () => state.getSnapshot(),
   );
+  const receiptKey = snapshot.commands
+    .flatMap((command) =>
+      command.phase === "syncing" &&
+      command.acceptedAt !== undefined &&
+      command.receiptCheckStartedAt === undefined
+        ? [`${command.commandId}:${command.acceptedAt}`]
+        : [],
+    )
+    .join("\n");
 
   useEffect(() => {
-    const timers = snapshot.commands.flatMap((command) => {
+    const timers = state.getSnapshot().commands.flatMap((command) => {
       if (
         command.phase !== "syncing" ||
         command.acceptedAt === undefined ||
@@ -105,7 +114,7 @@ function DelayedCommandReconciliation({
     return () => {
       for (const timer of timers) window.clearTimeout(timer);
     };
-  }, [restartZero, snapshot.commands, state]);
+  }, [receiptKey, restartZero, state]);
 
   return null;
 }

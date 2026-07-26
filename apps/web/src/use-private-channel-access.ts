@@ -26,9 +26,11 @@ export function usePrivateChannelAccess({
   workspaceId,
 }: PrivateChannelAccessOptions): PrivateChannelAccessState {
   const connection = useConnectionState();
-  const [synchronizedMembership, synchronizedResult] = useQuery(
-    queries.access.channelMembership({ workspaceId, channelId }),
-  );
+  const membershipQuery =
+    visibility === "private"
+      ? queries.access.channelMembership({ workspaceId, channelId })
+      : undefined;
+  const [synchronizedMembership, synchronizedResult] = useQuery(membershipQuery);
   const previousConnection = useRef(connection.name);
   const [revalidating, setRevalidating] = useState(false);
   const reconnectRequiresRevalidation =

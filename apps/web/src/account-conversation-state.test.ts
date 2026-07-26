@@ -3,43 +3,15 @@ import {
   createAccountConversationState,
   AccountConversationStorageUnavailableError,
   readActiveConversationAccountId,
-  type AccountConversationBroadcast,
   type AccountConversationScope,
 } from "./account-conversation-state.ts";
+import { BroadcastHub, MemoryStorage } from "./test-support/account-conversation-state.ts";
 
 const scope: AccountConversationScope = {
   workspaceId: "workspace-1",
   channelId: "channel-1",
   topicId: "topic-1",
 };
-
-class MemoryStorage implements Storage {
-  readonly values = new Map<string, string>();
-
-  get length(): number {
-    return this.values.size;
-  }
-
-  clear(): void {
-    this.values.clear();
-  }
-
-  getItem(key: string): string | null {
-    return this.values.get(key) ?? null;
-  }
-
-  key(index: number): string | null {
-    return [...this.values.keys()][index] ?? null;
-  }
-
-  removeItem(key: string): void {
-    this.values.delete(key);
-  }
-
-  setItem(key: string, value: string): void {
-    this.values.set(key, value);
-  }
-}
 
 class FailingStorage extends MemoryStorage {
   failRemovals = false;
@@ -54,27 +26,6 @@ class FailingStorage extends MemoryStorage {
     if (this.failWrites) throw new DOMException("Storage unavailable");
     super.setItem(key, value);
   }
-}
-
-class BroadcastHub {
-  readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
-
-  create = (name: string): AccountConversationBroadcast => ({
-    addEventListener: (_type, listener) => {
-      const listeners = this.listeners.get(name) ?? new Set();
-      listeners.add(listener);
-      this.listeners.set(name, listeners);
-    },
-    close: () => undefined,
-    postMessage: (data) => {
-      for (const listener of this.listeners.get(name) ?? []) {
-        listener(new MessageEvent("message", { data }));
-      }
-    },
-    removeEventListener: (_type, listener) => {
-      this.listeners.get(name)?.delete(listener);
-    },
-  });
 }
 
 const stores: Array<ReturnType<typeof createAccountConversationState>> = [];
@@ -357,6 +308,63 @@ describe("Account conversation state", () => {
       }),
     ).toThrow(AccountConversationStorageUnavailableError);
     expect(store.commandsFor(scope)).toEqual([]);
+  });
+
+  it("retries draft and command persistence after browser storage recovers", () => {
+    const storage = new FailingStorage();
+    const store = makeStore("alice", storage);
+    storage.failWrites = true;
+
+    expect(() => store.writeDraft(scope, "Recovered draft")).toThrow(
+      AccountConversationStorageUnavailableError,
+    );
+    expect(() =>
+      store.startCommand(scope, {
+        kind: "delete",
+        commandId: "command-1",
+        messageId: "message-1",
+        expectedVersion: 1,
+      }),
+    ).toThrow(AccountConversationStorageUnavailableError);
+
+    storage.failWrites = false;
+    store.writeDraft(scope, "Recovered draft");
+    store.startCommand(scope, {
+      kind: "delete",
+      commandId: "command-1",
+      messageId: "message-1",
+      expectedVersion: 1,
+    });
+
+    expect(store.readDraft(scope)).toBe("Recovered draft");
+    expect(store.commandsFor(scope)).toHaveLength(1);
+    expect(store.getSnapshot().storageHealth).toBe("recovered");
+  });
+
+  it("restores commands when dismissal or reconciliation cannot be persisted", () => {
+    const storage = new FailingStorage();
+    const store = makeStore("alice", storage);
+    for (const commandId of ["command-1", "command-2"]) {
+      store.startCommand(scope, {
+        kind: "delete",
+        commandId,
+        messageId: `message-${commandId}`,
+        expectedVersion: 1,
+      });
+    }
+    storage.failWrites = true;
+
+    store.dismissCommand("command-1");
+    expect(store.commandsFor(scope).map(({ commandId }) => commandId)).toEqual([
+      "command-1",
+      "command-2",
+    ]);
+
+    store.reconcileCommands(["command-2"]);
+    expect(store.commandsFor(scope).map(({ commandId }) => commandId)).toEqual([
+      "command-1",
+      "command-2",
+    ]);
   });
 
   it("deactivates other tabs before Account erasure and surfaces failures for retry", () => {

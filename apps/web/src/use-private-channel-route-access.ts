@@ -28,6 +28,7 @@ interface PrivateChannelRouteAccessOptions {
 }
 
 export interface PrivateChannelRouteAccess {
+  readonly retryAccessCheck: () => void;
   readonly state: PrivateChannelAccessState | "cleanup-required";
   readonly retryCleanup: () => void;
 }
@@ -48,6 +49,9 @@ export function usePrivateChannelRouteAccess({
     () => Promise.all([workspace.refetch(), channel.refetch()]),
     [channel.refetch, workspace.refetch],
   );
+  const retryAccessCheck = useCallback((): void => {
+    void refreshAuthoritativeAccess().catch(() => undefined);
+  }, [refreshAuthoritativeAccess]);
   const generalChannelId = workspace.data?.generalChannelId;
   const onRevoked = useCallback((): void => {
     try {
@@ -107,6 +111,7 @@ export function usePrivateChannelRouteAccess({
     cleanupFailureScope.current === cleanupScope;
 
   return {
+    retryAccessCheck,
     state: cleanupFailed ? "cleanup-required" : state,
     retryCleanup: onRevoked,
   };

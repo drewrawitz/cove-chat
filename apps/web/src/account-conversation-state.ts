@@ -597,8 +597,12 @@ export function createAccountConversationState({
     dismissCommand: (commandId) => {
       const remaining = commands.filter((command) => command.commandId !== commandId);
       if (remaining.length === commands.length) return;
+      const previous = commands;
       commands = remaining;
-      persistCommands();
+      if (!persistCommands()) {
+        commands = previous;
+        notify();
+      }
     },
     getSnapshot: () => snapshot,
     hasAutomaticZeroRepairAttempted: () => recovery.automaticZeroRepairAttempted,
@@ -647,14 +651,15 @@ export function createAccountConversationState({
       const reconciled = new Set(producedCommandIds);
       const remaining = commands.filter(({ commandId }) => !reconciled.has(commandId));
       if (remaining.length === commands.length) return;
+      const previous = commands;
       commands = remaining;
-      persistCommands();
+      if (!persistCommands()) {
+        commands = previous;
+        notify();
+      }
     },
     startCommand: (scope, command) => {
       if (commands.some(({ commandId }) => commandId === command.commandId)) return;
-      if (health === "unavailable") {
-        throw new AccountConversationStorageUnavailableError();
-      }
       if ("body" in command) {
         const validationMessage = messageBodyValidity(command.body);
         if (validationMessage.length > 0) throw new RangeError(validationMessage);
@@ -686,9 +691,6 @@ export function createAccountConversationState({
     },
     writeDraft: (scope, body) => {
       pruneExpiredDrafts();
-      if (health === "unavailable") {
-        throw new AccountConversationStorageUnavailableError();
-      }
       if (body.length === 0) {
         const remaining = drafts.filter((draft) => !sameScope(draft, scope));
         if (remaining.length === drafts.length) return;

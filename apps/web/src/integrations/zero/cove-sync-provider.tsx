@@ -56,19 +56,12 @@ function DurableSyncStatus({ enabled }: { readonly enabled: boolean }) {
 function AccountZeroLifecycle(): null {
   const connection = useConnectionState();
   const navigate = useNavigate();
-  const { clearAccountConversationState, reportZeroStorageFailure } =
-    useAccountConversationRuntime();
+  const { clearAccountConversationState } = useAccountConversationRuntime();
   const handleConnectionState = useEffectEvent((): void => {
     if (connection.name === "needs-auth") {
       void clearAccountConversationState()
         .then(() => navigate({ to: "/", replace: true }))
         .catch(() => undefined);
-    }
-    if (
-      connection.name === "error" &&
-      /(indexeddb|storage|quota|corrupt|database)/i.test(connection.reason)
-    ) {
-      reportZeroStorageFailure();
     }
   });
 
@@ -141,6 +134,9 @@ function AccountSyncProvider({
   const restartZero = useCallback((): void => {
     setGeneration((current) => current + 1);
   }, []);
+  const initZero = useCallback((instance: Zero): void => {
+    zero.current = instance;
+  }, []);
 
   const repairZeroCache = useCallback((): Promise<void> => {
     if (repairInProgress.current !== undefined) return repairInProgress.current;
@@ -154,7 +150,7 @@ function AccountSyncProvider({
             throw new AggregateError(result.errors, "Zero cache deletion failed.");
           }
         }
-        zero.current = undefined;
+        if (zero.current === current) zero.current = undefined;
         setGeneration((value) => value + 1);
         setZeroRecoveryState("ready");
       } catch {
@@ -191,7 +187,7 @@ function AccountSyncProvider({
               throw new AggregateError(result.errors, "Zero cache deletion failed.");
             }
           }
-          zero.current = undefined;
+          if (zero.current === current) zero.current = undefined;
           await queryClient.cancelQueries();
           queryClient.clear();
           setAccountClearFailed(false);
@@ -258,7 +254,7 @@ function AccountSyncProvider({
 
   return (
     <AccountConversationStateProvider
-      clearAccountConversationState={() => clearAccountConversationState()}
+      clearAccountConversationState={clearAccountConversationState}
       repairZeroCache={repairZeroCache}
       reportZeroStorageFailure={reportZeroStorageFailure}
       restartZero={restartZero}
@@ -269,9 +265,7 @@ function AccountSyncProvider({
         key={generation}
         cacheURL={cacheURL}
         context={context}
-        init={(instance) => {
-          zero.current = instance;
-        }}
+        init={initZero}
         onClientStateNotFound={reportZeroStorageFailure}
         schema={schema}
         storageKey="cove"
@@ -379,16 +373,23 @@ function ExpiredAccountCleanup({
 export function CoveSyncProvider({ children }: CoveSyncProviderProps): ReactNode {
   const account = useAuthMe({ query: { retry: false } });
   const accountId = account.data?.id;
-  if (accountId === undefined) {
-    const expiredAccountId =
-      account.isError && account.error instanceof CoveApiError && account.error.status === 401
-        ? readActiveConversationAccountId()
-        : undefined;
-    return expiredAccountId === undefined ? (
-      <AnonymousSyncProvider>{children}</AnonymousSyncProvider>
-    ) : (
-      <ExpiredAccountCleanup accountId={expiredAccountId}>{children}</ExpiredAccountCleanup>
+  if (accountId !== undefined) {
+    return <AccountSyncProvider accountId={accountId}>{children}</AccountSyncProvider>;
+  }
+  if (account.isPending) {
+    return (
+      <p className="p-6 text-sm text-muted-foreground" role="status">
+        Opening Cove…
+      </p>
     );
   }
-  return <AccountSyncProvider accountId={accountId}>{children}</AccountSyncProvider>;
+  const expiredAccountId =
+    account.isError && account.error instanceof CoveApiError && account.error.status === 401
+      ? readActiveConversationAccountId()
+      : undefined;
+  return expiredAccountId === undefined ? (
+    <AnonymousSyncProvider>{children}</AnonymousSyncProvider>
+  ) : (
+    <ExpiredAccountCleanup accountId={expiredAccountId}>{children}</ExpiredAccountCleanup>
+  );
 }

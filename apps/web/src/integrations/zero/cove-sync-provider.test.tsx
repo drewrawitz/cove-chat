@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import {
@@ -16,10 +16,13 @@ const zeroHarness = vi.hoisted(() => ({
     data: { id: "account-1" } as { readonly id: string } | undefined,
     error: undefined as unknown,
     isError: false,
+    isPending: false,
   },
   connection: { name: "connected" } as
     | { readonly name: "connected" }
-    | { readonly name: "error"; readonly reason: string },
+    | { readonly name: "error"; readonly reason: string }
+    | { readonly name: "needs-auth" },
+  onClientStateNotFound: undefined as (() => void) | undefined,
   delete: vi.fn(async () => ({ errors: [] as ReadonlyArray<Error> })),
   navigate: vi.fn(async () => undefined),
 }));
@@ -31,13 +34,16 @@ vi.mock("@rocicorp/zero/react", async () => {
     ZeroProvider: ({
       children,
       init,
+      onClientStateNotFound,
     }: {
       readonly children: ReactNode;
       readonly init?: (zero: { readonly delete: typeof zeroHarness.delete }) => void;
+      readonly onClientStateNotFound?: () => void;
     }) => {
       useReactEffect(() => {
+        zeroHarness.onClientStateNotFound = onClientStateNotFound;
         init?.({ delete: zeroHarness.delete });
-      }, [init]);
+      }, [init, onClientStateNotFound]);
       return children;
     },
   };
@@ -87,6 +93,24 @@ const renderProvider = (queryClient = new QueryClient()) =>
       </CoveSyncProvider>
     </QueryClientProvider>,
   );
+const rerenderProvider = (
+  view: ReturnType<typeof renderProvider>,
+  queryClient = new QueryClient(),
+): void => {
+  view.rerender(
+    <QueryClientProvider client={queryClient}>
+      <CoveSyncProvider>
+        <PersistedWork />
+      </CoveSyncProvider>
+    </QueryClientProvider>,
+  );
+};
+const reportClientStateNotFound = (): void => {
+  if (zeroHarness.onClientStateNotFound === undefined) {
+    throw new Error("ZeroProvider did not register onClientStateNotFound.");
+  }
+  act(() => zeroHarness.onClientStateNotFound?.());
+};
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -94,11 +118,13 @@ beforeEach(() => {
     data: { id: "account-1" },
     error: undefined,
     isError: false,
+    isPending: false,
   };
   zeroHarness.connection = { name: "connected" };
   zeroHarness.delete.mockReset();
   zeroHarness.delete.mockResolvedValue({ errors: [] });
   zeroHarness.navigate.mockClear();
+  zeroHarness.onClientStateNotFound = undefined;
 });
 
 afterEach(() => {
@@ -107,22 +133,12 @@ afterEach(() => {
 });
 
 test("automatically rebuilds Zero once, then stops and offers manual recovery", async () => {
-  const view = renderProvider();
+  renderProvider();
   await screen.findByText("1:1");
 
-  zeroHarness.connection = {
-    name: "error",
-    reason: "IndexedDB quota exceeded while opening the database",
-  };
-  view.rerender(
-    <QueryClientProvider client={new QueryClient()}>
-      <CoveSyncProvider>
-        <PersistedWork />
-      </CoveSyncProvider>
-    </QueryClientProvider>,
-  );
-
+  reportClientStateNotFound();
   await waitFor(() => expect(zeroHarness.delete).toHaveBeenCalledOnce());
+  reportClientStateNotFound();
   expect(await screen.findByText("1:1")).toBeDefined();
   expect(await screen.findByRole("button", { name: "Reset synchronized cache" })).toBeDefined();
   expect(zeroHarness.delete).toHaveBeenCalledOnce();
@@ -136,21 +152,10 @@ test("manual recovery retries a Zero cache deletion that reported errors", async
   zeroHarness.delete
     .mockResolvedValueOnce({ errors: [new Error("Database deletion blocked")] })
     .mockResolvedValueOnce({ errors: [] });
-  const view = renderProvider();
+  renderProvider();
   await screen.findByText("1:1");
 
-  zeroHarness.connection = {
-    name: "error",
-    reason: "IndexedDB corruption prevented startup",
-  };
-  view.rerender(
-    <QueryClientProvider client={new QueryClient()}>
-      <CoveSyncProvider>
-        <PersistedWork />
-      </CoveSyncProvider>
-    </QueryClientProvider>,
-  );
-
+  reportClientStateNotFound();
   const manualRepair = await screen.findByRole("button", {
     name: "Reset synchronized cache",
   });
@@ -160,6 +165,57 @@ test("manual recovery retries a Zero cache deletion that reported errors", async
 
   await waitFor(() => expect(zeroHarness.delete).toHaveBeenCalledTimes(2));
   expect(screen.getByText("1:1")).toBeDefined();
+});
+
+test("does not rebuild Zero from generic connection error text", async () => {
+  zeroHarness.connection = {
+    name: "error",
+    reason: "IndexedDB quota database network failure",
+  };
+  renderProvider();
+
+  await screen.findByText("1:1");
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
+  expect(zeroHarness.delete).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "Reset synchronized cache" })).toBeNull();
+});
+
+test("clears Account state and navigates when Zero needs authentication", async () => {
+  const view = renderProvider();
+  await screen.findByText("1:1");
+  zeroHarness.connection = { name: "needs-auth" };
+
+  rerenderProvider(view);
+
+  await screen.findByText("Removing this Account’s conversation data…");
+  await waitFor(() => expect(zeroHarness.delete).toHaveBeenCalledOnce());
+  expect(zeroHarness.navigate).toHaveBeenCalledWith({ to: "/", replace: true });
+  expect(
+    Object.keys(window.localStorage).filter((key) => key.startsWith("cove:account-conversation:")),
+  ).toEqual([]);
+});
+
+test("waits for initial authentication instead of mounting anonymous Zero", async () => {
+  zeroHarness.account = {
+    data: undefined,
+    error: undefined,
+    isError: false,
+    isPending: true,
+  };
+  const view = renderProvider();
+
+  expect(screen.getByText("Opening Cove…")).toBeDefined();
+  expect(screen.queryByText("1:1")).toBeNull();
+
+  zeroHarness.account = {
+    data: { id: "account-1" },
+    error: undefined,
+    isError: false,
+    isPending: false,
+  };
+  rerenderProvider(view);
+
+  expect(await screen.findByText("1:1")).toBeDefined();
 });
 
 test("invalid-session discovery clears the Account cache, journal, drafts, and HTTP cache", async () => {
@@ -233,6 +289,7 @@ test("clears the last active Account when an invalid session is discovered on br
       message: "Authentication is required.",
     }),
     isError: true,
+    isPending: false,
   };
 
   render(

@@ -8,7 +8,10 @@ import {
   MenuTrigger,
 } from "@cove/ui/components/menu";
 import { Fragment, type ReactElement, type RefObject, useEffect, useRef, useState } from "react";
-import type { StoredMessageCommand } from "../account-conversation-state.ts";
+import {
+  AccountConversationStorageUnavailableError,
+  type StoredMessageCommand,
+} from "../account-conversation-state.ts";
 import {
   type DeleteMessageOverlayCommand,
   type EditMessageOverlayCommand,
@@ -442,7 +445,11 @@ export function TopicMessages({
             onDraftChange={setDraft}
             onPost={async (body) => {
               await add(body);
-              clearDraft();
+              try {
+                clearDraft();
+              } catch (error) {
+                if (!(error instanceof AccountConversationStorageUnavailableError)) throw error;
+              }
             }}
           />
         </>

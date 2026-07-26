@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StrictMode, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -11,6 +11,7 @@ import {
 } from "../account-conversation-state.ts";
 import { AccountConversationStateProvider } from "../account-conversation-state-context.tsx";
 import { CoveApiError } from "../api/cove-fetch.ts";
+import { BroadcastHub, MemoryStorage } from "../test-support/account-conversation-state.ts";
 import { SnackbarProvider } from "./snackbar.tsx";
 import { TopicMessages } from "./topic-messages.tsx";
 
@@ -90,41 +91,6 @@ const scrollIntoView = vi.fn();
 const scrollTo = vi.fn();
 const conversationStates: Array<AccountConversationState> = [];
 let conversationState: AccountConversationState;
-
-class TestBroadcastHub {
-  readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
-
-  create = (name: string): AccountConversationBroadcast => ({
-    addEventListener: (_type, listener) => {
-      const listeners = this.listeners.get(name) ?? new Set();
-      listeners.add(listener);
-      this.listeners.set(name, listeners);
-    },
-    close: () => undefined,
-    postMessage: (data) => {
-      for (const listener of this.listeners.get(name) ?? []) {
-        listener(new MessageEvent("message", { data }));
-      }
-    },
-    removeEventListener: (_type, listener) => {
-      this.listeners.get(name)?.delete(listener);
-    },
-  });
-}
-
-const memoryStorage = (): Storage => {
-  const values = new Map<string, string>();
-  return {
-    get length() {
-      return values.size;
-    },
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => values.delete(key),
-    setItem: (key, value) => values.set(key, value),
-  };
-};
 
 const makeConversationState = (
   createBroadcastChannel: (name: string) => AccountConversationBroadcast = () => ({
@@ -234,6 +200,14 @@ const openOpeningBriefEditor = (): HTMLTextAreaElement => {
 const openMessageDeleteDialog = (actionName: string, menuItemName: string): void => {
   fireEvent.click(screen.getByRole("button", { name: actionName }));
   fireEvent.click(screen.getByRole("menuitem", { name: menuItemName }));
+};
+
+const failStorageWritesFor = (keySuffix: string) => {
+  const setItem = Storage.prototype.setItem.bind(window.localStorage);
+  return vi.spyOn(Storage.prototype, "setItem").mockImplementation((key, value) => {
+    if (key.endsWith(keySuffix)) throw new DOMException("Storage unavailable");
+    setItem(key, value);
+  });
 };
 
 test("identifies messages by author and timestamp instead of a numbered heading", () => {
@@ -416,6 +390,55 @@ test("presents message editing as a composer with Cancel before Save", () => {
   ).toEqual(["Cancel", "Save"]);
 });
 
+test("prevents edit form submission after storage becomes unavailable", async () => {
+  render(topicMessages([openingMessage]));
+  const editor = openOpeningBriefEditor();
+  const storage = failStorageWritesFor(":drafts");
+  expect(() => conversationState.writeDraft(topicScope, "Cannot persist")).toThrow();
+  storage.mockRestore();
+  await screen.findByText(/Browser storage is unavailable/);
+  const submit = new Event("submit", { bubbles: true, cancelable: true });
+
+  await act(async () => {
+    editor.form?.dispatchEvent(submit);
+  });
+
+  expect(submit.defaultPrevented).toBe(true);
+  expect(apiHarness.editMessage).not.toHaveBeenCalled();
+});
+
+test("reports an edit that cannot be added to the durable command journal", async () => {
+  render(topicMessages([openingMessage]));
+  const editor = openOpeningBriefEditor();
+  fireEvent.change(editor, { target: { value: "A locally durable edit" } });
+  const storage = failStorageWritesFor(":commands");
+
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(
+    await screen.findByText("Browser storage is unavailable. Cove could not save this change."),
+  ).toBeDefined();
+  expect(apiHarness.editMessage).not.toHaveBeenCalled();
+  storage.mockRestore();
+});
+
+test("reports a deletion that cannot be added to the durable command journal", async () => {
+  render(topicMessages([openingMessage]));
+  openMessageDeleteDialog(
+    `More actions for opening brief by ${currentIdentity.name}: ${openingMessage.body}`,
+    "Delete opening brief",
+  );
+  const storage = failStorageWritesFor(":commands");
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete opening brief" }));
+
+  expect(
+    await screen.findByText("Browser storage is unavailable. Cove could not save this change."),
+  ).toBeDefined();
+  expect(apiHarness.deleteMessage).not.toHaveBeenCalled();
+  storage.mockRestore();
+});
+
 test("keeps unrelated Reply and Message controls enabled during an edit", async () => {
   apiHarness.editMessage.mockReturnValue(new Promise(() => undefined));
   render(topicMessages([openingMessage, newReply]));
@@ -500,6 +523,22 @@ test("scrolls the newly posted reply into view after it renders", async () => {
   });
 });
 
+test("keeps a successful post successful when clearing its draft fails", async () => {
+  render(topicMessages([openingMessage]));
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  fireEvent.change(screen.getByLabelText("Write a reply"), {
+    target: { value: newReply.body },
+  });
+  const storage = failStorageWritesFor(":drafts");
+
+  fireEvent.click(screen.getByRole("button", { name: "Post" }));
+
+  await waitFor(() => expect(apiHarness.addMessage).toHaveBeenCalledOnce());
+  expect(await screen.findByRole("button", { name: /Reply/ })).toBeDefined();
+  expect(screen.queryByText("Cove could not add this reply. Refresh and try again.")).toBeNull();
+  storage.mockRestore();
+});
+
 test("restores an Account-scoped Topic draft after remount", () => {
   const firstRender = render(topicMessages([openingMessage]));
   fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
@@ -518,9 +557,9 @@ test("restores an Account-scoped Topic draft after remount", () => {
 
 test("shows one unresolved overlay across tabs while only the source tab dispatches HTTP", async () => {
   apiHarness.addMessage.mockReturnValue(new Promise(() => undefined));
-  const hub = new TestBroadcastHub();
-  const sourceState = makeConversationState(hub.create, undefined, memoryStorage());
-  const otherState = makeConversationState(hub.create, undefined, memoryStorage());
+  const hub = new BroadcastHub();
+  const sourceState = makeConversationState(hub.create, undefined, new MemoryStorage());
+  const otherState = makeConversationState(hub.create, undefined, new MemoryStorage());
   const source = render(topicMessages([openingMessage], undefined, sourceState));
   const other = render(topicMessages([openingMessage], undefined, otherState));
 
@@ -671,6 +710,7 @@ test("checks one delayed receipt and restarts Zero at most once across reload", 
 
   const reloadedState = makeConversationState();
   render(topicMessages([openingMessage], undefined, reloadedState, { restartZero }));
+  await new Promise((resolve) => window.setTimeout(resolve, 0));
 
   expect(apiHarness.getMessageCommandStatus).toHaveBeenCalledOnce();
   expect(restartZero).toHaveBeenCalledOnce();

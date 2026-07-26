@@ -21,6 +21,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelLoading } from "../components/channel-loading.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { PrivateChannelStatusMessage } from "../components/private-channel-status-message.tsx";
 import { ChannelMembership } from "../components/channel-membership.tsx";
 import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
@@ -181,13 +182,10 @@ function ChannelPage(): ReactElement {
   } else if (channel.data.visibility === "private" && privateAccess.state !== "available") {
     channelContent = (
       <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
-        <p className="text-muted-foreground" role="status">
-          {privateAccess.state === "offline"
-            ? "Private Channel content is unavailable while Cove is offline."
-            : privateAccess.state === "revoked"
-              ? "This Private Channel is no longer available to your Account."
-              : "Confirming access before opening this Private Channel…"}
-        </p>
+        <PrivateChannelStatusMessage
+          retryAccessCheck={privateAccess.retryAccessCheck}
+          state={privateAccess.state}
+        />
       </div>
     );
   } else {

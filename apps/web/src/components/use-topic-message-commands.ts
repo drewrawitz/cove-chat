@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AccountConversationStorageUnavailableError } from "../account-conversation-state.ts";
 import {
   useAccountConversationRuntime,
   useAccountConversationSnapshot,
@@ -16,6 +17,7 @@ import {
   type OverlayMessageCommand,
   type OverlayTopicMessage,
 } from "../message-command-overlay.ts";
+import { useSnackbar } from "./snackbar.tsx";
 
 interface TopicMessageCommandOptions {
   readonly channelId: string;
@@ -68,6 +70,7 @@ export function useTopicMessageCommands({
     zeroRecoveryState,
   } = useAccountConversationRuntime();
   const conversationSnapshot = useAccountConversationSnapshot();
+  const { showSnackbar } = useSnackbar();
   const [clock, setClock] = useState(Date.now());
   const scope = useMemo(
     () => ({ workspaceId, channelId, topicId }),
@@ -75,10 +78,15 @@ export function useTopicMessageCommands({
   );
   const overlay = useMemo(
     () => ({
-      commands: conversationState.commandsFor(scope),
+      commands: conversationSnapshot.commands.filter(
+        (command) =>
+          command.workspaceId === scope.workspaceId &&
+          command.channelId === scope.channelId &&
+          command.topicId === scope.topicId,
+      ),
       reconciledCommandIds: [],
     }),
-    [conversationSnapshot, conversationState, scope],
+    [conversationSnapshot.commands, scope],
   );
   const projectedMessages = useMemo(
     () => overlayTopicMessages(messages, overlay),
@@ -169,6 +177,10 @@ export function useTopicMessageCommands({
       }
     }
   };
+  const handleCommandStorageError = (error: unknown): void => {
+    if (!(error instanceof AccountConversationStorageUnavailableError)) throw error;
+    showSnackbar("Browser storage is unavailable. Cove could not save this change.");
+  };
 
   const add = async (body: string): Promise<void> => {
     dismissRejected("create");
@@ -195,8 +207,8 @@ export function useTopicMessageCommands({
   };
 
   const edit = (event: FormEvent<HTMLFormElement>, message: OverlayTopicMessage): void => {
-    if (!conversationStorageAvailable) return;
     event.preventDefault();
+    if (!conversationStorageAvailable) return;
     const form = new FormData(event.currentTarget);
     dismissRejected("edit", message.id);
     const command: OverlayMessageCommand = {
@@ -209,7 +221,8 @@ export function useTopicMessageCommands({
     };
     try {
       conversationState.startCommand(scope, command);
-    } catch {
+    } catch (error) {
+      handleCommandStorageError(error);
       return;
     }
     void send(command);
@@ -227,7 +240,8 @@ export function useTopicMessageCommands({
     };
     try {
       conversationState.startCommand(scope, command);
-    } catch {
+    } catch (error) {
+      handleCommandStorageError(error);
       return;
     }
     void send(command);
@@ -281,7 +295,13 @@ export function useTopicMessageCommands({
     isMessageEditSaving,
     isMessageMutationPending,
     overlay,
-    draft: conversationState.readDraft(scope),
+    draft:
+      conversationSnapshot.drafts.find(
+        (draft) =>
+          draft.workspaceId === scope.workspaceId &&
+          draft.channelId === scope.channelId &&
+          draft.topicId === scope.topicId,
+      )?.body ?? "",
     projectedMessages,
     remove,
     repairSynchronization: () => void repairZeroCache(),

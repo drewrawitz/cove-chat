@@ -13,29 +13,35 @@ const zeroHarness = vi.hoisted(() => ({
     visibility: "private",
   } as { readonly id: string; readonly visibility: "private" } | undefined,
   connection: { name: "connected" },
+  query: undefined as unknown,
   result: { type: "complete" },
 }));
 
 vi.mock("@rocicorp/zero/react", () => ({
   useConnectionState: () => zeroHarness.connection,
-  useQuery: () => [zeroHarness.channel, zeroHarness.result],
+  useQuery: (query: unknown) => {
+    zeroHarness.query = query;
+    return [zeroHarness.channel, zeroHarness.result];
+  },
 }));
 
 function AccessView({
   authoritativeAccess,
   onRevoked,
   refreshAuthoritativeAccess,
+  visibility = "private",
 }: {
   readonly authoritativeAccess: AuthoritativeChannelAccess;
   readonly onRevoked: () => void;
   readonly refreshAuthoritativeAccess: () => Promise<unknown>;
+  readonly visibility?: "private" | "public";
 }): ReactElement {
   const state = usePrivateChannelAccess({
     authoritativeAccess,
     channelId: "channel-1",
     onRevoked,
     refreshAuthoritativeAccess,
-    visibility: "private",
+    visibility,
     workspaceId: "workspace-1",
   });
   return <output>{state}</output>;
@@ -45,6 +51,7 @@ beforeEach(() => {
   window.localStorage.clear();
   zeroHarness.channel = { id: "channel-1", visibility: "private" };
   zeroHarness.connection = { name: "connected" };
+  zeroHarness.query = undefined;
   zeroHarness.result = { type: "complete" };
 });
 
@@ -70,6 +77,20 @@ test("keeps a Private Channel hidden until its initial access reads complete", (
       refreshAuthoritativeAccess={async () => undefined}
     />,
   );
+  expect(screen.getByText("available")).toBeDefined();
+});
+
+test("does not subscribe to synchronized membership for a Public Channel", () => {
+  render(
+    <AccessView
+      authoritativeAccess="available"
+      onRevoked={() => undefined}
+      refreshAuthoritativeAccess={async () => undefined}
+      visibility="public"
+    />,
+  );
+
+  expect(zeroHarness.query).toBeUndefined();
   expect(screen.getByText("available")).toBeDefined();
 });
 
