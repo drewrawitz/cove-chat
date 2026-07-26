@@ -31,20 +31,26 @@ export class MemoryStorage implements Storage {
 export class BroadcastHub {
   readonly listeners = new Map<string, Set<(event: MessageEvent) => void>>();
 
-  create = (name: string): AccountConversationBroadcast => ({
-    addEventListener: (_type, listener) => {
-      const listeners = this.listeners.get(name) ?? new Set();
-      listeners.add(listener);
-      this.listeners.set(name, listeners);
-    },
-    close: () => undefined,
-    postMessage: (data) => {
-      for (const listener of this.listeners.get(name) ?? []) {
-        listener(new MessageEvent("message", { data }));
-      }
-    },
-    removeEventListener: (_type, listener) => {
-      this.listeners.get(name)?.delete(listener);
-    },
-  });
+  create = (name: string): AccountConversationBroadcast => {
+    let closed = false;
+    return {
+      addEventListener: (_type, listener) => {
+        const listeners = this.listeners.get(name) ?? new Set();
+        listeners.add(listener);
+        this.listeners.set(name, listeners);
+      },
+      close: () => {
+        closed = true;
+      },
+      postMessage: (data) => {
+        if (closed) throw new DOMException("Channel is closed", "InvalidStateError");
+        for (const listener of this.listeners.get(name) ?? []) {
+          listener(new MessageEvent("message", { data }));
+        }
+      },
+      removeEventListener: (_type, listener) => {
+        this.listeners.get(name)?.delete(listener);
+      },
+    };
+  };
 }

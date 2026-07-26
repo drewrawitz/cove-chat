@@ -6,7 +6,6 @@ import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 const execFileAsync = promisify(execFile);
-const workspaceDirectory = fileURLToPath(new URL("../../../../../", import.meta.url));
 const databasePackageDirectory = fileURLToPath(new URL("../../../../db", import.meta.url));
 const prismaExecutable = fileURLToPath(
   new URL("../../../../db/node_modules/.bin/prisma", import.meta.url),
@@ -16,10 +15,22 @@ let container: StartedPostgreSqlContainer | undefined;
 let client: Client | undefined;
 
 const runModerateSeed = async (databaseUrl: string): Promise<void> => {
-  await execFileAsync("vp", ["run", "@cove/db#seed:moderate"], {
-    cwd: workspaceDirectory,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-  });
+  try {
+    await execFileAsync(process.execPath, ["prisma/seed-moderate.ts"], {
+      cwd: databasePackageDirectory,
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
+  } catch (cause) {
+    const failure = cause as { readonly stderr?: string; readonly stdout?: string };
+    throw new Error(
+      [
+        "Moderate fixture seed failed.",
+        `stdout:\n${failure.stdout ?? ""}`,
+        `stderr:\n${failure.stderr ?? ""}`,
+      ].join("\n"),
+      { cause },
+    );
+  }
 };
 
 const readFixtureShape = async () => {

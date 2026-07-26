@@ -75,6 +75,7 @@ const removeFixtures = Effect.fn("TopicPostgresTest.removeFixtures")(function* (
   fixtures: Fixtures,
 ) {
   const sql = yield* SqlClient.SqlClient;
+  yield* sql`DELETE FROM topics WHERE workspace_id = ${fixtures.workspaceId}`;
   yield* sql`DELETE FROM workspaces WHERE id = ${fixtures.workspaceId}`;
   yield* sql`
     DELETE FROM users

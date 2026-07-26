@@ -168,8 +168,21 @@ it.live(
         page.goto(`${acceptance.webUrl}/workspaces/${otherWorkspaceId}/channels/${channelId}`),
       );
       yield* browserAction(() =>
-        page.getByText("This channel is not available in this workspace.").waitFor(),
+        page.waitForURL((url) => {
+          const workspacePath = `/workspaces/${otherWorkspaceId}`;
+          return (
+            url.pathname === workspacePath || url.pathname === `${workspacePath}/channels/general`
+          );
+        }),
       );
+      expect(
+        yield* browserAction(() => page.getByText("Product Lab", { exact: true }).count()),
+      ).toBe(0);
+      expect(
+        yield* browserAction(() =>
+          page.getByText("A durable place to explore and maintain product experiments.").count(),
+        ),
+      ).toBe(0);
 
       yield* browserAction(() => page.context().clearCookies());
       yield* signIn(acceptance, "carol@cove.local");

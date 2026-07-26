@@ -240,9 +240,16 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
     }).pipe(
       Effect.retry(Schedule.spaced("100 millis")),
       Effect.timeout("15 seconds"),
-      Effect.mapError(
-        (cause) => new Error(`Waiting for ${url} failed.\n${processOutput.join("")}`, { cause }),
-      ),
+      Effect.mapError((cause) => {
+        const outputLineCount = processOutput.reduce(
+          (total, chunk) => total + chunk.split("\n").length - 1,
+          0,
+        );
+        return new Error(
+          `Waiting for ${new URL(url).origin} failed after ${outputLineCount} process-output lines.`,
+          { cause },
+        );
+      }),
     ),
 );
 
@@ -250,6 +257,7 @@ export interface BrowserAcceptanceService {
   readonly browser: Browser;
   readonly page: Page;
   readonly webUrl: string;
+  readonly zeroUrl: string;
   readonly makeWorkspaceInvitationResendable: (inviteeEmail: string) => Effect.Effect<void, Error>;
   readonly restartZero: () => Effect.Effect<{ readonly rebuildMs: number }, Error>;
   readonly stopAndRemoveZeroReplica: () => Effect.Effect<{ readonly replicaBytes: number }, Error>;
@@ -292,11 +300,12 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
       const apiOutput: Array<string> = [];
       const zeroOutput: Array<string> = [];
       const webOutput: Array<string> = [];
-      const browserOutput: Array<string> = [];
+      let takenMagicLinkCount = 0;
+      let takenWorkspaceInvitationLinkCount = 0;
 
       yield* startProcess({
         command: process.execPath,
-        args: ["apps/api/src/main.ts"],
+        args: ["--conditions=development", "apps/api/src/main.ts"],
         options: {
           cwd: repositoryDirectory,
           env: {
@@ -320,6 +329,7 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
           cwd: acceptanceDirectory,
           env: {
             ...process.env,
+            NODE_ENV: "development",
             ZERO_APP_ID: "cove_acceptance",
             ZERO_APP_PUBLICATIONS: "cove_zero_data",
             ZERO_CHANGE_STREAMER_PORT: String(changeStreamerPort),
@@ -352,24 +362,6 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
 
       const browser = yield* launchBrowser();
       const page = yield* openPage(browser);
-      page.on("console", (message) =>
-        browserOutput.push(`[console:${message.type()}] ${message.text()}\n`),
-      );
-      page.on("pageerror", (error) =>
-        browserOutput.push(`[pageerror] ${error.stack ?? error.message}\n`),
-      );
-      page.on("requestfailed", (request) =>
-        browserOutput.push(
-          `[requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}\n`,
-        ),
-      );
-      page.on("response", (response) => {
-        if (response.status() >= 400) {
-          browserOutput.push(
-            `[response] ${response.request().method()} ${response.url()} ${response.status()}\n`,
-          );
-        }
-      });
       page.setDefaultTimeout(10_000);
 
       const takeMagicLink = Effect.fn("BrowserAcceptance.takeMagicLink")(() =>
@@ -380,9 +372,10 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
                 .join("")
                 .matchAll(/http:\/\/localhost:\d+\/auth\/verify\?token=[A-Za-z0-9_-]+/g),
             ];
-            const link = links.at(-1)?.[0];
+            const link = links[takenMagicLinkCount]?.[0];
             if (link === undefined)
               throw new Error("No development magic link has been delivered.");
+            takenMagicLinkCount += 1;
             return link;
           },
           catch: (cause) => new Error("No development magic link has been delivered.", { cause }),
@@ -391,16 +384,9 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
           Effect.timeout("10 seconds"),
           Effect.mapError(
             (cause) =>
-              new Error(
-                [
-                  "No development magic link has been delivered.",
-                  `API output:\n${apiOutput.join("")}`,
-                  `Zero output:\n${zeroOutput.join("")}`,
-                  `Web output:\n${webOutput.join("")}`,
-                  `Browser output:\n${browserOutput.join("")}`,
-                ].join("\n"),
-                { cause },
-              ),
+              new Error("No development magic link has been delivered within 10 seconds.", {
+                cause,
+              }),
           ),
         ),
       );
@@ -417,10 +403,11 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
                   /http:\/\/localhost:\d+\/workspace-invitations\/redeem\?token=[A-Za-z0-9_-]+/g,
                 ),
             ];
-            const link = links.at(-1)?.[0];
+            const link = links[takenWorkspaceInvitationLinkCount]?.[0];
             if (link === undefined) {
               throw new Error("No development Workspace invitation link has been delivered.");
             }
+            takenWorkspaceInvitationLinkCount += 1;
             return link;
           },
           catch: (cause) =>
@@ -431,13 +418,7 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
           Effect.mapError(
             (cause) =>
               new Error(
-                [
-                  "No development Workspace invitation link has been delivered.",
-                  `API output:\n${apiOutput.join("")}`,
-                  `Zero output:\n${zeroOutput.join("")}`,
-                  `Web output:\n${webOutput.join("")}`,
-                  `Browser output:\n${browserOutput.join("")}`,
-                ].join("\n"),
+                "No development Workspace invitation link has been delivered within 10 seconds.",
                 { cause },
               ),
           ),
@@ -455,10 +436,8 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
               container.getUsername(),
               "--dbname",
               container.getDatabase(),
-              "--set",
-              `invitee_email=${inviteeEmail}`,
               "--command",
-              "UPDATE workspace_invitations SET invited_at = NOW() - INTERVAL '61 seconds' WHERE invitee_email = :'invitee_email';",
+              `UPDATE workspace_invitations SET invited_at = NOW() - INTERVAL '61 seconds' WHERE invitee_email = '${inviteeEmail.replaceAll("'", "''")}';`,
             ]);
             if (result.exitCode !== 0 || !result.stdout.includes("UPDATE 1")) {
               throw new Error(result.stderr || result.stdout);
@@ -499,6 +478,7 @@ const browserAcceptanceLive = (moderateFixture: boolean) =>
         browser,
         page,
         webUrl,
+        zeroUrl,
         makeWorkspaceInvitationResendable,
         restartZero,
         stopAndRemoveZeroReplica,

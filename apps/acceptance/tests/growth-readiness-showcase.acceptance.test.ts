@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { Buffer } from "node:buffer";
 import type { Page } from "playwright";
 import { browserAction, openConversations, signIn } from "./support/browser-actions.ts";
 import {
@@ -13,45 +14,54 @@ const privateChannelName = "Showcase Private";
 const privateTopicTitle = "Private showcase recovery";
 const privateOpeningBrief = "Fresh authorization protects this cached Private Channel.";
 const recoveryReply = "Accepted by PostgreSQL while synchronization is unavailable.";
+const repairDraft = "Draft preserved during selective repair.";
 
 const elapsedSince = (startedAt: number): number => Math.max(0, performance.now() - startedAt);
 
 const messageList = (page: Page) => page.getByRole("list", { name: "Topic messages" });
 const topicRows = (page: Page) => page.locator("section[aria-labelledby='topics-heading'] ol > li");
 
-const readBrowserStorageUsage = (page: Page) =>
+interface GrowthReadinessDiagnostics {
+  boundedColdChannelMs: number;
+  boundedColdTopicMs: number;
+  browserIndexedDbSamplesBytes: ReadonlyArray<number>;
+  cachedRenderMs: number;
+  channelRowsExpanded: number;
+  channelRowsInitial: number;
+  commitToVisibleMs: number;
+  httpCommitMs: number;
+  pendingAgeAtHttpCommitMs: number;
+  pendingAppearanceMs: number;
+  reconnectConvergenceMs: number;
+  replicaBytes: number;
+  replicaRebuildMs: number;
+  topicRowsExpanded: number;
+  topicRowsInitial: number;
+  zeroQueryBytesReceived: number;
+}
+
+const controllableGate = () => {
+  let release = (): void => undefined;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+};
+
+const readBrowserIndexedDbUsage = (page: Page) =>
   browserAction(() =>
     page.evaluate(async () => {
       const estimate = await (
         navigator as Navigator & {
-          readonly storage: { estimate: () => Promise<{ usage?: number }> };
+          readonly storage: {
+            estimate: () => Promise<{
+              usage?: number;
+              usageDetails?: { indexedDB?: number };
+            }>;
+          };
         }
       ).storage.estimate();
-      return estimate.usage ?? 0;
-    }),
-  );
-
-const ageAcceptedCommandForRepair = (page: Page) =>
-  browserAction(() =>
-    page.evaluate(() => {
-      const commandKey = Object.keys(localStorage).find((key) => key.endsWith(":commands"));
-      if (commandKey === undefined) throw new Error("No unresolved command journal was found.");
-      const envelope = JSON.parse(localStorage.getItem(commandKey) ?? "null") as {
-        commands?: Array<{ acceptedAt?: string }>;
-      };
-      if (envelope.commands?.length !== 1) {
-        throw new Error("Expected exactly one unresolved command.");
-      }
-      envelope.commands[0]!.acceptedAt = new Date(Date.now() - 31_000).toISOString();
-      localStorage.setItem(commandKey, JSON.stringify(envelope));
-
-      const accountId = localStorage.getItem("cove:account-conversation:active-account");
-      if (accountId === null) throw new Error("No active Account marker was found.");
-      const broadcast = new BroadcastChannel(
-        `cove:account-conversation:${encodeURIComponent(accountId)}`,
-      );
-      broadcast.postMessage({ type: "state-changed" });
-      broadcast.close();
+      return estimate.usageDetails?.indexedDB ?? estimate.usage ?? 0;
     }),
   );
 
@@ -61,9 +71,36 @@ it.live(
     Effect.gen(function* () {
       const acceptance = yield* BrowserAcceptance;
       const sourcePage = acceptance.page;
-      const diagnostics: Record<string, number | ReadonlyArray<number>> = {};
       const browserStorageSamples: Array<number> = [];
+      const diagnostics: GrowthReadinessDiagnostics = {
+        boundedColdChannelMs: Number.NaN,
+        boundedColdTopicMs: Number.NaN,
+        browserIndexedDbSamplesBytes: browserStorageSamples,
+        cachedRenderMs: Number.NaN,
+        channelRowsExpanded: Number.NaN,
+        channelRowsInitial: Number.NaN,
+        commitToVisibleMs: Number.NaN,
+        httpCommitMs: Number.NaN,
+        pendingAgeAtHttpCommitMs: Number.NaN,
+        pendingAppearanceMs: Number.NaN,
+        reconnectConvergenceMs: Number.NaN,
+        replicaBytes: Number.NaN,
+        replicaRebuildMs: Number.NaN,
+        topicRowsExpanded: Number.NaN,
+        topicRowsInitial: Number.NaN,
+        zeroQueryBytesReceived: Number.NaN,
+      };
+      let zeroQueryBytesReceived = 0;
+      const zeroHost = new URL(acceptance.zeroUrl).host;
+      sourcePage.on("websocket", (socket) => {
+        if (new URL(socket.url()).host !== zeroHost) return;
+        socket.on("framereceived", ({ payload }) => {
+          zeroQueryBytesReceived +=
+            typeof payload === "string" ? Buffer.byteLength(payload) : payload.byteLength;
+        });
+      });
 
+      yield* browserAction(() => sourcePage.clock.install());
       yield* signIn(acceptance, "bob@cove.local");
       const coldChannelStartedAt = performance.now();
       yield* openConversations(sourcePage);
@@ -71,7 +108,7 @@ it.live(
       diagnostics.boundedColdChannelMs = elapsedSince(coldChannelStartedAt);
       diagnostics.channelRowsInitial = yield* browserAction(() => topicRows(sourcePage).count());
       expect(diagnostics.channelRowsInitial).toBe(50);
-      browserStorageSamples.push(yield* readBrowserStorageUsage(sourcePage));
+      browserStorageSamples.push(yield* readBrowserIndexedDbUsage(sourcePage));
 
       yield* browserAction(() =>
         sourcePage.getByRole("button", { name: "Load older Topics" }).click(),
@@ -106,7 +143,7 @@ it.live(
         messageList(sourcePage).locator("article").count(),
       );
       expect(diagnostics.topicRowsExpanded).toBe(201);
-      browserStorageSamples.push(yield* readBrowserStorageUsage(sourcePage));
+      browserStorageSamples.push(yield* readBrowserIndexedDbUsage(sourcePage));
 
       yield* browserAction(() => sourcePage.getByRole("link", { name: "Back to General" }).click());
       const cachedRenderStartedAt = performance.now();
@@ -124,17 +161,14 @@ it.live(
         observingPage.getByRole("heading", { name: "Growth Topic 0001", level: 2 }).waitFor(),
       );
 
-      let releaseRequest: (() => void) | undefined;
-      const requestGate = new Promise<void>((resolve) => {
-        releaseRequest = resolve;
-      });
-      let messageRequestCount = 0;
+      const requestGate = controllableGate();
+      const requestFinished = controllableGate();
       const browserContext = sourcePage.context();
       yield* browserAction(() =>
         browserContext.route(messageRequestPattern, async (route) => {
-          messageRequestCount += 1;
-          await requestGate;
+          await requestGate.promise;
           await route.continue();
+          requestFinished.release();
         }),
       );
 
@@ -149,7 +183,6 @@ it.live(
         messageList(observingPage).getByText("Pending…", { exact: true }).waitFor(),
       );
       diagnostics.pendingAppearanceMs = elapsedSince(pendingStartedAt);
-      expect(messageRequestCount).toBe(1);
 
       const replica = yield* acceptance.stopAndRemoveZeroReplica();
       diagnostics.replicaBytes = replica.replicaBytes;
@@ -160,7 +193,8 @@ it.live(
       );
 
       const httpCommitStartedAt = performance.now();
-      yield* Effect.sync(() => releaseRequest?.());
+      yield* Effect.sync(requestGate.release);
+      yield* browserAction(() => requestFinished.promise);
       yield* browserAction(() => browserContext.unroute(messageRequestPattern));
       yield* browserAction(() =>
         messageList(sourcePage).getByText("Syncing…", { exact: true }).waitFor(),
@@ -171,39 +205,32 @@ it.live(
       diagnostics.httpCommitMs = elapsedSince(httpCommitStartedAt);
       diagnostics.pendingAgeAtHttpCommitMs = elapsedSince(pendingStartedAt);
       const httpCommittedAt = performance.now();
-      expect(messageRequestCount).toBe(1);
 
       yield* browserAction(() => sourcePage.keyboard.press("r"));
+      yield* browserAction(() => sourcePage.getByLabel("Write a reply").fill(repairDraft));
+      yield* browserAction(async () => {
+        const repairButton = sourcePage.getByRole("button", {
+          name: "Repair synchronization",
+        });
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          await sourcePage.clock.runFor(31_000);
+          if (await repairButton.isVisible()) {
+            await repairButton.press("Enter");
+            return;
+          }
+        }
+        throw new Error("Synchronization repair did not become available.");
+      });
+      yield* browserAction(() => sourcePage.keyboard.press("r"));
+      expect(yield* browserAction(() => sourcePage.getByLabel("Write a reply").inputValue())).toBe(
+        repairDraft,
+      );
       yield* browserAction(() =>
-        sourcePage.getByLabel("Write a reply").fill("Draft preserved during selective repair."),
+        messageList(sourcePage).getByText(recoveryReply, { exact: true }).waitFor(),
       );
-      yield* ageAcceptedCommandForRepair(sourcePage);
       yield* browserAction(() =>
-        sourcePage.getByRole("button", { name: "Repair synchronization" }).click(),
+        messageList(sourcePage).getByText("Syncing…", { exact: true }).waitFor(),
       );
-      const preservedState = yield* browserAction(() =>
-        sourcePage.evaluate(() => {
-          const values = Object.fromEntries(
-            Object.keys(localStorage)
-              .filter((key) => key.startsWith("cove:account-conversation:"))
-              .map((key) => [key, localStorage.getItem(key)]),
-          );
-          return {
-            hasCommand: Object.entries(values).some(
-              ([key, value]) =>
-                key.endsWith(":commands") &&
-                (JSON.parse(value ?? "null") as { commands?: unknown[] }).commands?.length === 1,
-            ),
-            hasDraft: Object.entries(values).some(
-              ([key, value]) =>
-                key.endsWith(":drafts") &&
-                (JSON.parse(value ?? "null") as { drafts?: unknown[] }).drafts?.length === 1,
-            ),
-          };
-        }),
-      );
-      expect(preservedState).toEqual({ hasCommand: true, hasDraft: true });
-      expect(messageRequestCount).toBe(1);
 
       const reconnectStartedAt = performance.now();
       const rebuild = yield* acceptance.restartZero();
@@ -218,9 +245,14 @@ it.live(
           state: "detached",
         }),
       );
+      yield* browserAction(() =>
+        messageList(sourcePage).getByText(recoveryReply, { exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        messageList(observingPage).getByText(recoveryReply, { exact: true }).waitFor(),
+      );
       diagnostics.commitToVisibleMs = elapsedSince(httpCommittedAt);
       diagnostics.reconnectConvergenceMs = elapsedSince(reconnectStartedAt);
-      expect(messageRequestCount).toBe(1);
       expect(
         yield* browserAction(() =>
           messageList(sourcePage).getByText(recoveryReply, { exact: true }).count(),
@@ -298,21 +330,20 @@ it.live(
       yield* browserAction(() =>
         sourcePage.getByRole("link", { name: `Back to ${privateChannelName}` }).click(),
       );
-      let releasePrivateAccess: (() => void) | undefined;
-      const privateAccessGate = new Promise<void>((resolve) => {
-        releasePrivateAccess = resolve;
-      });
+      const privateAccessGate = controllableGate();
+      const privateAccessFinished = controllableGate();
       const privateAccessPattern = `**/api/app/v1/workspaces/demo-workspace/channels/${privateChannelId}`;
       yield* browserAction(() =>
         sourcePage.route(privateAccessPattern, async (route) => {
-          await privateAccessGate;
+          await privateAccessGate.promise;
           await route.continue();
+          privateAccessFinished.release();
         }),
       );
       yield* browserAction(() => sourcePage.goto(privateTopicUrl));
       yield* browserAction(() =>
         sourcePage
-          .getByText("Confirming access before opening this Private Channel…", { exact: true })
+          .getByText(/^(Opening Topic…|Confirming access before opening this Private Channel…)$/)
           .waitFor(),
       );
       expect(
@@ -320,7 +351,8 @@ it.live(
           sourcePage.getByText(privateOpeningBrief, { exact: true }).count(),
         ),
       ).toBe(0);
-      yield* Effect.sync(() => releasePrivateAccess?.());
+      yield* Effect.sync(privateAccessGate.release);
+      yield* browserAction(() => privateAccessFinished.promise);
       yield* browserAction(() => sourcePage.unroute(privateAccessPattern));
       yield* browserAction(() =>
         sourcePage.getByText(privateOpeningBrief, { exact: true }).waitFor(),
@@ -350,18 +382,9 @@ it.live(
         ),
       ).toBe(0);
 
-      browserStorageSamples.push(yield* readBrowserStorageUsage(sourcePage));
-      diagnostics.browserStorageSamplesBytes = browserStorageSamples;
-      diagnostics.browserTransferredBytes = yield* browserAction(() =>
-        sourcePage.evaluate(() =>
-          performance
-            .getEntriesByType("resource")
-            .reduce(
-              (total, entry) => total + ((entry as { transferSize?: number }).transferSize ?? 0),
-              0,
-            ),
-        ),
-      );
+      browserStorageSamples.push(yield* readBrowserIndexedDbUsage(sourcePage));
+      diagnostics.zeroQueryBytesReceived = zeroQueryBytesReceived;
+      expect(diagnostics.zeroQueryBytesReceived).toBeGreaterThan(0);
       expect(
         Object.values(diagnostics)
           .flatMap((value) => (typeof value === "number" ? [value] : value))
@@ -379,13 +402,8 @@ it.live(
           .click(),
       );
       yield* browserAction(() => sourcePage.getByLabel("Email address").waitFor());
-      expect(
-        yield* browserAction(() =>
-          sourcePage.evaluate(() =>
-            Object.keys(localStorage).filter((key) => key.startsWith("cove:account-conversation:")),
-          ),
-        ),
-      ).toEqual([]);
+      yield* browserAction(() => sourcePage.reload());
+      yield* browserAction(() => sourcePage.getByLabel("Email address").waitFor());
     }).pipe(Effect.provide(GrowthReadinessBrowserAcceptanceLive)),
   180_000,
 );

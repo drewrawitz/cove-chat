@@ -9,7 +9,10 @@ const postReply = (page: Page, body: string) =>
     yield* browserAction(() => page.keyboard.press("r"));
     yield* browserAction(() => page.getByLabel("Write a reply").fill(body));
     yield* browserAction(() => page.getByRole("button", { name: "Post" }).click());
-    yield* browserAction(() => page.getByText(body, { exact: true }).waitFor());
+    yield* browserAction(() =>
+      page.getByRole("list", { name: "Topic messages" }).getByText(body, { exact: true }).waitFor(),
+    );
+    yield* browserAction(() => page.getByRole("button", { name: /^Reply/ }).waitFor());
   });
 
 it.live(
@@ -65,7 +68,7 @@ it.live(
       );
       yield* browserAction(() =>
         acceptance.page
-          .getByLabel("Edit opening brief")
+          .getByRole("textbox", { name: "Edit opening brief" })
           .fill("Track the completed launch checks and their owners."),
       );
       yield* browserAction(() => acceptance.page.getByRole("button", { name: "Save" }).click());

@@ -341,7 +341,7 @@ describe("PostgreSQL migrations", () => {
         'succeeded',
         'migration-channel',
         'active-topic',
-        'active-latest',
+        'active-opening',
         1,
         '2026-07-20T14:00:00Z',
         '2026-07-20T14:00:01Z'
@@ -350,7 +350,7 @@ describe("PostgreSQL migrations", () => {
       SET produced_by_command_id = 'valid-completion'
       WHERE workspace_id = 'migration-workspace'
         AND topic_id = 'active-topic'
-        AND id = 'active-latest';
+        AND id = 'active-opening';
       DELETE FROM message_command_receipts
       WHERE workspace_id = 'migration-workspace'
         AND command_id = 'valid-completion';
@@ -364,7 +364,7 @@ describe("PostgreSQL migrations", () => {
               FROM messages
               WHERE workspace_id = 'migration-workspace'
                 AND topic_id = 'active-topic'
-                AND id = 'active-latest'
+                AND id = 'active-opening'
             ),
             '<null>'
           ),
@@ -386,7 +386,12 @@ describe("PostgreSQL migrations", () => {
             id,
             version,
             coalesce(produced_by_command_id, '<null>'),
-            coalesce(body, '<null>'),
+            coalesce(octet_length(body)::text, '<null>'),
+            CASE
+              WHEN id = 'active-latest' THEN body = repeat('é', 5000)
+              WHEN id = 'active-opening' THEN body = 'Opening'
+              ELSE body IS NULL
+            END,
             coalesce(
               to_char(deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS'),
               '<null>'
@@ -400,9 +405,9 @@ describe("PostgreSQL migrations", () => {
       `),
     ).toBe(
       [
-        "active-latest|1|<null>|" + multibyteLatestBody + "|<null>",
-        "active-opening|1|<null>|Opening|<null>",
-        "deleted-latest|1|<null>|<null>|2026-07-20T13:05:00",
+        "active-latest|1|<null>|10000|t|<null>",
+        "active-opening|1|<null>|7|t|<null>",
+        "deleted-latest|1|<null>|<null>|t|2026-07-20T13:05:00",
       ].join("\n"),
     );
     expect(

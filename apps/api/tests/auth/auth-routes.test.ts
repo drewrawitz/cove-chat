@@ -220,6 +220,7 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         expect(yield* workspacesResponse.json).toEqual({
           workspaces: [
             {
+              generalChannelId: "general",
               id: "demo-workspace",
               name: "Cove Demo",
               identity: {
@@ -472,8 +473,16 @@ layer(Api, { excludeTestServices: true, timeout: "2 minutes" })(
         expect(memberCandidates.status).toBe(200);
         expect(yield* memberCandidates.json).toMatchObject({
           members: expect.arrayContaining([
-            { id: "demo-bob-identity", name: "Bob in Cove" },
-            { id: "demo-carol-identity", name: "Carol in Cove" },
+            {
+              id: "demo-bob-identity",
+              name: "Bob in Cove",
+              avatarUrl: "/avatars/bob.svg",
+            },
+            {
+              id: "demo-carol-identity",
+              name: "Carol in Cove",
+              avatarUrl: "/avatars/carol.svg",
+            },
           ]),
         });
 

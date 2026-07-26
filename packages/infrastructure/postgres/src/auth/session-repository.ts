@@ -1,12 +1,13 @@
 import { User, type User as UserType } from "@cove/domain";
 import { CsrfTokenValue, SessionRepository, SessionTokenValue } from "@cove/ports";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { persistenceError } from "../persistence-error.ts";
 import { hashOpaqueToken, makeOpaqueToken } from "./opaque-token.ts";
 
 const FindCurrentUserRequest = Schema.Struct({
   tokenHash: Schema.String,
+  activeAt: Schema.Date,
 });
 
 interface FindCurrentUserRequest extends Schema.Schema.Type<typeof FindCurrentUserRequest> {}
@@ -16,7 +17,7 @@ const make = Effect.gen(function* () {
   const findCurrentUser = SqlSchema.findOneOption({
     Request: FindCurrentUserRequest,
     Result: User,
-    execute: ({ tokenHash }) => sql<UserType>`
+    execute: ({ activeAt, tokenHash }) => sql<UserType>`
       SELECT
         authenticated_user.id,
         authenticated_user.email,
@@ -25,7 +26,7 @@ const make = Effect.gen(function* () {
       INNER JOIN users AS authenticated_user
         ON authenticated_user.id = session.user_id
       WHERE session.token_hash = ${tokenHash}
-        AND session.expires_at > CURRENT_TIMESTAMP
+        AND session.expires_at > ${activeAt}
       LIMIT 1
     `,
   });
@@ -44,19 +45,21 @@ const make = Effect.gen(function* () {
 
       return { token, csrfToken, expiresAt };
     }),
-    findCurrentUser: Effect.fn("PostgresSessionRepository.findCurrentUser")((token) =>
-      findCurrentUser({ tokenHash: hashOpaqueToken(token) }).pipe(
+    findCurrentUser: Effect.fn("PostgresSessionRepository.findCurrentUser")(function* (token) {
+      const activeAt = new Date(yield* Clock.currentTimeMillis);
+      return yield* findCurrentUser({ activeAt, tokenHash: hashOpaqueToken(token) }).pipe(
         Effect.mapError((cause) => persistenceError("SessionRepository.findCurrentUser", cause)),
-      ),
-    ),
+      );
+    }),
     validateCsrf: Effect.fn("PostgresSessionRepository.validateCsrf")(function* (token, csrfToken) {
+      const activeAt = new Date(yield* Clock.currentTimeMillis);
       const sessions = yield* sql<{ readonly exists: boolean }>`
         SELECT EXISTS (
           SELECT 1
           FROM sessions
           WHERE token_hash = ${hashOpaqueToken(token)}
             AND csrf_token_hash = ${hashOpaqueToken(csrfToken)}
-            AND expires_at > CURRENT_TIMESTAMP
+            AND expires_at > ${activeAt}
         ) AS "exists"
       `.pipe(Effect.mapError((cause) => persistenceError("SessionRepository.validateCsrf", cause)));
 

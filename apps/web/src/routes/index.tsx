@@ -36,7 +36,7 @@ function Home(): ReactElement {
   const { left } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const account = useAuthMe({ query: { retry: false } });
+  const account = useAuthMe({ query: { retry: false, retryOnMount: false } });
   const workspaces = useWorkspacesListWorkspaces({
     query: { enabled: account.isSuccess, retry: false },
   });

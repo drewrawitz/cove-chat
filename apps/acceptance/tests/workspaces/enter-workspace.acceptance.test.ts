@@ -1,39 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { randomUUID } from "node:crypto";
-import type { Page } from "playwright";
-import {
-  BrowserAcceptance,
-  BrowserAcceptanceLive,
-  type BrowserAcceptanceService,
-} from "../support/browser-acceptance.ts";
-
-const browserAction = <A>(operation: () => Promise<A>) =>
-  Effect.tryPromise({
-    try: operation,
-    catch: (cause) => new Error("Browser action failed.", { cause }),
-  });
-
-const waitForWorkspaceChooser = (page: Page) =>
-  browserAction(async () => {
-    try {
-      await page.getByRole("heading", { name: "Choose a workspace" }).waitFor();
-    } catch (cause) {
-      const body = await page.locator("body").innerText();
-      throw new Error(`Workspace chooser did not load at ${page.url()}.\n${body}`, { cause });
-    }
-  });
-
-const signIn = (acceptance: BrowserAcceptanceService, email: string) =>
-  Effect.gen(function* () {
-    const page = acceptance.page;
-    yield* browserAction(() => page.goto(acceptance.webUrl));
-    yield* browserAction(() => page.getByLabel("Email address").fill(email));
-    yield* browserAction(() => page.getByRole("button", { name: "Send magic link" }).click());
-    const magicLink = yield* acceptance.takeMagicLink();
-    yield* browserAction(() => page.goto(magicLink));
-    yield* waitForWorkspaceChooser(page);
-  });
+import { browserAction, signIn, waitForWorkspaceChooser } from "../support/browser-actions.ts";
+import { BrowserAcceptance, BrowserAcceptanceLive } from "../support/browser-acceptance.ts";
 
 it.live(
   "signs in, enters a workspace as its workspace identity, and loses access after leaving",
@@ -205,16 +174,16 @@ it.live(
       yield* browserAction(() => page.context().clearCookies());
       yield* browserAction(() => page.goto(invitationLink));
       yield* browserAction(() => page.getByLabel("Your name").fill("New Member"));
-      yield* browserAction(() =>
-        page.getByRole("button", { name: "Create account and join workspace" }).click(),
-      );
+      yield* browserAction(() => page.getByRole("button", { name: "Accept invitation" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "New Member" }).waitFor());
 
       yield* browserAction(() => page.context().clearCookies());
       yield* signIn(acceptance, "bob@cove.local");
       yield* browserAction(() => page.getByRole("link", { name: "Enter Cove Demo" }).click());
       yield* browserAction(() => page.getByRole("heading", { name: "Full Members" }).waitFor());
-      yield* browserAction(() => page.getByLabel("Role for New Member").selectOption("admin"));
+      yield* browserAction(() =>
+        page.getByRole("combobox", { name: "Role for New Member" }).selectOption("admin"),
+      );
       yield* browserAction(() =>
         page.getByRole("button", { name: "Save role for New Member" }).click(),
       );

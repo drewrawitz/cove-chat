@@ -18,11 +18,12 @@ const topicArguments = {
 const context = { userID: "review-account" };
 
 interface QueryAst {
+  readonly alias?: string;
   readonly table: string;
   readonly limit?: number;
   readonly orderBy?: ReadonlyArray<readonly [string, "asc" | "desc"]>;
   readonly related?: ReadonlyArray<{
-    readonly subquery: { readonly alias?: string; readonly limit?: number; readonly table: string };
+    readonly subquery: QueryAst;
   }>;
 }
 
@@ -38,11 +39,20 @@ const relationships = schema.relationships as Record<
   Record<string, ReadonlyArray<Relationship>>
 >;
 
-const queryShape = (ast: QueryAst) => ({
-  table: ast.table,
-  limit: ast.limit,
-  orderBy: ast.orderBy ?? [],
-  related: (ast.related ?? []).map(({ subquery }) => {
+interface QueryShape {
+  readonly table: string;
+  readonly limit?: number;
+  readonly orderBy: ReadonlyArray<readonly [string, "asc" | "desc"]>;
+  readonly related: ReadonlyArray<
+    QueryShape & {
+      readonly alias: string;
+      readonly cardinality: "many" | "one";
+    }
+  >;
+}
+
+const queryShape = (ast: QueryAst): QueryShape => {
+  const related = (ast.related ?? []).map(({ subquery }) => {
     const alias = subquery.alias ?? subquery.table;
     const relationship = relationships[ast.table]?.[alias]?.[0];
     if (relationship === undefined) {
@@ -54,16 +64,39 @@ const queryShape = (ast: QueryAst) => ({
     if (relationship.cardinality === "many" && subquery.limit === undefined) {
       throw new Error(`Synchronized relation ${ast.table}.${alias} is unbounded.`);
     }
+    const nestedShape = queryShape(subquery);
     return {
       alias,
-      table: subquery.table,
       cardinality: relationship.cardinality,
-      limit: subquery.limit,
+      ...nestedShape,
     };
-  }),
-});
+  });
+  return {
+    table: ast.table,
+    limit: ast.limit,
+    orderBy: ast.orderBy ?? [],
+    related,
+  };
+};
 
 describe("synchronized growth and privacy review", () => {
+  it("rejects an unbounded relation nested below a bounded to-one relation", () => {
+    expect(() =>
+      queryShape({
+        table: "topic",
+        related: [
+          {
+            subquery: {
+              alias: "latestMessageAuthor",
+              table: "workspaceIdentity",
+              related: [{ subquery: { alias: "messages", table: "message" } }],
+            },
+          },
+        ],
+      }),
+    ).toThrowError("Synchronized relation workspaceIdentity.messages is unbounded.");
+  });
+
   it("keeps every reviewed table, column, named query, relation, and result bound explicit", () => {
     const synchronizedColumns = Object.fromEntries(
       Object.entries(schema.tables).map(([tableName, table]) => [
@@ -183,6 +216,8 @@ describe("synchronized growth and privacy review", () => {
             table: "workspaceIdentity",
             cardinality: "one",
             limit: undefined,
+            orderBy: [],
+            related: [],
           },
         ],
       },
@@ -202,6 +237,8 @@ describe("synchronized growth and privacy review", () => {
             table: "workspaceIdentity",
             cardinality: "one",
             limit: undefined,
+            orderBy: [],
+            related: [],
           },
         ],
       },
@@ -215,6 +252,8 @@ describe("synchronized growth and privacy review", () => {
             table: "workspaceIdentity",
             cardinality: "one",
             limit: undefined,
+            orderBy: [],
+            related: [],
           },
         ],
       },

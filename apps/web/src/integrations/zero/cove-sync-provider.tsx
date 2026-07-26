@@ -129,7 +129,10 @@ function AccountSyncProvider({
   const [accountClearFailed, setAccountClearFailed] = useState(false);
   const [zeroRecoveryState, setZeroRecoveryState] = useState<ZeroRecoveryState>("ready");
 
-  useEffect(() => () => conversationState.destroy(), [conversationState]);
+  useEffect(() => {
+    conversationState.activate();
+    return () => conversationState.destroy();
+  }, [conversationState]);
 
   const restartZero = useCallback((): void => {
     setGeneration((current) => current + 1);
@@ -307,7 +310,10 @@ function ExpiredAccountCleanup({
   const [failed, setFailed] = useState(false);
   const context = useMemo(() => ({ userID: accountId }), [accountId]);
 
-  useEffect(() => () => conversationState.destroy(), [conversationState]);
+  useEffect(() => {
+    conversationState.activate();
+    return () => conversationState.destroy();
+  }, [conversationState]);
 
   const eraseZeroCache = useCallback(
     (instance: Zero): void => {

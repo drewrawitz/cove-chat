@@ -37,10 +37,10 @@ the Zero replica is persistent while running but disposable derived state and is
 
 The console ends with one content-free diagnostic object containing samples for cached render,
 bounded cold Channel and Topic pages, pending appearance, HTTP commit, commit-to-visible,
-reconnect convergence, synchronized row counts, browser-transferred bytes, repeated browser
-storage usage, replica size, and rebuild duration. These values are directional local diagnostics,
-not benchmark percentiles, service levels, production recovery claims, or blocking timing
-thresholds. Deterministic correctness and the successful browser journey are the gate.
+reconnect convergence, synchronized row counts, repeated browser IndexedDB usage, Zero query bytes
+received, replica size, and rebuild duration. These values are directional local diagnostics, not
+benchmark percentiles, service levels, production recovery claims, or blocking timing thresholds.
+Deterministic correctness and the successful browser journey are the gate.
 
 The directional comparison points are 200 ms for cached render, 2 s for a bounded cold page, 100 ms
 for pending appearance, 1 s for an ordinary HTTP commit, 2 s for normal commit-to-visible

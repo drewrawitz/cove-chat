@@ -50,7 +50,7 @@ export const coveFetch: typeof globalThis.fetch = async (input, init) => {
     credentials: init?.credentials ?? "same-origin",
     headers,
   });
-  if (response.status === 401 && typeof window !== "undefined") {
+  if (response.status === 401 && csrfToken !== undefined && typeof window !== "undefined") {
     window.dispatchEvent(new Event(COVE_INVALID_SESSION_EVENT));
   }
   return response;

@@ -568,7 +568,7 @@ describe("authorized Topic synchronization", () => {
         kvStore: "mem",
         queryHeaders: { authorization: "Bearer sync-alice" },
         schema,
-        userID: `sync-alice-pages-${replyCount}`,
+        userID: "sync-alice",
       });
       const scope = {
         workspaceId: "sync-workspace",

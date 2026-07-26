@@ -89,6 +89,19 @@ describe("Account conversation state", () => {
     expect(readActiveConversationAccountId(storage)).toBeUndefined();
   });
 
+  it("reactivates cross-tab coordination after a React Strict Mode lifecycle cleanup", () => {
+    const storage = new MemoryStorage();
+    const store = makeStore("alice", storage);
+    store.writeDraft(scope, "Private draft");
+
+    store.destroy();
+    store.activate();
+    store.clearAccount();
+
+    expect(store.readDraft(scope)).toBe("");
+    expect(readActiveConversationAccountId(storage)).toBeUndefined();
+  });
+
   it("expires drafts lazily after 30 days without editing", () => {
     let currentTime = Date.parse("2026-07-01T00:00:00.000Z");
     const store = makeStore("alice", new MemoryStorage(), new BroadcastHub(), () => currentTime);

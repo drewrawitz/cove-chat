@@ -680,7 +680,13 @@ layer(TestPostgres, { timeout: "2 minutes" })("Workspace Membership administrati
           },
         ]),
       );
-      expect(auditEvents).toHaveLength(2);
+      expect(
+        auditEvents.filter(({ eventType }) => eventType === "workspace.member_invited"),
+      ).toHaveLength(2);
+      expect(
+        auditEvents.filter(({ eventType }) => eventType === "workspace.invitation_accepted"),
+      ).toHaveLength(1);
+      expect(auditEvents).toHaveLength(3);
     }),
   );
 
