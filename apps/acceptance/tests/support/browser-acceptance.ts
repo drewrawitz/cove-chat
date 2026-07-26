@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { lstat, mkdtemp, realpath, rm } from "node:fs/promises";
+import { lstat, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -17,6 +17,12 @@ const prismaExecutable = join(dbPackageDirectory, "node_modules/.bin/prisma");
 const zeroCacheExecutable = join(acceptanceDirectory, "node_modules/.bin/zero-cache-dev");
 const webDirectory = join(repositoryDirectory, "apps/web");
 const webExecutable = join(webDirectory, "node_modules/.bin/vp");
+const expectedZeroReplicaFiles = new Set(
+  ["zero.db", "zero.db-serving-copy"].flatMap((file) =>
+    ["", "-wal", "-wal2", "-shm", "-journal"].map((suffix) => `${file}${suffix}`),
+  ),
+);
+const processOutputTailLength = 2_000;
 
 interface ProcessSpec {
   readonly args: ReadonlyArray<string>;
@@ -189,21 +195,40 @@ const removeConfiguredZeroReplica = Effect.fn("BrowserAcceptance.removeConfigure
   (replicaDirectory: string, replicaFile: string) =>
     Effect.tryPromise({
       try: async () => {
-        const [configuredDirectory, targetDirectory, file] = await Promise.all([
-          realpath(replicaDirectory),
-          realpath(dirname(replicaFile)),
-          lstat(replicaFile),
-        ]);
+        const [configuredDirectory, targetDirectory, configuredFile, directoryEntries] =
+          await Promise.all([
+            realpath(replicaDirectory),
+            realpath(dirname(replicaFile)),
+            lstat(replicaFile),
+            readdir(replicaDirectory),
+          ]);
         if (
           configuredDirectory !== targetDirectory ||
           basename(replicaFile) !== "zero.db" ||
-          file.isSymbolicLink() ||
-          !file.isFile()
+          configuredFile.isSymbolicLink() ||
+          !configuredFile.isFile()
         ) {
           throw new Error("Configured Zero replica target is not the expected regular file.");
         }
-        const replicaBytes = file.size;
-        await rm(replicaFile);
+
+        const replicaFiles = await Promise.all(
+          directoryEntries
+            .filter((entry) => expectedZeroReplicaFiles.has(entry))
+            .map(async (entry) => {
+              const candidate = join(configuredDirectory, entry);
+              const file = await lstat(candidate);
+              if (
+                dirname(candidate) !== configuredDirectory ||
+                file.isSymbolicLink() ||
+                !file.isFile()
+              ) {
+                throw new Error(`Zero replica companion ${entry} is not an expected regular file.`);
+              }
+              return { candidate, size: file.size };
+            }),
+        );
+        const replicaBytes = replicaFiles.reduce((total, file) => total + file.size, 0);
+        await Promise.all(replicaFiles.map(({ candidate }) => rm(candidate)));
         return { replicaBytes };
       },
       catch: (cause) =>
@@ -245,8 +270,19 @@ const waitForServer = Effect.fn("BrowserAcceptance.waitForServer")(
           (total, chunk) => total + chunk.split("\n").length - 1,
           0,
         );
+        const outputTail = processOutput
+          .join("")
+          .slice(-processOutputTailLength * 2)
+          .replaceAll(String.fromCharCode(27), "")
+          .replace(/("(?:body|draft|email|message|token|userID)"\s*:\s*")[^"]*"/gi, '$1[redacted]"')
+          .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
+          .replace(/([?&](?:token|code)=)[^&\s]+/gi, "$1[redacted]")
+          .slice(-processOutputTailLength)
+          .trim();
+        const outputContext =
+          outputTail === "" ? "" : `\nTruncated process-output tail:\n${outputTail}`;
         return new Error(
-          `Waiting for ${new URL(url).origin} failed after ${outputLineCount} process-output lines.`,
+          `Waiting for ${new URL(url).origin} failed after ${outputLineCount} process-output lines.${outputContext}`,
           { cause },
         );
       }),

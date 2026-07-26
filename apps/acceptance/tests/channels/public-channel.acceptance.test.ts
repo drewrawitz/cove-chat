@@ -175,14 +175,17 @@ it.live(
           );
         }),
       );
-      expect(
-        yield* browserAction(() => page.getByText("Product Lab", { exact: true }).count()),
-      ).toBe(0);
-      expect(
-        yield* browserAction(() =>
-          page.getByText("A durable place to explore and maintain product experiments.").count(),
-        ),
-      ).toBe(0);
+      yield* browserAction(() =>
+        page.getByRole("heading", { name: "General", exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        page.getByText("Product Lab", { exact: true }).waitFor({ state: "hidden" }),
+      );
+      yield* browserAction(() =>
+        page
+          .getByText("A durable place to explore and maintain product experiments.")
+          .waitFor({ state: "hidden" }),
+      );
 
       yield* browserAction(() => page.context().clearCookies());
       yield* signIn(acceptance, "carol@cove.local");

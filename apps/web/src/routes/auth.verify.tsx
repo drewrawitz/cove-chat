@@ -26,6 +26,9 @@ function VerifyMagicLink() {
   const queryClient = useQueryClient();
   const verify = useAuthVerifyMagicLink({
     mutation: {
+      onError: () => {
+        if (token !== undefined) attemptedMagicLinkTokens.delete(token);
+      },
       onSuccess: async () => {
         await Promise.all([
           invalidateAuthMe(queryClient),

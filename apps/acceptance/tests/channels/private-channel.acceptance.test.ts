@@ -126,16 +126,19 @@ it.live(
         ),
       );
       yield* browserAction(() => page.waitForURL("**/workspaces/demo-workspace/channels/general"));
-      expect(
-        yield* browserAction(() =>
-          page.getByRole("heading", { name: "Compensation", exact: true }).count(),
-        ),
-      ).toBe(0);
-      expect(
-        yield* browserAction(() =>
-          page.getByText("Discuss private compensation decisions.", { exact: true }).count(),
-        ),
-      ).toBe(0);
+      yield* browserAction(() =>
+        page.getByRole("heading", { name: "General", exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        page
+          .getByRole("heading", { name: "Compensation", exact: true })
+          .waitFor({ state: "hidden" }),
+      );
+      yield* browserAction(() =>
+        page
+          .getByText("Discuss private compensation decisions.", { exact: true })
+          .waitFor({ state: "hidden" }),
+      );
       yield* browserAction(() => page.goto(`${acceptance.webUrl}/workspaces/demo-workspace`));
       yield* browserAction(() => administration.waitFor());
       yield* browserAction(() =>
