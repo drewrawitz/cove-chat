@@ -1,4 +1,11 @@
-import { createContext, useEffect, type ReactNode, useContext, useSyncExternalStore } from "react";
+import {
+  createContext,
+  useEffect,
+  type ReactNode,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import type {
   AccountConversationSnapshot,
   AccountConversationState,
@@ -28,6 +35,8 @@ interface AccountConversationStateProviderProps {
 
 const AccountConversationContext = createContext<AccountConversationRuntime | undefined>(undefined);
 const RECEIPT_CHECK_DELAY_MS = 10_000;
+const noAccountCleanup = async (): Promise<void> => undefined;
+const ignoreZeroStorageFailure = (): void => undefined;
 
 function DelayedCommandReconciliation({
   restartZero,
@@ -103,24 +112,34 @@ function DelayedCommandReconciliation({
 
 export function AccountConversationStateProvider({
   children,
-  clearAccountConversationState = async () => undefined,
+  clearAccountConversationState = noAccountCleanup,
   repairZeroCache,
-  reportZeroStorageFailure = () => undefined,
+  reportZeroStorageFailure = ignoreZeroStorageFailure,
   restartZero,
   state,
   zeroRecoveryState = "ready",
 }: AccountConversationStateProviderProps): ReactNode {
+  const runtime = useMemo(
+    () => ({
+      state,
+      clearAccountConversationState,
+      repairZeroCache,
+      reportZeroStorageFailure,
+      restartZero,
+      zeroRecoveryState,
+    }),
+    [
+      clearAccountConversationState,
+      repairZeroCache,
+      reportZeroStorageFailure,
+      restartZero,
+      state,
+      zeroRecoveryState,
+    ],
+  );
+
   return (
-    <AccountConversationContext
-      value={{
-        state,
-        clearAccountConversationState,
-        repairZeroCache,
-        reportZeroStorageFailure,
-        restartZero,
-        zeroRecoveryState,
-      }}
-    >
+    <AccountConversationContext value={runtime}>
       <DelayedCommandReconciliation restartZero={restartZero} state={state} />
       {children}
     </AccountConversationContext>

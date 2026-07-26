@@ -1,7 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
-import { useAccountConversationRuntime } from "./account-conversation-state-context.tsx";
+import { useCallback, useEffect, useRef } from "react";
+import {
+  useAccountConversationRuntime,
+  useAccountConversationSnapshot,
+} from "./account-conversation-state-context.tsx";
 import { getChannelsGetChannelQueryKey } from "./api/generated/cove-app.ts";
 import {
   authoritativeChannelAccessState,
@@ -38,7 +41,9 @@ export function usePrivateChannelRouteAccess({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { state: conversationState } = useAccountConversationRuntime();
-  const [cleanupFailed, setCleanupFailed] = useState(false);
+  const conversationSnapshot = useAccountConversationSnapshot();
+  const cleanupFailureScope = useRef<string | undefined>(undefined);
+  const cleanupScope = `${workspaceId}:${channelId}`;
   const refreshAuthoritativeAccess = useCallback(
     () => Promise.all([workspace.refetch(), channel.refetch()]),
     [channel.refetch, workspace.refetch],
@@ -47,9 +52,9 @@ export function usePrivateChannelRouteAccess({
   const onRevoked = useCallback((): void => {
     try {
       conversationState.clearChannelDrafts(workspaceId, channelId);
-      setCleanupFailed(false);
+      cleanupFailureScope.current = undefined;
     } catch {
-      setCleanupFailed(true);
+      cleanupFailureScope.current = cleanupScope;
       return;
     }
     queryClient.removeQueries({
@@ -64,7 +69,15 @@ export function usePrivateChannelRouteAccess({
       params: { workspaceId, channelId: generalChannelId },
       replace: true,
     });
-  }, [channelId, conversationState, generalChannelId, navigate, queryClient, workspaceId]);
+  }, [
+    channelId,
+    cleanupScope,
+    conversationState,
+    generalChannelId,
+    navigate,
+    queryClient,
+    workspaceId,
+  ]);
   const workspaceAccess = authoritativeChannelAccessState({
     error: workspace.error,
     isFetching: workspace.isFetching,
@@ -89,6 +102,9 @@ export function usePrivateChannelRouteAccess({
   useEffect(() => {
     if (authoritativeAccessLost && state !== "revoked") onRevoked();
   }, [authoritativeAccessLost, onRevoked, state]);
+  const cleanupFailed =
+    conversationSnapshot.storageHealth === "unavailable" &&
+    cleanupFailureScope.current === cleanupScope;
 
   return {
     state: cleanupFailed ? "cleanup-required" : state,
