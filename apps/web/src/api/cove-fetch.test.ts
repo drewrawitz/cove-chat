@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vite-plus/test";
 import { authLogin, authVerifyMagicLink, workspacesEndMembership } from "./generated/cove-app.ts";
-import { CoveApiError, coveFetch } from "./cove-fetch.ts";
+import { COVE_INVALID_SESSION_EVENT, CoveApiError, coveFetch } from "./cove-fetch.ts";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -53,6 +53,22 @@ describe("Cove API transport", () => {
         status: 500,
       });
     }
+  });
+
+  it("reports an invalid browser session without consuming the unauthorized response", async () => {
+    const browserWindow = new EventTarget();
+    const invalidSession = vi.fn();
+    browserWindow.addEventListener(COVE_INVALID_SESSION_EVENT, invalidSession);
+    vi.stubGlobal("window", browserWindow);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.resolve(new Response(null, { status: 401 }))),
+    );
+
+    const response = await coveFetch("/api/app/v1/auth/me");
+
+    expect(response.status).toBe(401);
+    expect(invalidSession).toHaveBeenCalledOnce();
   });
 
   it("decodes an error declared by the requested operation", async () => {

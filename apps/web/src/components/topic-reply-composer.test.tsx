@@ -110,6 +110,27 @@ test("validates the 8 KiB reply limit before submission", () => {
   expect(reply.validationMessage).toContain("8 KiB");
 });
 
+test("keeps an oversized controlled draft editable when persistence rejects it", () => {
+  const oversizedDraft = "é".repeat(4_097);
+  render(
+    <TopicReplyComposer
+      draft=""
+      identity={identity}
+      onDraftChange={() => {
+        throw new RangeError("Messages are limited to 8 KiB.");
+      }}
+      onPost={vi.fn()}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /Reply/ }));
+  const reply = screen.getByLabelText("Write a reply") as HTMLTextAreaElement;
+  fireEvent.change(reply, { target: { value: oversizedDraft } });
+
+  expect(reply.value).toBe(oversizedDraft);
+  expect(reply.validationMessage).toContain("8 KiB");
+});
+
 test.each([
   { shortcut: "Command", modifier: { metaKey: true } },
   { shortcut: "Control", modifier: { ctrlKey: true } },

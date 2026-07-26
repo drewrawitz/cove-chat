@@ -17,9 +17,12 @@ interface ReplyIdentity {
 }
 
 interface TopicReplyComposerProps {
+  readonly canPost?: boolean;
+  readonly draft?: string;
   readonly hasError?: boolean;
   readonly identity: ReplyIdentity;
   readonly isPending?: boolean;
+  readonly onDraftChange?: (draft: string) => void;
   readonly onPost: (body: string) => Promise<void>;
 }
 
@@ -38,16 +41,28 @@ const isEditableTarget = (target: EventTarget | null): boolean => {
 };
 
 export function TopicReplyComposer({
+  canPost = true,
+  draft: controlledDraft,
   hasError = false,
   identity,
   isPending = false,
+  onDraftChange,
   onPost,
 }: TopicReplyComposerProps): ReactElement {
   const textarea = useRef<HTMLTextAreaElement>(null);
-  const [draft, setDraft] = useState("");
+  const [localDraft, setLocalDraft] = useState(controlledDraft ?? "");
   const [isExpanded, setIsExpanded] = useState(false);
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const draft = localDraft;
+  const setDraft = (value: string): void => {
+    setLocalDraft(value);
+    try {
+      onDraftChange?.(value);
+    } catch {
+      // Keep invalid in-progress text local while the durable draft stays at its last valid value.
+    }
+  };
   const isBusy = isPending || isSubmitting;
   const hasDraft = draft.trim().length > 0;
 
@@ -56,6 +71,10 @@ export function TopicReplyComposer({
       textarea.current?.focus();
     }
   }, [isExpanded]);
+
+  useEffect(() => {
+    if (controlledDraft !== undefined) setLocalDraft(controlledDraft);
+  }, [controlledDraft]);
 
   useEffect(() => {
     const expandFromKeyboard = (event: KeyboardEvent): void => {
@@ -96,7 +115,7 @@ export function TopicReplyComposer({
 
   const post = async (): Promise<void> => {
     const body = draft.trim();
-    if (body.length === 0 || isBusy) {
+    if (body.length === 0 || isBusy || !canPost) {
       return;
     }
     const input = textarea.current;
@@ -174,7 +193,7 @@ export function TopicReplyComposer({
                 >
                   Discard
                 </Button>
-                <Button type="submit" size="lg" disabled={isBusy || !hasDraft}>
+                <Button type="submit" size="lg" disabled={isBusy || !hasDraft || !canPost}>
                   {isBusy ? "Posting…" : "Post"}
                 </Button>
               </div>

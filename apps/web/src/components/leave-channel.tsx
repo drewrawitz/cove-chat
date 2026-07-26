@@ -12,6 +12,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactElement, useState } from "react";
+import { useAccountConversationRuntime } from "../account-conversation-state-context.tsx";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import {
   getChannelsGetChannelMembershipRosterQueryKey,
@@ -39,14 +40,43 @@ export function LeaveChannel({
   workspaceId,
 }: LeaveChannelProps): ReactElement {
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [draftCleanupFailed, setDraftCleanupFailed] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { state: conversationState } = useAccountConversationRuntime();
   const leaveChannel = useChannelsLeaveChannel();
 
   const setOpen = (open: boolean): void => {
     if (leaveChannel.isPending) return;
+    if (draftCleanupFailed && !open) return;
     if (open) leaveChannel.reset();
     setDialogOpen(open);
+  };
+
+  const finishAccessLoss = async (): Promise<void> => {
+    try {
+      conversationState.clearChannelDrafts(workspaceId, channelId);
+    } catch {
+      setDraftCleanupFailed(true);
+      setDialogOpen(true);
+      return;
+    }
+    setDraftCleanupFailed(false);
+    setDialogOpen(false);
+    await navigate(
+      visibility === "private"
+        ? {
+            to: "/workspaces/$workspaceId/channels/$channelId",
+            params: { workspaceId, channelId: generalChannelId },
+          }
+        : {
+            to: "/workspaces/$workspaceId",
+            params: { workspaceId },
+          },
+    );
+    queryClient.removeQueries({
+      queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
+    });
   };
 
   const leave = (): void => {
@@ -54,7 +84,6 @@ export function LeaveChannel({
       { workspaceId, channelId },
       {
         onSuccess: async () => {
-          setDialogOpen(false);
           await Promise.all([
             queryClient.invalidateQueries({
               queryKey: getChannelsListPublicChannelsQueryKey(workspaceId),
@@ -67,28 +96,12 @@ export function LeaveChannel({
             }),
           ]);
 
-          if (visibility === "private") {
-            await navigate({
-              to: "/workspaces/$workspaceId/channels/$channelId",
-              params: { workspaceId, channelId: generalChannelId },
-            });
-            queryClient.removeQueries({
-              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
-            });
+          if (visibility === "private" || willLoseAccess) {
+            await finishAccessLoss();
             return;
           }
 
-          if (willLoseAccess) {
-            await navigate({
-              to: "/workspaces/$workspaceId",
-              params: { workspaceId },
-            });
-            queryClient.removeQueries({
-              queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
-            });
-            return;
-          }
-
+          setDialogOpen(false);
           await queryClient.invalidateQueries({
             queryKey: getChannelsGetChannelQueryKey(workspaceId, channelId),
           });
@@ -120,18 +133,30 @@ export function LeaveChannel({
             </p>
           ) : null}
 
+          {draftCleanupFailed ? (
+            <p className="px-6 pt-6 text-sm text-destructive sm:px-8" role="alert">
+              Cove could not remove this Channel’s saved drafts from this browser.
+            </p>
+          ) : null}
+
           <footer className="flex justify-end gap-3 p-6 sm:px-8">
-            <DialogClose className={buttonVariants({ variant: "secondary", size: "lg" })}>
-              Keep channel
-            </DialogClose>
+            {draftCleanupFailed ? null : (
+              <DialogClose className={buttonVariants({ variant: "secondary", size: "lg" })}>
+                Keep channel
+              </DialogClose>
+            )}
             <Button
               type="button"
               size="lg"
               variant="destructive"
               disabled={leaveChannel.isPending}
-              onClick={leave}
+              onClick={draftCleanupFailed ? () => void finishAccessLoss() : leave}
             >
-              {leaveChannel.isPending ? "Leaving…" : "Leave channel"}
+              {draftCleanupFailed
+                ? "Retry removing saved drafts"
+                : leaveChannel.isPending
+                  ? "Leaving…"
+                  : "Leave channel"}
             </Button>
           </footer>
         </DialogPopup>

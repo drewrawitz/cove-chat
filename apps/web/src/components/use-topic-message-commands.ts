@@ -1,4 +1,9 @@
-import { type FormEvent, useEffect, useMemo, useReducer, useRef } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { AccountConversationStorageUnavailableError } from "../account-conversation-state.ts";
+import {
+  useAccountConversationRuntime,
+  useAccountConversationSnapshot,
+} from "../account-conversation-state-context.tsx";
 import {
   useTopicsAddMessage,
   useTopicsDeleteMessage,
@@ -7,13 +12,12 @@ import {
 import { CoveApiError } from "../api/cove-fetch.ts";
 import { requiredFormValue } from "../form-data.ts";
 import {
-  emptyMessageCommandOverlay,
-  messageCommandOverlay,
   overlayTopicMessages,
   type MessageCommandRejection,
   type OverlayMessageCommand,
   type OverlayTopicMessage,
 } from "../message-command-overlay.ts";
+import { useSnackbar } from "./snackbar.tsx";
 
 interface TopicMessageCommandOptions {
   readonly channelId: string;
@@ -60,15 +64,55 @@ export function useTopicMessageCommands({
   const editMutation = useTopicsEditMessage();
   const deleteMutation = useTopicsDeleteMessage();
   const scrollAfterMessageId = useRef<string | undefined>(undefined);
-  const [overlay, dispatchOverlay] = useReducer(messageCommandOverlay, emptyMessageCommandOverlay);
+  const {
+    repairZeroCache,
+    state: conversationState,
+    zeroRecoveryState,
+  } = useAccountConversationRuntime();
+  const conversationSnapshot = useAccountConversationSnapshot();
+  const { showSnackbar } = useSnackbar();
+  const [clock, setClock] = useState(Date.now());
+  const scope = useMemo(
+    () => ({ workspaceId, channelId, topicId }),
+    [channelId, topicId, workspaceId],
+  );
+  const overlay = useMemo(
+    () => ({
+      commands: conversationSnapshot.commands.filter(
+        (command) =>
+          command.workspaceId === scope.workspaceId &&
+          command.channelId === scope.channelId &&
+          command.topicId === scope.topicId,
+      ),
+      reconciledCommandIds: [],
+    }),
+    [conversationSnapshot.commands, scope],
+  );
   const projectedMessages = useMemo(
     () => overlayTopicMessages(messages, overlay),
     [messages, overlay],
   );
+  const conversationStorageAvailable = conversationSnapshot.storageHealth !== "unavailable";
 
   useEffect(() => {
-    dispatchOverlay({ type: "synchronized", messages });
-  }, [messages]);
+    conversationState.reconcileCommands(
+      messages.flatMap(({ producedByCommandId }) =>
+        producedByCommandId === undefined ? [] : [producedByCommandId],
+      ),
+    );
+  }, [conversationState, messages]);
+
+  useEffect(() => {
+    const nextRepairAt = overlay.commands.reduce<number | undefined>((earliest, command) => {
+      if (command.phase !== "syncing" || command.acceptedAt === undefined) return earliest;
+      const repairAt = Date.parse(command.acceptedAt) + 30_000;
+      if (repairAt <= clock) return earliest;
+      return earliest === undefined ? repairAt : Math.min(earliest, repairAt);
+    }, undefined);
+    if (nextRepairAt === undefined) return;
+    const timer = window.setTimeout(() => setClock(Date.now()), nextRepairAt - clock);
+    return () => window.clearTimeout(timer);
+  }, [clock, overlay.commands]);
 
   const send = async (
     command: OverlayMessageCommand,
@@ -109,15 +153,15 @@ export function useTopicMessageCommands({
           });
           break;
       }
-      dispatchOverlay({ type: "accepted", commandId: command.commandId });
+      conversationState.markCommandAccepted(command.commandId);
       return "accepted";
     } catch (error) {
       const reason = rejectionFor(error);
       if (reason === undefined) {
-        dispatchOverlay({ type: "uncertain", commandId: command.commandId });
+        conversationState.markCommandUncertain(command.commandId);
         return "uncertain";
       }
-      dispatchOverlay({ type: "rejected", commandId: command.commandId, reason });
+      conversationState.markCommandRejected(command.commandId, reason);
       return "rejected";
     }
   };
@@ -129,9 +173,13 @@ export function useTopicMessageCommands({
         command.kind === kind &&
         (messageId === undefined || ("messageId" in command && command.messageId === messageId))
       ) {
-        dispatchOverlay({ type: "dismissed", commandId: command.commandId });
+        conversationState.dismissCommand(command.commandId);
       }
     }
+  };
+  const handleCommandStorageError = (error: unknown): void => {
+    if (!(error instanceof AccountConversationStorageUnavailableError)) throw error;
+    showSnackbar("Browser storage is unavailable. Cove could not save this change.");
   };
 
   const add = async (body: string): Promise<void> => {
@@ -146,15 +194,21 @@ export function useTopicMessageCommands({
       phase: "pending",
     };
     scrollAfterMessageId.current = `optimistic-${commandId}`;
-    dispatchOverlay({ type: "started", command });
-    if ((await send(command)) === "rejected") {
+    try {
+      conversationState.startCommand(scope, command);
+    } catch (error) {
       scrollAfterMessageId.current = undefined;
-      throw new Error("Message command was rejected.");
+      throw error;
+    }
+    if ((await send(command)) !== "accepted") {
+      scrollAfterMessageId.current = undefined;
+      throw new Error("Message command was not accepted.");
     }
   };
 
   const edit = (event: FormEvent<HTMLFormElement>, message: OverlayTopicMessage): void => {
     event.preventDefault();
+    if (!conversationStorageAvailable) return;
     const form = new FormData(event.currentTarget);
     dismissRejected("edit", message.id);
     const command: OverlayMessageCommand = {
@@ -165,11 +219,17 @@ export function useTopicMessageCommands({
       body: requiredFormValue(form, "messageBody"),
       phase: "pending",
     };
-    dispatchOverlay({ type: "started", command });
+    try {
+      conversationState.startCommand(scope, command);
+    } catch (error) {
+      handleCommandStorageError(error);
+      return;
+    }
     void send(command);
   };
 
   const remove = (message: OverlayTopicMessage): void => {
+    if (!conversationStorageAvailable) return;
     dismissRejected("delete", message.id);
     const command: OverlayMessageCommand = {
       kind: "delete",
@@ -178,17 +238,23 @@ export function useTopicMessageCommands({
       expectedVersion: message.version,
       phase: "pending",
     };
-    dispatchOverlay({ type: "started", command });
+    try {
+      conversationState.startCommand(scope, command);
+    } catch (error) {
+      handleCommandStorageError(error);
+      return;
+    }
     void send(command);
   };
 
   const retry = (command: OverlayMessageCommand): void => {
-    dispatchOverlay({ type: "retried", commandId: command.commandId });
+    if (!conversationStorageAvailable || !conversationState.ownsCommand(command.commandId)) return;
+    if (!conversationState.markCommandRetried(command.commandId)) return;
     void send(command);
   };
 
   const dismiss = (commandId: string): void => {
-    dispatchOverlay({ type: "dismissed", commandId });
+    conversationState.dismissCommand(commandId);
   };
 
   const isMessageMutationPending = (messageId: string): boolean =>
@@ -205,8 +271,23 @@ export function useTopicMessageCommands({
         command.kind === "edit" && command.messageId === messageId && command.phase === "pending",
     );
 
+  const canRepairSynchronization = (commandId: string): boolean =>
+    overlay.commands.some(
+      (command) =>
+        command.commandId === commandId &&
+        command.phase === "syncing" &&
+        command.acceptedAt !== undefined &&
+        clock - Date.parse(command.acceptedAt) >= 30_000,
+    );
+  const canRetryCommand = (commandId: string): boolean =>
+    conversationStorageAvailable && conversationState.ownsCommand(commandId);
+
   return {
     add,
+    canRepairSynchronization,
+    canRetryCommand,
+    clearDraft: () => conversationState.clearDraft(scope),
+    conversationStorageAvailable,
     deleteMutation,
     dismiss,
     edit,
@@ -214,9 +295,19 @@ export function useTopicMessageCommands({
     isMessageEditSaving,
     isMessageMutationPending,
     overlay,
+    draft:
+      conversationSnapshot.drafts.find(
+        (draft) =>
+          draft.workspaceId === scope.workspaceId &&
+          draft.channelId === scope.channelId &&
+          draft.topicId === scope.topicId,
+      )?.body ?? "",
     projectedMessages,
     remove,
+    repairSynchronization: () => void repairZeroCache(),
     retry,
+    setDraft: (draft: string) => conversationState.writeDraft(scope, draft),
     scrollAfterMessageId,
+    zeroRecoveryState,
   };
 }

@@ -21,6 +21,7 @@ import {
 import { channelDisplayName } from "../channel-display-name.ts";
 import { ChannelLoading } from "../components/channel-loading.tsx";
 import { PageMessage } from "../components/page-message.tsx";
+import { PrivateChannelStatusMessage } from "../components/private-channel-status-message.tsx";
 import { ChannelMembership } from "../components/channel-membership.tsx";
 import { LeaveChannel } from "../components/leave-channel.tsx";
 import { ConversationShell } from "../components/conversation-shell.tsx";
@@ -38,6 +39,7 @@ import {
 } from "../topic-sync.ts";
 import { isWorkspaceAdministrator } from "../workspace-role.ts";
 import { topicIntentLabel } from "../topic-intent.ts";
+import { usePrivateChannelRouteAccess } from "../use-private-channel-route-access.ts";
 
 export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channelId/")({
   component: ChannelPage,
@@ -50,9 +52,11 @@ export const Route = createFileRoute("/workspaces/$workspaceId/channels/$channel
 function ChannelPage(): ReactElement {
   const { workspaceId, channelId } = Route.useParams();
   const account = useAuthMe({ query: { retry: false } });
-  const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
+  const workspace = useWorkspacesGetWorkspace(workspaceId, {
+    query: { retry: false, refetchOnMount: "always", refetchOnReconnect: "always" },
+  });
   const channel = useChannelsGetChannel(workspaceId, channelId, {
-    query: { retry: false },
+    query: { retry: false, refetchOnMount: "always", refetchOnReconnect: "always" },
   });
   const joinChannelMutation = useChannelsJoinPublicChannel();
   const [liveTopicLimit, setLiveTopicLimit] = useState<ChannelTopicLiveLimit>(
@@ -78,12 +82,27 @@ function ChannelPage(): ReactElement {
     ],
     successMessage: (channelName) => `You joined ${channelName}.`,
   });
+  const privateAccess = usePrivateChannelRouteAccess({
+    channel,
+    channelId,
+    workspace,
+    workspaceId,
+  });
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
   }
   if (account.isError) {
     return <PageMessage message="Cove could not load your account." theme="dark" />;
+  }
+  if (privateAccess.state === "cleanup-required") {
+    return (
+      <PageMessage message="Cove could not remove saved drafts for this Channel." theme="dark">
+        <Button className="mt-4" type="button" size="sm" onClick={privateAccess.retryCleanup}>
+          Retry removing saved drafts
+        </Button>
+      </PageMessage>
+    );
   }
   if (workspace.isError) {
     return (
@@ -158,6 +177,15 @@ function ChannelPage(): ReactElement {
         >
           Return to workspace management
         </Link>
+      </div>
+    );
+  } else if (channel.data.visibility === "private" && privateAccess.state !== "available") {
+    channelContent = (
+      <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-12 lg:pt-24 xl:px-16">
+        <PrivateChannelStatusMessage
+          retryAccessCheck={privateAccess.retryAccessCheck}
+          state={privateAccess.state}
+        />
       </div>
     );
   } else {
@@ -280,7 +308,9 @@ function ChannelPage(): ReactElement {
       accountEmail={account.data.email}
       activeChannelId={channelId}
       busy={
-        channel.isPending || (synchronizedTopicsResult.type === "unknown" && topics.length === 0)
+        channel.isPending ||
+        (channel.data?.visibility === "private" && privateAccess.state !== "available") ||
+        (synchronizedTopicsResult.type === "unknown" && topics.length === 0)
       }
       identityName={workspace.data.identity.name}
       workspaceId={workspaceId}
