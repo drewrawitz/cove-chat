@@ -1,6 +1,7 @@
 import { PgClient } from "@effect/sql-pg";
 import { Config, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import { realpathSync } from "node:fs";
 
 export const seedDemo = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -66,11 +67,15 @@ export const seedDemo = Effect.gen(function* () {
   `;
 });
 
-export const seedConfiguredDatabase = Effect.gen(function* () {
-  const databaseUrl = yield* Config.redacted("DATABASE_URL");
-  yield* seedDemo.pipe(Effect.provide(PgClient.layer({ url: databaseUrl })));
-});
+export const seedConfiguredDatabase = <A, E>(seed: Effect.Effect<A, E, SqlClient.SqlClient>) =>
+  Effect.gen(function* () {
+    const databaseUrl = yield* Config.redacted("DATABASE_URL");
+    return yield* seed.pipe(Effect.provide(PgClient.layer({ url: databaseUrl })));
+  });
 
-if (process.argv[1] === import.meta.filename) {
-  await Effect.runPromise(seedConfiguredDatabase);
+if (
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(import.meta.filename)
+) {
+  await Effect.runPromise(seedConfiguredDatabase(seedDemo));
 }

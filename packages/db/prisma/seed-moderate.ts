@@ -1,7 +1,19 @@
-import { PgClient } from "@effect/sql-pg";
-import { Config, Effect } from "effect";
+import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { seedDemo } from "./seed.ts";
+import {
+  MODERATE_ADDITIONAL_CHANNEL_COUNT,
+  MODERATE_CHANNEL_COUNT,
+  MODERATE_DEFAULT_TOPIC_MESSAGE_COUNT,
+  MODERATE_HIGH_MESSAGE_TOPIC_COUNT,
+  MODERATE_HIGH_MESSAGE_TOPIC_MESSAGE_COUNT,
+  MODERATE_LONG_TOPIC_REPLY_COUNT,
+  MODERATE_LONG_TOPIC_MESSAGE_COUNT,
+  MODERATE_MESSAGE_COUNT,
+  MODERATE_TOPIC_COUNT,
+} from "./moderate-fixture.ts";
+import { seedConfiguredDatabase, seedDemo } from "./seed.ts";
+
+export * from "./moderate-fixture.ts";
 
 const moderateSeed = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -27,7 +39,7 @@ const moderateSeed = Effect.gen(function* () {
       CASE WHEN channel_number = 1 THEN 'private'::"ChannelVisibility" ELSE 'public'::"ChannelVisibility" END,
       'demo-bob-identity',
       timestamptz '2026-01-01T00:00:00Z' + make_interval(mins => channel_number)
-    FROM generate_series(1, 19) AS channel_number
+    FROM generate_series(1, ${MODERATE_ADDITIONAL_CHANNEL_COUNT}::int) AS channel_number
     ON CONFLICT (workspace_id, id) DO UPDATE
     SET
       name = EXCLUDED.name,
@@ -43,17 +55,22 @@ const moderateSeed = Effect.gen(function* () {
       'moderate-channel-' || lpad(channel_number::text, 2, '0'),
       'demo-bob-identity',
       timestamptz '2026-01-01T00:00:00Z' + make_interval(mins => channel_number)
-    FROM generate_series(1, 19) AS channel_number
+    FROM generate_series(1, ${MODERATE_ADDITIONAL_CHANNEL_COUNT}::int) AS channel_number
     ON CONFLICT (workspace_id, channel_id, identity_id) DO NOTHING
   `;
   yield* sql`
     WITH fixture_topics AS (
       SELECT
         topic_number,
-        CASE WHEN topic_number = 1 THEN 1001 WHEN topic_number <= 18 THEN 19 ELSE 18 END AS message_count,
+        CASE
+          WHEN topic_number = 1 THEN ${MODERATE_LONG_TOPIC_MESSAGE_COUNT}::int
+          WHEN topic_number <= ${MODERATE_HIGH_MESSAGE_TOPIC_COUNT}::int
+            THEN ${MODERATE_HIGH_MESSAGE_TOPIC_MESSAGE_COUNT}::int
+          ELSE ${MODERATE_DEFAULT_TOPIC_MESSAGE_COUNT}::int
+        END AS message_count,
         timestamptz '2026-01-01T00:00:00Z' +
-          make_interval(mins => 500 - topic_number) AS topic_created_at
-      FROM generate_series(1, 500) AS topic_number
+          make_interval(mins => ${MODERATE_TOPIC_COUNT}::int - topic_number) AS topic_created_at
+      FROM generate_series(1, ${MODERATE_TOPIC_COUNT}::int) AS topic_number
     )
     INSERT INTO topics (
       id,
@@ -163,16 +180,14 @@ const moderateSeed = Effect.gen(function* () {
   `;
 });
 
-const program = Effect.gen(function* () {
-  const databaseUrl = yield* Config.redacted("DATABASE_URL");
-  const layer = PgClient.layer({ url: databaseUrl });
-  yield* Effect.gen(function* () {
+const program = seedConfiguredDatabase(
+  Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* sql.withTransaction(seedDemo.pipe(Effect.andThen(moderateSeed)));
-  }).pipe(Effect.provide(layer));
-});
+  }),
+);
 
 await Effect.runPromise(program);
 console.log(
-  "Moderate fixture ready: 20 Channels, 500 Topics in General, 10,000 Messages, 1,000 Replies in the longest Topic.",
+  `Moderate fixture ready: ${MODERATE_CHANNEL_COUNT} Channels, ${MODERATE_TOPIC_COUNT} Topics in General, ${MODERATE_MESSAGE_COUNT} Messages, ${MODERATE_LONG_TOPIC_REPLY_COUNT} Replies in the longest Topic.`,
 );

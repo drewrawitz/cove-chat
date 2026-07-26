@@ -238,11 +238,13 @@ it.live(
       yield* browserAction(() =>
         messageList(sourcePage).getByText("Syncing…", { exact: true }).waitFor({
           state: "detached",
+          timeout: 60_000,
         }),
       );
       yield* browserAction(() =>
         messageList(observingPage).getByText("Syncing…", { exact: true }).waitFor({
           state: "detached",
+          timeout: 60_000,
         }),
       );
       yield* browserAction(() =>

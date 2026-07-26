@@ -28,7 +28,8 @@ The command uses an isolated PostgreSQL container, loads the deterministic moder
 starts one API, web, Zero cache, and Chromium instance. It opens a second tab only for the shared
 unresolved-command and sign-out checks. Before that journey, it runs repository checks, the normal
 focused suites from the preceding growth-readiness slices, and the exact-shape moderate fixture
-test. Ordinary `vp run test` excludes the moderate fixture and showcase journey.
+test. The fixture dimensions come from `@cove/db`'s exported `MODERATE_*` constants. Ordinary
+`vp run test` excludes the moderate fixture and showcase journey.
 
 During the recovery section, the harness stops only the Zero cache process it started, verifies
 that `ZERO_REPLICA_FILE` is the expected regular file inside its temporary replica directory,

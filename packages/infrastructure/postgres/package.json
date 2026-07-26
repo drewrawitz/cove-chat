@@ -17,7 +17,7 @@
     "check": "vp check",
     "dev": "vp pack --watch",
     "test": "vp test run --exclude tests/fixtures/moderate-seed.integration.test.ts",
-    "test:integration": "vp test run --exclude tests/fixtures/moderate-seed.integration.test.ts",
+    "test:integration": "vp test run integration --exclude tests/fixtures/moderate-seed.integration.test.ts",
     "test:growth-readiness": "vp test run tests/fixtures/moderate-seed.integration.test.ts"
   },
   "dependencies": {

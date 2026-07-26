@@ -4,6 +4,14 @@ import { fileURLToPath } from "node:url";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import {
+  MODERATE_CHANNEL_COUNT,
+  MODERATE_DEFAULT_TOPIC_MESSAGE_COUNT,
+  MODERATE_LONG_TOPIC_MESSAGE_COUNT,
+  MODERATE_LONG_TOPIC_REPLY_COUNT,
+  MODERATE_MESSAGE_COUNT,
+  MODERATE_TOPIC_COUNT,
+} from "../../../../db/prisma/moderate-fixture.ts";
 
 const execFileAsync = promisify(execFile);
 const databasePackageDirectory = fileURLToPath(new URL("../../../../db", import.meta.url));
@@ -93,8 +101,11 @@ describe("moderate growth-readiness fixture", () => {
   }, 120_000);
 
   afterAll(async () => {
-    await client?.end();
-    await container?.stop();
+    try {
+      await client?.end();
+    } finally {
+      await container?.stop();
+    }
   });
 
   it("creates the exact deterministic shape without duplicating it on a repeated run", async () => {
@@ -105,12 +116,17 @@ describe("moderate growth-readiness fixture", () => {
     const repeatedShape = await readFixtureShape();
 
     const expectedShape = {
-      channels: 20,
-      busiest_channel_topics: 500,
-      messages: 10_000,
-      long_topic_replies: 1_000,
-      long_topic_latest_message: "moderate-message-0001-1001",
-      last_topic_latest_message: "moderate-message-0500-0018",
+      channels: MODERATE_CHANNEL_COUNT,
+      busiest_channel_topics: MODERATE_TOPIC_COUNT,
+      messages: MODERATE_MESSAGE_COUNT,
+      long_topic_replies: MODERATE_LONG_TOPIC_REPLY_COUNT,
+      long_topic_latest_message: `moderate-message-0001-${String(
+        MODERATE_LONG_TOPIC_MESSAGE_COUNT,
+      ).padStart(4, "0")}`,
+      last_topic_latest_message: `moderate-message-${String(MODERATE_TOPIC_COUNT).padStart(
+        4,
+        "0",
+      )}-${String(MODERATE_DEFAULT_TOPIC_MESSAGE_COUNT).padStart(4, "0")}`,
     };
     expect(firstShape).toEqual(expectedShape);
     expect(repeatedShape).toEqual(expectedShape);
