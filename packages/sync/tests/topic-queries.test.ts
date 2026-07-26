@@ -12,6 +12,21 @@ const queryAst = (query: unknown): { readonly table: string } =>
   (query as { readonly ast: { readonly table: string } }).ast;
 
 describe("authorized Topic queries", () => {
+  it("synchronizes only the open private Channel Membership needed to detect access loss", () => {
+    const query = queries.access.channelMembership.fn({ args, ctx });
+    const ast = queryAst(query);
+    const serialized = JSON.stringify(ast);
+
+    expect(ast.table).toBe("channelMembership");
+    expect(serialized).toContain(args.workspaceId);
+    expect(serialized).toContain(args.channelId);
+    expect(serialized).toContain(ctx.userID);
+    expect(serialized).toContain("membershipEndedAt");
+    expect(serialized).toContain('"limit":1');
+    expect(serialized).not.toContain('"name":"visibility"');
+    expect(serialized).not.toContain('"alias":"topics"');
+  });
+
   it("scopes a bounded recent Channel window to an active authorized workspace identity", () => {
     const query = queries.topics.inChannel.fn({ args, ctx });
     const ast = queryAst(query);

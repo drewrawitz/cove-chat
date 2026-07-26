@@ -2,6 +2,7 @@ import type { ZodType } from "zod";
 import type { CoveAppErrorResponse as ApiErrorInfo } from "./generated/schemas/coveAppErrorResponse.zod.ts";
 
 export type { ApiErrorInfo };
+export const COVE_INVALID_SESSION_EVENT = "cove:invalid-session";
 
 export class CoveApiError<ErrorInfo extends ApiErrorInfo = ApiErrorInfo> extends Error {
   readonly info: ErrorInfo;
@@ -37,16 +38,20 @@ function cookieValue(name: string): string | undefined {
   return value === undefined ? undefined : decodeURIComponent(value);
 }
 
-export const coveFetch: typeof globalThis.fetch = (input, init) => {
+export const coveFetch: typeof globalThis.fetch = async (input, init) => {
   const headers = new Headers(init?.headers);
   const csrfToken = cookieValue("cove_csrf");
   if (csrfToken !== undefined && !headers.has("x-csrf-token")) {
     headers.set("x-csrf-token", csrfToken);
   }
 
-  return globalThis.fetch(input, {
+  const response = await globalThis.fetch(input, {
     ...init,
     credentials: init?.credentials ?? "same-origin",
     headers,
   });
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(COVE_INVALID_SESSION_EVENT));
+  }
+  return response;
 };

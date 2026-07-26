@@ -1,7 +1,9 @@
 import { queries } from "@cove/sync";
+import { Button } from "@cove/ui/components/button";
 import { useQuery } from "@rocicorp/zero/react";
 import { Link, createFileRoute, useLocation } from "@tanstack/react-router";
-import { type ReactElement, useRef } from "react";
+import { type ReactElement, useCallback, useEffect, useRef, useState } from "react";
+import { useAccountConversationRuntime } from "../account-conversation-state-context.tsx";
 import {
   useAuthMe,
   useChannelsGetChannel,
@@ -18,6 +20,7 @@ import { TopicHeader } from "../components/topic-header.tsx";
 import { TopicMessages } from "../components/topic-messages.tsx";
 import { topicIntentLabel } from "../topic-intent.ts";
 import { synchronizedTopicDetail, topicProjectionState } from "../topic-sync.ts";
+import { usePrivateChannelRouteAccess } from "../use-private-channel-route-access.ts";
 
 export const Route = createFileRoute(
   "/workspaces/$workspaceId/channels/$channelId/topics/$topicId",
@@ -25,6 +28,7 @@ export const Route = createFileRoute(
 
 function TopicPage(): ReactElement {
   const { workspaceId, channelId, topicId } = Route.useParams();
+  const { state: conversationState } = useAccountConversationRuntime();
   const justCreatedTopicId = useLocation({
     select: ({ state }) =>
       "justCreatedTopicId" in state && typeof state.justCreatedTopicId === "string"
@@ -32,9 +36,14 @@ function TopicPage(): ReactElement {
         : undefined,
   });
   const topicHeading = useRef<HTMLHeadingElement>(null);
+  const [draftCleanupFailed, setDraftCleanupFailed] = useState(false);
   const account = useAuthMe({ query: { retry: false } });
-  const workspace = useWorkspacesGetWorkspace(workspaceId, { query: { retry: false } });
-  const channel = useChannelsGetChannel(workspaceId, channelId, { query: { retry: false } });
+  const workspace = useWorkspacesGetWorkspace(workspaceId, {
+    query: { retry: false, refetchOnMount: "always", refetchOnReconnect: "always" },
+  });
+  const channel = useChannelsGetChannel(workspaceId, channelId, {
+    query: { retry: false, refetchOnMount: "always", refetchOnReconnect: "always" },
+  });
   const [synchronizedTopic, synchronizedTopicResult] = useQuery(
     queries.topics.byId({ workspaceId, channelId, topicId }),
     { ttl: TOPIC_QUERY_TTL },
@@ -56,6 +65,29 @@ function TopicPage(): ReactElement {
   });
   const topicPending = projectionState === "syncing";
   const topicError = projectionState === "unavailable";
+  const topicAccessLost =
+    synchronizedResultType === "complete" &&
+    justCreatedTopicId !== topicId &&
+    (synchronizedTopic === undefined || openingBrief === undefined);
+  const privateAccess = usePrivateChannelRouteAccess({
+    channel,
+    channelId,
+    workspace,
+    workspaceId,
+  });
+
+  const clearLostTopicDraft = useCallback((): void => {
+    try {
+      conversationState.clearDraft({ workspaceId, channelId, topicId });
+      setDraftCleanupFailed(false);
+    } catch {
+      setDraftCleanupFailed(true);
+    }
+  }, [channelId, conversationState, topicId, workspaceId]);
+
+  useEffect(() => {
+    if (topicAccessLost) clearLostTopicDraft();
+  }, [clearLostTopicDraft, topicAccessLost]);
 
   if (account.isPending || workspace.isPending) {
     return <PageMessage message="Opening workspace…" theme="dark" />;
@@ -63,12 +95,53 @@ function TopicPage(): ReactElement {
   if (account.isError) {
     return <PageMessage message="Cove could not load your account." theme="dark" />;
   }
+  if (draftCleanupFailed) {
+    return (
+      <PageMessage
+        message="Cove could not remove this Topic’s saved draft from this browser."
+        theme="dark"
+      >
+        <Button className="mt-4" type="button" size="sm" onClick={clearLostTopicDraft}>
+          Retry removing saved draft
+        </Button>
+      </PageMessage>
+    );
+  }
+  if (privateAccess.state === "cleanup-required") {
+    return (
+      <PageMessage message="Cove could not remove saved drafts for this Channel." theme="dark">
+        <Button className="mt-4" type="button" size="sm" onClick={privateAccess.retryCleanup}>
+          Retry removing saved drafts
+        </Button>
+      </PageMessage>
+    );
+  }
   if (workspace.isError) {
     return <PageMessage message="This topic is not available in this workspace." theme="dark" />;
   }
 
   let content: ReactElement;
-  if (channel.isPending || topicPending) {
+  if (channel.isPending) {
+    content = (
+      <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
+        <p className="text-muted-foreground" role="status">
+          Opening Topic…
+        </p>
+      </div>
+    );
+  } else if (channel.data?.visibility === "private" && privateAccess.state !== "available") {
+    content = (
+      <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
+        <p className="text-muted-foreground" role="status">
+          {privateAccess.state === "offline"
+            ? "Private Channel content is unavailable while Cove is offline."
+            : privateAccess.state === "revoked"
+              ? "This Private Channel is no longer available to your Account."
+              : "Confirming access before opening this Private Channel…"}
+        </p>
+      </div>
+    );
+  } else if (topicPending) {
     content = (
       <div className="mx-auto w-full max-w-4xl px-5 py-16 sm:px-8 lg:px-12 lg:py-24">
         <p className="text-muted-foreground" role="status">
@@ -184,7 +257,11 @@ function TopicPage(): ReactElement {
       accountDisplayName={account.data.displayName}
       accountEmail={account.data.email}
       activeChannelId={channelId}
-      busy={channel.isPending || topicPending}
+      busy={
+        channel.isPending ||
+        topicPending ||
+        (channel.data?.visibility === "private" && privateAccess.state !== "available")
+      }
       identityName={workspace.data.identity.name}
       workspaceId={workspaceId}
       workspaceName={workspace.data.workspace.name}

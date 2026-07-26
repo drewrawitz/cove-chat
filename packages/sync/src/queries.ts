@@ -90,6 +90,17 @@ const authorizedMessages = (args: z.output<typeof TopicArguments>, context: Quer
     );
 
 export const queries = defineQueries({
+  access: {
+    channelMembership: defineQuery(ChannelScopeArguments, ({ args, ctx }) =>
+      zql.channelMembership
+        .where("workspaceId", args.workspaceId)
+        .where("channelId", args.channelId)
+        .whereExists("workspaceIdentity", (identity) =>
+          identity.where("accountId", ctx.userID).where("membershipEndedAt", "IS", null),
+        )
+        .one(),
+    ),
+  },
   topics: {
     inChannel: defineQuery(ChannelTopicsArguments, ({ args, ctx }) =>
       authorizedTopics(args, ctx)

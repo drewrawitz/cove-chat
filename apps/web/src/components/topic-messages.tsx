@@ -7,7 +7,8 @@ import {
   MenuRoot,
   MenuTrigger,
 } from "@cove/ui/components/menu";
-import { Fragment, type ReactElement, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactElement, type RefObject, useEffect, useRef, useState } from "react";
+import type { StoredMessageCommand } from "../account-conversation-state.ts";
 import {
   type DeleteMessageOverlayCommand,
   type EditMessageOverlayCommand,
@@ -135,6 +136,43 @@ function RejectedDeleteNotice({
   );
 }
 
+function useInitialTopicPosition(topicId: string, messageCount: number): void {
+  const positionedTopicId = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (positionedTopicId.current === topicId) return;
+    const frame = window.requestAnimationFrame(() => {
+      positionedTopicId.current = topicId;
+      window.scrollTo({
+        top: messageCount > 1 ? document.documentElement.scrollHeight : 0,
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messageCount, topicId]);
+}
+
+function usePostedMessageScroll(
+  projectedMessages: ReadonlyArray<TopicMessage>,
+  scrollAfterMessageId: RefObject<string | undefined>,
+): void {
+  useEffect(() => {
+    const messageId = scrollAfterMessageId.current;
+    if (messageId === undefined) return;
+    const messageElement = document.getElementById(`topic-message-${messageId}`);
+    if (messageElement === null) return;
+
+    scrollAfterMessageId.current = undefined;
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    messageElement.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [projectedMessages, scrollAfterMessageId]);
+}
+
 export function TopicMessages({
   canReply,
   channelId,
@@ -144,11 +182,15 @@ export function TopicMessages({
   topicId,
   workspaceId,
 }: TopicMessagesProps): ReactElement {
-  const initiallyPositionedTopicId = useRef<string | undefined>(undefined);
   const {
     add,
+    canRepairSynchronization,
+    canRetryCommand,
+    clearDraft,
+    conversationStorageAvailable,
     deleteMutation,
     dismiss,
+    draft,
     edit,
     editMutation,
     isMessageEditSaving,
@@ -156,8 +198,11 @@ export function TopicMessages({
     overlay,
     projectedMessages,
     remove,
+    repairSynchronization,
     retry,
+    setDraft,
     scrollAfterMessageId,
+    zeroRecoveryState,
   } = useTopicMessageCommands({
     channelId,
     currentIdentity,
@@ -174,40 +219,8 @@ export function TopicMessages({
   const deletingMessageKind =
     deletingMessage === undefined ? undefined : topicMessageKind(deletingMessage.position);
   const olderRepliesControl = <OlderRepliesControl {...olderRepliesPagination} />;
-
-  useEffect(() => {
-    if (initiallyPositionedTopicId.current === topicId) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      initiallyPositionedTopicId.current = topicId;
-      window.scrollTo({
-        top: projectedMessages.length > 1 ? document.documentElement.scrollHeight : 0,
-        behavior: "auto",
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [projectedMessages.length, topicId]);
-
-  useEffect(() => {
-    const messageId = scrollAfterMessageId.current;
-    if (messageId === undefined) {
-      return;
-    }
-
-    const messageElement = document.getElementById(`topic-message-${messageId}`);
-    if (messageElement === null) {
-      return;
-    }
-
-    scrollAfterMessageId.current = undefined;
-    const reduceMotion =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    messageElement.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
-      block: "center",
-    });
-  }, [projectedMessages, scrollAfterMessageId]);
+  useInitialTopicPosition(topicId, projectedMessages.length);
+  usePostedMessageScroll(projectedMessages, scrollAfterMessageId);
 
   return (
     <>
@@ -219,7 +232,11 @@ export function TopicMessages({
           const excerpt = messageExcerpt(message.body);
           const isAuthor = message.author.id === currentIdentity.id;
           const canChange =
-            canReply && isAuthor && !message.deleted && message.optimisticPhase === undefined;
+            canReply &&
+            conversationStorageAvailable &&
+            isAuthor &&
+            !message.deleted &&
+            message.optimisticPhase === undefined;
           const isEditing = editing?.messageId === message.id;
           const optimisticCommand =
             message.producedByCommandId === undefined
@@ -229,13 +246,13 @@ export function TopicMessages({
                     commandId === message.producedByCommandId && phase !== "rejected",
                 );
           const rejectedEdit = overlay.commands.find(
-            (command): command is EditMessageOverlayCommand =>
+            (command): command is StoredMessageCommand & EditMessageOverlayCommand =>
               command.kind === "edit" &&
               command.messageId === message.id &&
               command.phase === "rejected",
           );
           const rejectedDelete = overlay.commands.find(
-            (command): command is DeleteMessageOverlayCommand =>
+            (command): command is StoredMessageCommand & DeleteMessageOverlayCommand =>
               command.kind === "delete" &&
               command.messageId === message.id &&
               command.phase === "rejected",
@@ -342,7 +359,8 @@ export function TopicMessages({
                         {optimisticCommand === undefined ? null : (
                           <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
                             <span role="status">{optimisticPhaseLabel(optimisticCommand)}</span>
-                            {optimisticCommand.phase === "uncertain" ? (
+                            {optimisticCommand.phase === "uncertain" &&
+                            canRetryCommand(optimisticCommand.commandId) ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -350,6 +368,17 @@ export function TopicMessages({
                                 onClick={() => retry(optimisticCommand)}
                               >
                                 Retry
+                              </Button>
+                            ) : null}
+                            {canRepairSynchronization(optimisticCommand.commandId) ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={zeroRecoveryState === "repairing"}
+                                onClick={repairSynchronization}
+                              >
+                                Repair synchronization
                               </Button>
                             ) : null}
                           </div>
@@ -394,13 +423,27 @@ export function TopicMessages({
 
       {canReply ? (
         <>
+          {conversationStorageAvailable ? null : (
+            <p
+              className="fixed right-5 bottom-24 left-5 z-40 mx-auto max-w-4xl rounded-xl border border-destructive/40 bg-background px-4 py-3 text-sm text-destructive shadow-lg lg:left-[calc(var(--conversation-sidebar-width)+1.25rem)]"
+              role="alert"
+            >
+              Browser storage is unavailable. Cove cannot safely save or send conversation work.
+            </p>
+          )}
           <div className="h-24" aria-hidden="true" />
           <TopicReplyComposer
+            canPost={conversationStorageAvailable}
+            draft={draft}
             identity={currentIdentity}
             hasError={overlay.commands.some(
               ({ kind, phase }) => kind === "create" && phase === "rejected",
             )}
-            onPost={add}
+            onDraftChange={setDraft}
+            onPost={async (body) => {
+              await add(body);
+              clearDraft();
+            }}
           />
         </>
       ) : null}

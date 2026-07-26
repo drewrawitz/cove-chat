@@ -1,7 +1,7 @@
 import { Button } from "@cove/ui/components/button";
-import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { type ReactElement } from "react";
+import { useAccountConversationRuntime } from "../account-conversation-state-context.tsx";
 import { CoveApiError } from "../api/cove-fetch.ts";
 import { useAuthLogout } from "../api/generated/cove-app.ts";
 
@@ -13,13 +13,16 @@ interface AccountSignOutProps {
 
 export function AccountSignOut({ displayName, email, variant }: AccountSignOutProps): ReactElement {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { clearAccountConversationState } = useAccountConversationRuntime();
   const logout = useAuthLogout();
 
   const finishSignOut = async (): Promise<void> => {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await navigate({ to: "/", replace: true });
+    try {
+      await clearAccountConversationState();
+      await navigate({ to: "/", replace: true });
+    } catch {
+      // The Account cleanup screen owns retrying a failed Zero cache deletion.
+    }
   };
 
   const signOut = (): void => {
