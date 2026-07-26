@@ -2,7 +2,7 @@ import { PgClient } from "@effect/sql-pg";
 import { Config, Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 
-const seed = Effect.gen(function* () {
+export const seedDemo = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
   yield* sql`
@@ -66,9 +66,11 @@ const seed = Effect.gen(function* () {
   `;
 });
 
-const program = Effect.gen(function* () {
+export const seedConfiguredDatabase = Effect.gen(function* () {
   const databaseUrl = yield* Config.redacted("DATABASE_URL");
-  yield* seed.pipe(Effect.provide(PgClient.layer({ url: databaseUrl })));
+  yield* seedDemo.pipe(Effect.provide(PgClient.layer({ url: databaseUrl })));
 });
 
-await Effect.runPromise(program);
+if (process.argv[1] === import.meta.filename) {
+  await Effect.runPromise(seedConfiguredDatabase);
+}

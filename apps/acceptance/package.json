@@ -6,7 +6,8 @@
   "scripts": {
     "check": "vp check",
     "install:browsers": "playwright install chromium",
-    "test": "vp run web#generate:api && vp test run"
+    "test": "vp run web#generate:api && vp test run --exclude tests/growth-readiness-showcase.acceptance.test.ts",
+    "test:growth-readiness": "vp run web#generate:api && vp test run tests/growth-readiness-showcase.acceptance.test.ts --reporter=verbose"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
