@@ -168,7 +168,23 @@ it.live(
         page.goto(`${acceptance.webUrl}/workspaces/${otherWorkspaceId}/channels/${channelId}`),
       );
       yield* browserAction(() =>
-        page.getByText("This channel is not available in this workspace.").waitFor(),
+        page.waitForURL((url) => {
+          const workspacePath = `/workspaces/${otherWorkspaceId}`;
+          return (
+            url.pathname === workspacePath || url.pathname === `${workspacePath}/channels/general`
+          );
+        }),
+      );
+      yield* browserAction(() =>
+        page.getByRole("heading", { name: "General", exact: true }).waitFor(),
+      );
+      yield* browserAction(() =>
+        page.getByText("Product Lab", { exact: true }).waitFor({ state: "hidden" }),
+      );
+      yield* browserAction(() =>
+        page
+          .getByText("A durable place to explore and maintain product experiments.")
+          .waitFor({ state: "hidden" }),
       );
 
       yield* browserAction(() => page.context().clearCookies());

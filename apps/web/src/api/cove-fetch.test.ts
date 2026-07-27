@@ -59,6 +59,7 @@ describe("Cove API transport", () => {
     const browserWindow = new EventTarget();
     const invalidSession = vi.fn();
     browserWindow.addEventListener(COVE_INVALID_SESSION_EVENT, invalidSession);
+    vi.stubGlobal("document", { cookie: "cove_csrf=expired-session-csrf-token" });
     vi.stubGlobal("window", browserWindow);
     vi.stubGlobal(
       "fetch",
@@ -69,6 +70,23 @@ describe("Cove API transport", () => {
 
     expect(response.status).toBe(401);
     expect(invalidSession).toHaveBeenCalledOnce();
+  });
+
+  it("leaves an anonymous unauthorized response for the sign-in query to handle", async () => {
+    const browserWindow = new EventTarget();
+    const invalidSession = vi.fn();
+    browserWindow.addEventListener(COVE_INVALID_SESSION_EVENT, invalidSession);
+    vi.stubGlobal("document", { cookie: "" });
+    vi.stubGlobal("window", browserWindow);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.resolve(new Response(null, { status: 401 }))),
+    );
+
+    const response = await coveFetch("/api/app/v1/me");
+
+    expect(response.status).toBe(401);
+    expect(invalidSession).not.toHaveBeenCalled();
   });
 
   it("decodes an error declared by the requested operation", async () => {

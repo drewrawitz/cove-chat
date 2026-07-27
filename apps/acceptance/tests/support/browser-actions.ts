@@ -9,7 +9,17 @@ export const browserAction = <A>(operation: () => Promise<A>) =>
   });
 
 export const waitForWorkspaceChooser = (page: Page) =>
-  browserAction(() => page.getByRole("heading", { name: "Choose a workspace" }).waitFor());
+  browserAction(async () => {
+    try {
+      await page.getByRole("heading", { name: "Choose a workspace" }).waitFor();
+    } catch (cause) {
+      const location = new URL(page.url());
+      throw new Error(
+        `Workspace chooser did not render at ${location.origin}${location.pathname}.`,
+        { cause },
+      );
+    }
+  });
 
 export const signIn = (acceptance: BrowserAcceptanceService, email: string) =>
   Effect.gen(function* () {

@@ -9,7 +9,8 @@ export default defineConfig({
   },
   fmt: {},
   test: {
-    testTimeout: 120_000,
     hookTimeout: 120_000,
+    maxWorkers: 2,
+    testTimeout: 120_000,
   },
 });

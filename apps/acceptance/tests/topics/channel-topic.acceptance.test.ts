@@ -56,7 +56,7 @@ it.live(
       );
       yield* browserAction(() =>
         page
-          .getByLabel("Edit opening brief")
+          .getByRole("textbox", { name: "Edit opening brief" })
           .fill("Capture the remaining launch risks and owners."),
       );
       yield* browserAction(() => page.getByRole("button", { name: "Save" }).click());
@@ -71,7 +71,10 @@ it.live(
       );
       yield* browserAction(() => page.keyboard.press("Meta+Enter"));
       yield* browserAction(() =>
-        page.getByText("The release candidate passed smoke testing.", { exact: true }).waitFor(),
+        page
+          .getByRole("list", { name: "Topic messages" })
+          .getByText("The release candidate passed smoke testing.", { exact: true })
+          .waitFor(),
       );
       yield* browserAction(() =>
         page.getByRole("button", { name: /More actions for reply 1 by Bob in Cove:/ }).click(),
@@ -85,6 +88,12 @@ it.live(
         deleteDialog.getByRole("button", { name: "Delete reply" }).click(),
       );
       yield* browserAction(() => page.getByText("Reply deleted", { exact: true }).waitFor());
+      yield* browserAction(() =>
+        page.getByText("Pending…", { exact: true }).waitFor({ state: "detached" }),
+      );
+      yield* browserAction(() =>
+        page.getByText("Syncing…", { exact: true }).waitFor({ state: "detached" }),
+      );
       expect(new URL(page.url()).pathname).toMatch(
         /^\/workspaces\/demo-workspace\/channels\/general\/topics\/[^/]+$/,
       );
@@ -95,7 +104,7 @@ it.live(
       yield* browserAction(() => topicSummary.getByText("Question", { exact: true }).waitFor());
       yield* browserAction(() => topicSummary.getByText("Bob in Cove", { exact: true }).waitFor());
       yield* browserAction(() =>
-        topicSummary.getByText("Reply deleted", { exact: true }).waitFor(),
+        topicSummary.getByText("Message deleted", { exact: true }).waitFor(),
       );
       yield* browserAction(() => topicSummary.locator("time").waitFor());
       expect(

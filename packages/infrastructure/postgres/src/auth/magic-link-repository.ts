@@ -1,12 +1,13 @@
 import { User, type User as UserType } from "@cove/domain";
 import { MagicLinkRepository, MagicLinkTokenValue } from "@cove/ports";
-import { Effect, Layer, Schema } from "effect";
+import { Clock, Effect, Layer, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { persistenceError } from "../persistence-error.ts";
 import { hashOpaqueToken, makeOpaqueToken } from "./opaque-token.ts";
 
 const ConsumeMagicLinkRequest = Schema.Struct({
   tokenHash: Schema.String,
+  consumedAt: Schema.Date,
 });
 
 interface ConsumeMagicLinkRequest extends Schema.Schema.Type<typeof ConsumeMagicLinkRequest> {}
@@ -16,14 +17,14 @@ const make = Effect.gen(function* () {
   const consume = SqlSchema.findOneOption({
     Request: ConsumeMagicLinkRequest,
     Result: User,
-    execute: ({ tokenHash }) => sql<UserType>`
+    execute: ({ consumedAt, tokenHash }) => sql<UserType>`
       UPDATE magic_links AS magic_link
-      SET consumed_at = CURRENT_TIMESTAMP
+      SET consumed_at = ${consumedAt}
       FROM users AS authenticated_user
       WHERE magic_link.token_hash = ${tokenHash}
         AND magic_link.user_id = authenticated_user.id
         AND magic_link.consumed_at IS NULL
-        AND magic_link.expires_at > CURRENT_TIMESTAMP
+        AND magic_link.expires_at > ${consumedAt}
       RETURNING
         authenticated_user.id,
         authenticated_user.email,
@@ -43,11 +44,12 @@ const make = Effect.gen(function* () {
 
       return token;
     }),
-    consume: Effect.fn("PostgresMagicLinkRepository.consume")((token) =>
-      consume({ tokenHash: hashOpaqueToken(token) }).pipe(
+    consume: Effect.fn("PostgresMagicLinkRepository.consume")(function* (token) {
+      const consumedAt = new Date(yield* Clock.currentTimeMillis);
+      return yield* consume({ consumedAt, tokenHash: hashOpaqueToken(token) }).pipe(
         Effect.mapError((cause) => persistenceError("MagicLinkRepository.consume", cause)),
-      ),
-    ),
+      );
+    }),
   });
 });
 

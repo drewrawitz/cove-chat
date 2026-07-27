@@ -105,7 +105,9 @@ it.live(
       const administration = page.getByRole("region", {
         name: "Private Channel administration",
       });
-      yield* browserAction(() => administration.getByText("Compensation").waitFor());
+      yield* browserAction(() =>
+        administration.getByRole("heading", { name: "Compensation", exact: true }).waitFor(),
+      );
       const compensationAdministration = administration
         .getByRole("listitem")
         .filter({ hasText: "Compensation" });
@@ -123,12 +125,22 @@ it.live(
           `${acceptance.webUrl}/workspaces/demo-workspace/channels/${compensationChannelId}`,
         ),
       );
+      yield* browserAction(() => page.waitForURL("**/workspaces/demo-workspace/channels/general"));
       yield* browserAction(() =>
-        page.getByText("This channel is not available in this workspace.").waitFor(),
+        page.getByRole("heading", { name: "General", exact: true }).waitFor(),
       );
       yield* browserAction(() =>
-        page.getByRole("link", { name: "Return to workspace management" }).click(),
+        page
+          .getByRole("heading", { name: "Compensation", exact: true })
+          .waitFor({ state: "hidden" }),
       );
+      yield* browserAction(() =>
+        page
+          .getByText("Discuss private compensation decisions.", { exact: true })
+          .waitFor({ state: "hidden" }),
+      );
+      yield* browserAction(() => page.goto(`${acceptance.webUrl}/workspaces/demo-workspace`));
+      yield* browserAction(() => administration.waitFor());
       yield* browserAction(() =>
         administration.getByRole("button", { name: "Join Compensation" }).click(),
       );

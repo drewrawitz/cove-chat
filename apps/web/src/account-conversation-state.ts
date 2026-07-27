@@ -90,6 +90,7 @@ export interface CreateAccountConversationStateOptions {
 
 export interface AccountConversationState {
   readonly accountId: string;
+  activate(): void;
   clearAccount(): void;
   clearChannelDrafts(workspaceId: string, channelId: string): void;
   clearCommands(): void;
@@ -306,7 +307,8 @@ export function createAccountConversationState({
   const draftKey = `${namespace}:drafts`;
   const commandKey = `${namespace}:commands`;
   const recoveryKey = `${namespace}:zero-recovery`;
-  const broadcast = createBroadcastChannel(namespace);
+  let broadcast = createBroadcastChannel(namespace);
+  let broadcastActive = true;
   const listeners = new Set<() => void>();
   const accountClearStartedListeners = new Set<() => void>();
   let health: AccountConversationStorageHealth = "healthy";
@@ -386,7 +388,7 @@ export function createAccountConversationState({
 
   const announceChange = (): void => {
     notify();
-    broadcast.postMessage({ type: "state-changed" });
+    postBroadcast({ type: "state-changed" });
   };
 
   const persistDrafts = (): boolean => {
@@ -456,6 +458,18 @@ export function createAccountConversationState({
   };
   broadcast.addEventListener("message", onBroadcast);
 
+  const activate = (): void => {
+    if (broadcastActive) return;
+    broadcast = createBroadcastChannel(namespace);
+    broadcast.addEventListener("message", onBroadcast);
+    broadcastActive = true;
+  };
+
+  const postBroadcast = (event: BroadcastEvent): void => {
+    activate();
+    broadcast.postMessage(event);
+  };
+
   const updateCommand = (
     commandId: string,
     update: (command: StoredMessageCommand) => StoredMessageCommand,
@@ -486,6 +500,7 @@ export function createAccountConversationState({
 
   return {
     accountId,
+    activate,
     allCommands: () => commands,
     claimReceiptCheck: (commandId) => {
       const current = commands.find((command) => command.commandId === commandId);
@@ -516,7 +531,7 @@ export function createAccountConversationState({
       }));
     },
     clearAccount: () => {
-      broadcast.postMessage({ type: "account-clear-started" });
+      postBroadcast({ type: "account-clear-started" });
       const accountValuesRemoved = [draftKey, commandKey, recoveryKey]
         .map(removeStoredValue)
         .every(Boolean);
@@ -539,7 +554,7 @@ export function createAccountConversationState({
       commands = [];
       recovery = { version: STORAGE_VERSION, automaticZeroRepairAttempted: false };
       notify();
-      broadcast.postMessage({ type: "account-cleared" });
+      postBroadcast({ type: "account-cleared" });
     },
     clearChannelDrafts: (workspaceId, channelId) => {
       const remaining = drafts.filter(
@@ -589,8 +604,10 @@ export function createAccountConversationState({
     },
     commandsFor: (scope) => commands.filter((command) => sameScope(command, scope)),
     destroy: () => {
+      if (!broadcastActive) return;
       broadcast.removeEventListener("message", onBroadcast);
       broadcast.close();
+      broadcastActive = false;
       listeners.clear();
       accountClearStartedListeners.clear();
     },

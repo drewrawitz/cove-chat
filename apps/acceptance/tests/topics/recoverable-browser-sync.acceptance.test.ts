@@ -44,6 +44,10 @@ it.live(
       const requestGate = new Promise<void>((resolve) => {
         releaseRequest = resolve;
       });
+      let finishRequest: (() => void) | undefined;
+      const requestFinished = new Promise<void>((resolve) => {
+        finishRequest = resolve;
+      });
       let messageRequestCount = 0;
 
       const browserContext = sourcePage.context();
@@ -52,6 +56,7 @@ it.live(
           messageRequestCount += 1;
           await requestGate;
           await route.continue();
+          finishRequest?.();
         }),
       );
 
@@ -86,10 +91,9 @@ it.live(
       ).toBe(1);
 
       yield* Effect.sync(() => releaseRequest?.());
+      yield* browserAction(() => requestFinished);
       yield* browserAction(() => browserContext.unroute(messageRequestPattern));
-      yield* browserAction(() =>
-        sourcePage.getByRole("button", { name: "Reply", exact: true }).waitFor(),
-      );
+      yield* browserAction(() => sourcePage.getByRole("button", { name: /^Reply/ }).waitFor());
 
       yield* browserAction(() =>
         sourcePage.getByLabel("Switch workspace, currently Cove Demo").click(),

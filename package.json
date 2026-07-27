@@ -7,6 +7,7 @@
     "ready": "vp run check && vp run test && vp run -r build",
     "check": "vp run verify:zero-schema && vp run web#generate:api && vp check",
     "test": "vp run @cove/db#generate:zero && vp run web#generate:api && vp run --filter './packages/**' --filter './apps/api' test && vp run web#test && vp run @cove/acceptance#test",
+    "growth:showcase": "vp run check && vp run test && vp run @cove/infrastructure-postgres#test:growth-readiness && vp run @cove/acceptance#test:growth-readiness",
     "dev": "vp run web#dev",
     "prepare": "vp config && vp run web#generate:api",
     "doctor": "npx react-doctor@latest",

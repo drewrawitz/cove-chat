@@ -25,6 +25,7 @@ export function PrivateChannelAdministration({
   const joinChannelMutation = useChannelsAddChannelMember();
   const [joiningChannelId, setJoiningChannelId] = useState<string>();
   const joinChannel = useJoinChannel({
+    additionalRefresh: channels.refetch,
     queriesToInvalidate: [getChannelsListPrivateChannelsQueryKey(workspaceId)],
     successMessage: (channelName) => `You joined ${channelName}.`,
   });

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   invalidateAuthMe,
   invalidateWorkspacesListWorkspaces,
@@ -10,6 +10,8 @@ import {
 interface VerifySearch {
   readonly token?: string;
 }
+
+const attemptedMagicLinkTokens = new Set<string>();
 
 export const Route = createFileRoute("/auth/verify")({
   validateSearch: (search: Record<string, unknown>): VerifySearch => ({
@@ -22,9 +24,11 @@ function VerifyMagicLink() {
   const { token } = Route.useSearch();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const attemptedToken = useRef<string | undefined>(undefined);
   const verify = useAuthVerifyMagicLink({
     mutation: {
+      onError: () => {
+        if (token !== undefined) attemptedMagicLinkTokens.delete(token);
+      },
       onSuccess: async () => {
         await Promise.all([
           invalidateAuthMe(queryClient),
@@ -37,8 +41,8 @@ function VerifyMagicLink() {
   const verifyMagicLink = verify.mutate;
 
   useEffect(() => {
-    if (token === undefined || attemptedToken.current === token) return;
-    attemptedToken.current = token;
+    if (token === undefined || attemptedMagicLinkTokens.has(token)) return;
+    attemptedMagicLinkTokens.add(token);
     verifyMagicLink({ data: { token } });
   }, [token, verifyMagicLink]);
 

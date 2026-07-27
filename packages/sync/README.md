@@ -21,3 +21,13 @@ The web app connects to `http://localhost:4848` by default. Set `VITE_ZERO_CACHE
 browser-facing cache URL differs. In a deployed environment, configure the equivalent `ZERO_*`
 values from `.env.example`; `ZERO_QUERY_URL` is the server-reachable Cove API URL, while
 `VITE_ZERO_CACHE_URL` is the browser-reachable Zero cache URL.
+
+`ZERO_REPLICA_FILE` must point at persistent local storage so routine restarts do not force a
+rebuild. Treat that SQLite file as disposable derived state: PostgreSQL is authoritative, the
+replica is not backed up as a source of truth, and it may be removed only while the configured Zero
+cache is stopped. Use `vp run growth:showcase` for the guarded local rebuild proof; it never targets
+an unvalidated path or a running cache.
+
+Any new synchronized table, column, relationship, or named query must pass the
+[growth and privacy review](./GROWTH-PRIVACY-REVIEW.md). Its structural test is intentionally
+explicit so CI cannot accept a broader query shape without a conscious review update.
